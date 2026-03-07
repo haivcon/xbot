@@ -518,10 +518,20 @@ module.exports = {
             } else {
                 const erc20Abi = ['function transfer(address to, uint256 amount) returns (bool)', 'function decimals() view returns (uint8)', 'function symbol() view returns (string)', 'function balanceOf(address account) view returns (uint256)'];
                 const contract = new ethers.Contract(tokenAddr, erc20Abi, wallet);
-                const decimals = await contract.decimals();
 
-                balBeforeSrc = ethers.formatUnits(await contract.balanceOf(wallet.address), decimals);
-                balBeforeDst = ethers.formatUnits(await contract.balanceOf(toAddr), decimals);
+                let decimals = 18;
+                try {
+                    decimals = await contract.decimals();
+                } catch (decErr) {
+                    console.error('[TRANSFER] Could not fetch decimals, falling back to 18:', decErr.message);
+                }
+
+                try {
+                    balBeforeSrc = ethers.formatUnits(await contract.balanceOf(wallet.address), decimals);
+                    balBeforeDst = ethers.formatUnits(await contract.balanceOf(toAddr), decimals);
+                } catch (balErr) {
+                    return `❌ Lỗi: Không thể lấy số dư. Có thể địa chỉ token (${tokenAddr}) không hợp lệ trên mạng lưới này.`;
+                }
 
                 const amountWei = ethers.parseUnits(args.amount, decimals);
                 const tx = await contract.transfer(toAddr, amountWei);
@@ -656,7 +666,13 @@ module.exports = {
                 } else {
                     const erc20Abi = ['function transfer(address to, uint256 amount) returns (bool)', 'function decimals() view returns (uint8)', 'function balanceOf(address account) view returns (uint256)'];
                     const contract = new ethers.Contract(tokenAddr, erc20Abi, wallet);
-                    const decimals = await contract.decimals();
+
+                    let decimals = 18;
+                    try {
+                        decimals = await contract.decimals();
+                    } catch (decErr) {
+                        console.error('[BATCH_TRANSFER] Could not fetch decimals, falling back to 18:', decErr.message);
+                    }
 
                     balBeforeSrc = ethers.formatUnits(await contract.balanceOf(wallet.address), decimals);
                     const tx = await contract.transfer(destAddr, ethers.parseUnits(t.amount, decimals));

@@ -70,6 +70,23 @@ module.exports = {
             }
             // ----------------------------------------
 
+            // --- Phase 5 Auto-Decimal Resolution ---
+            let originalAmount = args.amount;
+            if (originalAmount && !originalAmount.includes('00000000') && !originalAmount.includes('e+')) {
+                try {
+                    const basicInfo = await onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress: fromTokenAddress }]);
+                    if (basicInfo && basicInfo.length > 0) {
+                        const resolvedDecimals = Number(basicInfo[0].decimal || 18);
+                        // Convert amount to wei if it looks like a small/human number
+                        if (Number(originalAmount) < 1e9) {
+                            args.amount = (Number(originalAmount) * Math.pow(10, resolvedDecimals)).toLocaleString('fullwide', { useGrouping: false }).split('.')[0];
+                            console.log(`[SWAP QUOTE] Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
+                        }
+                    }
+                } catch (e) { console.error('[SWAP QUOTE] Failed auto-decimal:', e.message); }
+            }
+            // ----------------------------------------
+
             let data;
             try {
                 data = await onchainos.getSwapQuote({
@@ -268,6 +285,23 @@ module.exports = {
 
             // 4. Get swap quote to determine Auto Slippage
             console.log(`[AUTO-SWAP] Getting swap quote to determine dynamic auto-slippage...`);
+
+            // --- Phase 5 Auto-Decimal Resolution for execution ---
+            let originalAmount = args.amount;
+            if (originalAmount && !originalAmount.includes('00000000') && !originalAmount.includes('e+')) {
+                try {
+                    const basicInfo = await onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress: fromTokenAddress }]);
+                    if (basicInfo && basicInfo.length > 0) {
+                        const resolvedDecimals = Number(basicInfo[0].decimal || 18);
+                        if (Number(originalAmount) < 1e9) {
+                            args.amount = (Number(originalAmount) * Math.pow(10, resolvedDecimals)).toLocaleString('fullwide', { useGrouping: false }).split('.')[0];
+                            console.log(`[AUTO-SWAP] Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
+                        }
+                    }
+                } catch (e) { console.error('[AUTO-SWAP] Failed auto-decimal:', e.message); }
+            }
+            // ----------------------------------------
+
             let quoteData;
             try {
                 quoteData = await onchainos.getSwapQuote({
@@ -377,7 +411,12 @@ module.exports = {
 
             console.log(`[AUTO-SWAP] ✅ Success! TxHash: ${txHash}`);
 
-            const lang = context?.lang || 'en';
+            // Use the user's actual DB-stored language preference (not prompt-detected lang which fails on "ok")
+            let lang = context?.lang || 'en';
+            try {
+                const { getLang } = require('../../../app/language');
+                if (context?.msg) lang = await getLang(context.msg);
+            } catch (e) { /* fallback to context.lang */ }
             let title = 'SWAP SUCCESS';
             let swappedLabel = 'Swapped:';
             let walletLabel = 'Wallet:';
@@ -409,16 +448,16 @@ module.exports = {
 
         } catch (error) {
             console.error(`[AUTO-SWAP] Error:`, error.msg || error.message || error);
-            const lang = context?.lang || 'en';
+            const lang2 = context?.lang || 'en';
             let title = 'SWAP EXECUTION ERROR';
             let reasonLabel = 'Reason:';
             let hintMsg = 'Please verify your liquidity, balance, or try again later.';
 
-            if (lang === 'vi') {
+            if (lang2 === 'vi') {
                 title = 'LỖI THỰC HIỆN SWAP';
                 reasonLabel = 'Lý do:';
                 hintMsg = 'Vui lòng kiểm tra lại thanh khoản, số dư hoặc thử lại sau.';
-            } else if (lang === 'zh' || lang === 'zh-cn' || lang === 'zh-Hans') {
+            } else if (lang2 === 'zh' || lang2 === 'zh-cn' || lang2 === 'zh-Hans') {
                 title = '兑换执行错误';
                 reasonLabel = '原因:';
                 hintMsg = '请检查您的流动性、余额，或稍后重试。';
@@ -474,7 +513,24 @@ module.exports = {
             const provider = new ethers.JsonRpcProvider(rpcUrl);
             const isNativeFrom = fromTokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 
-            // ── Phase 0: Resolve wallets and handle "max" amounts ──
+            // ── Phase 0: Auto-Decimal Resolution ──
+            try {
+                const basicInfo = await onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress: fromTokenAddress }]);
+                if (basicInfo && basicInfo.length > 0) {
+                    const resolvedDecimals = Number(basicInfo[0].decimal || 18);
+                    for (let s of swaps) {
+                        if (String(s.amount).toLowerCase() !== 'max' && !String(s.amount).includes('e+') && Number(s.amount) < 1e9) {
+                            const oldAmt = s.amount;
+                            s.amount = (Number(s.amount) * Math.pow(10, resolvedDecimals)).toLocaleString('fullwide', { useGrouping: false }).split('.')[0];
+                            console.log(`[BATCH-SWAP] Auto-converted ${oldAmt} to ${s.amount} wei based on ${resolvedDecimals} decimals`);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('[BATCH-SWAP] Failed auto-decimal:', e.message);
+            }
+
+            // ── Phase 1: Resolve wallets and handle "max" amounts ──
             console.log(`[BATCH-SWAP] Starting batch swap for ${swaps.length} wallets, user ${userId}`);
             const resolvedSwaps = [];
             for (const swap of swaps) {
@@ -690,6 +746,23 @@ module.exports = {
             const rpcUrl = _getChainRpc(chainIndex);
             const provider = new ethers.JsonRpcProvider(rpcUrl);
             const isNativeFrom = fromTokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+
+            // ── Phase 0: Auto-Decimal Resolution ──
+            try {
+                const basicInfo = await onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress: fromTokenAddress }]);
+                if (basicInfo && basicInfo.length > 0) {
+                    const resolvedDecimals = Number(basicInfo[0].decimal || 18);
+                    for (let s of args.swaps) {
+                        if (String(s.amount).toLowerCase() !== 'max' && !String(s.amount).includes('e+') && Number(s.amount) < 1e9) {
+                            const oldAmt = s.amount;
+                            s.amount = (Number(s.amount) * Math.pow(10, resolvedDecimals)).toLocaleString('fullwide', { useGrouping: false }).split('.')[0];
+                            console.log(`[SIM-BATCH] Auto-converted ${oldAmt} to ${s.amount} wei based on ${resolvedDecimals} decimals`);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('[SIM-BATCH] Failed auto-decimal:', e.message);
+            }
 
             console.log(`[SIM-BATCH] Simulating batch swap for ${args.swaps.length} wallets...`);
             const simResults = [];

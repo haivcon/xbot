@@ -23,7 +23,8 @@ const toolHandlers = {
 async function executeToolCall(functionCall, context) {
     const handler = toolHandlers[functionCall.name];
     if (!handler) {
-        return `Unknown function: ${functionCall.name}`;
+        // Return undefined so the master aiHandlers.js can pass this down to the skillRegistry
+        return undefined;
     }
     try {
         return await handler(functionCall.args || {}, context);
@@ -64,13 +65,15 @@ TRADING WALLET COMMANDS:
 - Check trading wallet balance/portfolio (use get_trading_wallet_balance, optionally with walletId)
 - List all trading wallets with IDs and addresses (use list_trading_wallets)
 
-SWAP EXECUTION FLOW:
-1. User asks to swap → use search_token to find addresses
-2. Check balance with get_wallet_balance or get_trading_wallet_balance
-3. Get quote with get_swap_quote (check honeypot & tax warnings!)
-4. If user confirms, use execute_swap to generate transaction
-5. Optionally use simulate_transaction to verify tx will succeed
-6. User signs with their private key
+SWAP EXECUTION FLOW (MANDATORY — DO NOT SKIP ANY STEP):
+1. User asks to swap/exchange → ALWAYS call get_swap_quote FIRST (it auto-resolves token symbols, NO need to call search_token before swap)
+2. get_swap_quote returns a formatted quote with price, fees, and a confirmation prompt. STOP HERE and WAIT for user to say "ok"/"có"/"confirm"
+3. ONLY after the user explicitly confirms → call execute_swap
+4. execute_swap handles token approval, signing, and broadcasting automatically
+
+⚠️ CRITICAL: NEVER call execute_swap without showing get_swap_quote first!
+⚠️ CRITICAL: Do NOT call search_token before get_swap_quote — the quote function already resolves token symbols automatically.
+⚠️ CRITICAL: When user says "đổi X sang Y" or "swap X to Y", call get_swap_quote, NOT execute_swap.
 
 SAFETY RULES:
 - ALWAYS check honeypot warnings from swap quotes — if isHoneyPot is true, BLOCK the trade
@@ -79,7 +82,7 @@ SAFETY RULES:
 - When suggesting swaps, recommend X Layer (low gas) unless user specifies a chain
 
 IMPORTANT RULES:
-1. ALWAYS use search_token first if you don't know a token's contract address
+1. Use search_token to look up token info/details. For SWAP operations, do NOT search first — get_swap_quote auto-resolves symbols
 2. Common native token address for EVM chains: 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 3. Solana native SOL address: 11111111111111111111111111111111 (NOT wSOL)
 4. Common chain IDs: Ethereum=1, BSC=56, X Layer=196, Polygon=137, Avalanche=43114, Solana=501, Base=8453, Arbitrum=42161
@@ -88,7 +91,7 @@ IMPORTANT RULES:
 7. Present data conversationally with market context and actionable insights
 8. When users mention "my wallet", "ví của tôi", "ví giao dịch" — use get_trading_wallet_balance
 9. NEVER fabricate data — only present data from function call results
-10. Amounts for swap/execute must be in MINIMAL UNITS (e.g. 1 USDT with 6 decimals = "1000000")
+10. Amounts for swap/execute can be in normal human units (e.g. "1000" for 1000 tokens). The system automatically converts to minimal units (wei)
 11. Understand Vietnamese commands: "tạo ví" = create wallet, "xóa ví" = delete wallet, "số dư" = balance, "đặt mặc định" = set default, "thời tiết" = weather, "biểu đồ" = chart
 12. For private key operations (exporting keys, revealing seed phrases) — politely decline to output it directly in chat for security. Instead, instruct the user to use the /mywallet command to securely view and export their keys in the Trading Wallet menu. Respond in the user's language.
 13. When showing technical analysis, include trend direction, RSI interpretation, and actionable suggestion

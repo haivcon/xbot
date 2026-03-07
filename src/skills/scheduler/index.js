@@ -20,7 +20,7 @@ function generateTaskId() {
 async function addScheduledTask({ userId, chatId, type, intervalMs, params = {}, lang = 'vi' }) {
     const id = generateTaskId();
     const now = Date.now();
-    const clampedInterval = Math.max(intervalMs, 60000); // Minimum 1 minute
+    const clampedInterval = Math.max(intervalMs, 10000); // Minimum 10 seconds (down from 1 min)
     const nextRunAt = now + clampedInterval;
     await dbRun(
         `INSERT INTO ai_scheduled_tasks (id, userId, chatId, type, intervalMs, nextRunAt, params, enabled, lang, createdAt)
@@ -60,7 +60,7 @@ function safeJsonParse(text, fallback) {
 }
 
 // ═══════════════════════════════════════════════════════
-// Scheduler Tick — Runs every 30 seconds
+// Scheduler Tick — Runs every 10 seconds
 // ═══════════════════════════════════════════════════════
 
 /** @type {function|null} External callback for task execution */
@@ -118,8 +118,8 @@ async function schedulerTick() {
 
 function startScheduler() {
     if (_tickInterval) return;
-    _tickInterval = setInterval(schedulerTick, 30000); // Every 30 seconds
-    console.log('[Scheduler] ⏰ Started autonomous scheduler (30s tick)');
+    _tickInterval = setInterval(schedulerTick, 10000); // Every 10 seconds
+    console.log('[Scheduler] ⏰ Started autonomous scheduler (10s tick)');
 }
 
 function stopScheduler() {
@@ -168,10 +168,11 @@ const SCHEDULER_TOOLS = [{
             parameters: {
                 type: 'object',
                 properties: {
-                    message: { type: 'string', description: 'Reminder message' },
-                    delay_minutes: { type: 'number', description: 'Send reminder after this many minutes from now (min: 1)' }
+                    message: { type: 'string', description: 'Reminder message if it is just a simple text alert' },
+                    delay_minutes: { type: 'number', description: 'Send reminder after this many minutes from now (min: 0.16)' },
+                    dynamic_prompt: { type: 'string', description: 'If the user asks the AI to fetch a price, run an analysis, or check data in the future, put their request here so the AI can run it at that specific time instead of now.' }
                 },
-                required: ['message', 'delay_minutes']
+                required: ['delay_minutes']
             }
         },
         {
@@ -249,6 +250,10 @@ const schedulerHandlers = {
         const providedDelay = parseFloat(args.delay_minutes);
         const delayMs = Math.max((isNaN(providedDelay) ? 5 : providedDelay), 10 / 60) * 60 * 1000;
         const lang = context?.lang || 'vi';
+
+        const message = args.message || '';
+        const dynamicPrompt = args.dynamic_prompt || '';
+
         const task = await addScheduledTask({
             userId: context?.userId,
             chatId: context?.userId, // DM: send to userId (private chat)
@@ -256,7 +261,8 @@ const schedulerHandlers = {
             intervalMs: delayMs,
             lang,
             params: {
-                message: args.message,
+                message: message,
+                dynamic_prompt: dynamicPrompt,
                 oneShot: true
             }
         });
@@ -264,7 +270,12 @@ const schedulerHandlers = {
         const pad = n => String(n).padStart(2, '0');
         const utc7 = new Date(fireAt.getTime() + 7 * 3600000);
         const fireStr = `${pad(utc7.getUTCHours())}:${pad(utc7.getUTCMinutes())}:${pad(utc7.getUTCSeconds())} ${pad(utc7.getUTCDate())}/${pad(utc7.getUTCMonth() + 1)}`;
-        return `⏰ Đã đặt nhắc nhở!\n━━━━━━━━━━━━━━━━━━\n💬 "${args.message}"\n🕐 Sẽ nhắc lúc: ${fireStr} (sau ${args.delay_minutes < 1 ? '1' : args.delay_minutes} phút)\n📬 Thông báo: gửi tin nhắn riêng (DM)\n🆔 Task ID: \`${task.id}\`\n\n💡 Nhắc nhở sẽ tự hủy sau khi gửi xong.`;
+
+        const typeNote = dynamicPrompt
+            ? `🧠 Sẽ kiểm tra thông tin: "${dynamicPrompt}"`
+            : `💬 "${message}"`;
+
+        return `⏰ Đã đặt nhắc nhở!\n━━━━━━━━━━━━━━━━━━\n${typeNote}\n🕐 Sẽ nhắc lúc: ${fireStr} (sau ${args.delay_minutes < 1 ? (args.delay_minutes * 60).toFixed(0) + ' giây' : args.delay_minutes + ' phút'})\n📬 Thông báo: gửi tin nhắn riêng (DM)\n🆔 Task ID: \`${task.id}\`\n\n💡 Nhắc nhở sẽ tự hủy sau khi gửi xong.`;
     },
 
     async list_scheduled_tasks(args, context) {

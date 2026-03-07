@@ -1131,14 +1131,43 @@ function createAiHandlers(deps) {
               }
             }
           } else if (task.type === 'custom_reminder') {
-            await bot.sendMessage(targetChatId,
-              `⏰ <b>${tFunc ? tFunc(taskLang, 'scheduler_reminder') || 'Nhắc nhở' : 'Nhắc nhở'}</b>\n` +
-              `━━━━━━━━━━━━━━━━━━\n` +
-              `💬 ${escapeHtml(task.params.message)}\n` +
-              `━━━━━━━━━━━━━━━━━━\n` +
-              `🕐 ${fmtTime(Date.now())}\n` +
-              `🆔 <code>${task.id}</code>`,
-              { parse_mode: 'HTML' });
+            if (task.params.dynamic_prompt) {
+              // 1. DYNAMIC REMINDER (Real-time AI query)
+              await bot.sendMessage(targetChatId,
+                `🚨 <b>${tFunc ? tFunc(taskLang, 'scheduler_reminder') || 'AI đang xử lý yêu cầu hẹn giờ của bạn...' : 'AI đang xử lý yêu cầu hẹn giờ của bạn...'}</b>\n` +
+                `━━━━━━━━━━━━━━━━━━\n` +
+                `💬 <i>${escapeHtml(task.params.dynamic_prompt)}</i>`,
+                { parse_mode: 'HTML', disable_notification: false });
+
+              // We construct a mock message to trick processAibRequest into running the prompt
+              // We append a rigid SYSTEM INSTRUCTION to block the AI from scheduling a loop
+              const overridePrompt = task.params.dynamic_prompt + "\n\n[SYSTEM INSTRUCTION: You are executing a scheduled background task. DO NOT schedule any further reminders or timers. Simply answer the query or perform the action requested immediately.]";
+
+              const mockMsg = {
+                chat: { id: targetChatId },
+                from: { id: task.userId, language_code: taskLang },
+                text: overridePrompt
+              };
+
+              const { processAibRequest } = require('./aiHandlers');
+              try {
+                // Execute the AI request silently in the background
+                await processAibRequest(bot, mockMsg, deps, overridePrompt);
+              } catch (err) {
+                console.error('[Scheduler] Failed dynamic AI prompt execution:', err);
+              }
+
+            } else {
+              // 2. STATIC REMINDER (Simple text)
+              await bot.sendMessage(targetChatId,
+                `⏰ <b>${tFunc ? tFunc(taskLang, 'scheduler_reminder') || 'Nhắc nhở tự động' : 'Nhắc nhở tự động'}</b>\n` +
+                `━━━━━━━━━━━━━━━━━━\n` +
+                `💬 ${escapeHtml(task.params.message)}\n` +
+                `━━━━━━━━━━━━━━━━━━\n` +
+                `🕐 ${fmtTime(Date.now())}\n` +
+                `🆔 <code>${task.id}</code>`,
+                { parse_mode: 'HTML', disable_notification: false }); // disable_notification: false ensures it rings!
+            }
           }
         } catch (execErr) {
           console.error(`[Scheduler] ❌ Error executing task ${task.id}:`, execErr);
@@ -7101,8 +7130,27 @@ function createAiHandlers(deps) {
             if (functionResult && functionResult.displayMessage) {
               // send the message directly
               const markdownRenderers = ['get_top_tokens', 'search_token', 'get_market_candles', 'get_token_holders', 'get_token_market_detail', 'get_token_security', 'get_trade_history', 'get_signal_list', 'calculate_profit_roi'];
-              const parseMode = markdownRenderers.includes(functionCall.name) ? 'MarkdownV2' : 'HTML';
-              await sendReply(msg, functionResult.displayMessage, { parse_mode: parseMode, disable_web_page_preview: true });
+              let parseMode = 'HTML';
+              let finalMessage = functionResult.displayMessage;
+
+              if (markdownRenderers.includes(functionCall.name)) {
+                // Wipe out AI instructions from formatters
+                finalMessage = finalMessage.replace(/> IMPORTANT INSTRUCTION:.*?\n\n/g, '');
+
+                // Escape HTML characters to prevent Telegram crashes (e.g. <0.01, &)
+                finalMessage = finalMessage.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                // Convert simple Markdown to Telegram HTML
+                finalMessage = finalMessage.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>'); // Bold
+                finalMessage = finalMessage.replace(/\*([^\*]+)\*/g, '<i>$1</i>'); // Italic
+                finalMessage = finalMessage.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>'); // Links
+                finalMessage = finalMessage.replace(/`([^`]+)`/g, '<code>$1</code>'); // Inline code
+
+                parseMode = 'HTML';
+              } else if (functionCall.name.startsWith('schedule_') || functionCall.name === 'set_reminder' || functionCall.name.includes('cancel_') || functionCall.name === 'list_scheduled_tasks') {
+                parseMode = 'Markdown';
+              }
+              await sendReply(msg, finalMessage, { parse_mode: parseMode, disable_web_page_preview: true });
               functionResult.action = true; // force the loop to return
               functionResult.success = true; // ensure it passes the break condition
             }
@@ -7137,7 +7185,21 @@ function createAiHandlers(deps) {
             console.log(`[AIA] ✓ Function ${functionCall.name} triggered command, returning`);
             // Save history BEFORE returning so context is preserved for next conversation
             await addToSessionHistory(userId, 'user', userPrompt);
-            await addToSessionHistory(userId, 'model', `✓ Called native function: ${functionCall.name}`);
+
+            // For get_swap_quote: save the swap parameters so when user says "ok",
+            // the AI can immediately call execute_swap with the correct args
+            if (functionCall.name === 'get_swap_quote') {
+              const swapArgs = functionCall.args || {};
+              await addToSessionHistory(userId, 'model',
+                `[System: A swap quote was shown to the user for swapping ${swapArgs.amount || '?'} ${swapArgs.fromTokenAddress || '?'} → ${swapArgs.toTokenAddress || '?'} on chain ${swapArgs.chainIndex || '196'}. ` +
+                `The quote is displayed and the user needs to confirm. ` +
+                `When the user says "ok"/"có"/"confirm", you MUST immediately call execute_swap with these exact parameters: ` +
+                `chainIndex="${swapArgs.chainIndex || '196'}", fromTokenAddress="${swapArgs.fromTokenAddress}", toTokenAddress="${swapArgs.toTokenAddress}", amount="${swapArgs.amount}". ` +
+                `Do NOT ask for additional confirmation. Do NOT output this system text.]`
+              );
+            } else {
+              await addToSessionHistory(userId, 'model', `[System: The bot successfully executed the native command '${functionCall.name}' for the user in the background. Do not output this text.]`);
+            }
             return;
           }
           // Create function response part

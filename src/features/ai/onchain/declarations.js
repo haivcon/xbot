@@ -49,14 +49,14 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'get_swap_quote',
-                description: 'Get a swap quote for exchanging tokens via DEX aggregator. Use this when users ask to swap/exchange/trade tokens, e.g. "swap 10 USDT to OKB", "exchange ETH for BANMAO"',
+                description: 'Get a swap quote BEFORE executing any swap. This MUST be called first — users must see and confirm the quote before execution. Auto-resolves token symbols, no need to call search_token first. Use when users say "swap", "đổi", "exchange", "báo giá".',
                 parameters: {
                     type: 'object',
                     properties: {
                         chainIndex: { type: 'string', description: 'Chain ID for the swap' },
                         fromTokenAddress: { type: 'string', description: 'Source token contract address OR token symbol (the token you are SELLING). E.g. "OKB", "USDT"' },
                         toTokenAddress: { type: 'string', description: 'Destination token contract address OR token symbol (the token you are BUYING). E.g. "banmao", "PEPE"' },
-                        amount: { type: 'string', description: 'Amount to SELL in minimal units (wei). CRITICAL: This MUST be the quantity of the SOURCE token (fromTokenAddress), never the destination token. If user says "buy 1000 X with Y", ask them to specify how much Y they want to spend.' }
+                        amount: { type: 'string', description: 'Amount to SELL in normal human units (e.g. "1000" for 1000 tokens). System auto-converts to wei. CRITICAL: This MUST be the quantity of the SOURCE token (fromTokenAddress), never the destination token.' }
                     },
                     required: ['chainIndex', 'fromTokenAddress', 'toTokenAddress', 'amount']
                 }
@@ -210,14 +210,14 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'execute_swap',
-                description: 'Execute a full token swap on DEX. This returns transaction calldata the user must sign. Use AFTER get_swap_quote when user confirms they want to proceed. Requires userWalletAddress. Vietnamese: "thực hiện swap", "đổi token"',
+                description: 'Execute a confirmed token swap. ONLY call this AFTER the user has seen and explicitly confirmed a get_swap_quote result (user said "ok"/"có"/"confirm"). NEVER call directly without a prior quote. Handles approval, signing and broadcasting automatically.',
                 parameters: {
                     type: 'object',
                     properties: {
                         chainIndex: { type: 'string', description: 'Chain ID for the swap' },
                         fromTokenAddress: { type: 'string', description: 'Source token address OR token symbol (selling)' },
                         toTokenAddress: { type: 'string', description: 'Destination token address OR token symbol (buying)' },
-                        amount: { type: 'string', description: 'Amount to SELL in minimal units (must be amount of fromToken)' },
+                        amount: { type: 'string', description: 'Amount to SELL in normal human units (e.g. "1000"). System auto-converts to wei.' },
                         userWalletAddress: { type: 'string', description: 'User wallet address that will sign the tx' },
                         slippagePercent: { type: 'string', description: 'Slippage tolerance %. Default "1"' }
                     },
@@ -364,7 +364,7 @@ module.exports.ONCHAIN_TOOLS = [
                     properties: {
                         walletId: { type: 'string', description: 'Source wallet ID' },
                         toAddress: { type: 'string', description: 'Destination address' },
-                        tokenAddress: { type: 'string', description: 'Token contract. Use "native" for native chain token. DO NOT guess ERC20 addresses. If user says "BANMAO" etc, you MUST first use search_token to find the exact contract address before calling this.' },
+                        tokenAddress: { type: 'string', description: 'Token contract address OR token symbol (e.g. "banmao", "USDT"). Use "native" for native chain token (OKB/ETH). System auto-resolves symbols to contract addresses.' },
                         amount: { type: 'string', description: 'Amount in human-readable units (e.g. "1.5")' },
                         chainIndex: { type: 'string', description: 'Chain ID. Default "196"' }
                     },
@@ -378,7 +378,7 @@ module.exports.ONCHAIN_TOOLS = [
                     type: 'object',
                     properties: {
                         mode: { type: 'string', description: '"collect" (many wallets → 1 dest), "distribute" (1 wallet → many dests), "custom" (N→N array)' },
-                        tokenAddress: { type: 'string', description: 'Token contract or "native". MUST NOT be guessed. If user gives a symbol, call search_token to retrieve the contract first.' },
+                        tokenAddress: { type: 'string', description: 'Token contract address OR symbol (e.g. "banmao"). Use "native" for native chain token. System auto-resolves symbols.' },
                         chainIndex: { type: 'string', description: 'Chain ID. Default "196"' },
                         transfers: {
                             type: 'array', items: {
