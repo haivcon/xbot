@@ -25,9 +25,9 @@ function createStartHandlers({
         const message = t(lang, 'welcome_generic');
         const reply_markup = buildStartHelpKeyboard(lang);
         const videoOptions = buildThreadedOptions(msg, { caption: message, parse_mode: 'Markdown', reply_markup });
-        const maxAttempts = pickStartVideo() ? 1 : 0;
 
-        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        // Try sending each available video; on failure disable it and try next
+        for (; ;) {
             const startVideo = pickStartVideo();
             if (!startVideo) {
                 break;
@@ -37,6 +37,7 @@ function createStartHandlers({
                 await bot.sendVideo(msg.chat.id, startVideo, videoOptions);
                 return;
             } catch (error) {
+                console.error(`[Start] Failed to send intro video: ${error.message}`);
                 disableStartVideo(startVideo, error);
             }
         }
