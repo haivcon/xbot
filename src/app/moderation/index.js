@@ -149,7 +149,9 @@ function normalizeFilterResponse(raw, keyword) {
 
 async function isGroupAdmin(chatId, userId) {
     try {
-        const member = await bot.getChatMember(chatId, userId);
+        const p = bot.getChatMember(chatId, userId);
+        p.catch(() => {}); // suppress request-promise duplicate rejection
+        const member = await p;
         if (!member) {
             return false;
         }
@@ -167,7 +169,9 @@ async function isGroupAdminFlexible(chatId, userId) {
     }
 
     try {
-        const admins = await bot.getChatAdministrators(chatId);
+        const p = bot.getChatAdministrators(chatId);
+        p.catch(() => {}); // suppress request-promise duplicate rejection
+        const admins = await p;
         return Array.isArray(admins)
             ? admins.some((admin) => admin?.user?.id?.toString() === userId?.toString())
             : false;

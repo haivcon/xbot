@@ -34,7 +34,9 @@ function createStartHandlers({
             }
 
             try {
-                await bot.sendVideo(msg.chat.id, startVideo, videoOptions);
+                const p = bot.sendVideo(msg.chat.id, startVideo, videoOptions);
+                p.catch(() => { }); // suppress request-promise duplicate rejection
+                await p;
                 return;
             } catch (error) {
                 console.error(`[Start] Failed to send intro video: ${error.message}`);

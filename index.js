@@ -2089,7 +2089,9 @@ function startTelegramBot() {
         });
 
         try {
-            await bot.sendVideo(msg.chat.id, startVideo, videoOptions);
+            const p = bot.sendVideo(msg.chat.id, startVideo, videoOptions);
+            p.catch(() => { }); // suppress request-promise duplicate rejection
+            await p;
             return true;
         } catch (error) {
             console.error(`[AI] Failed to send intro media: ${error.message}`);
