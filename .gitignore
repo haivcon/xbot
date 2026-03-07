@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+.env
+banmao.db
+*.db
+xlayer_navigator.db
+# Database - KHÔNG upload, giữ nguyên trên VPS
