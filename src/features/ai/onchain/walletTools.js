@@ -328,6 +328,55 @@ module.exports = {
                 console.error('[AIA Debug] Failed to fetch real-time prices:', e);
             }
 
+            // Detect user's prompt language
+            const userText = (context?.msg?.text || context?.msg?.caption || '').toLowerCase();
+            let lang = context?.lang || 'en';
+            if (/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/.test(userText)) lang = 'vi';
+            else if (/[\u4e00-\u9fa5]/.test(userText)) lang = 'zh';
+            else if (/[\uac00-\ud7af]/.test(userText)) lang = 'ko';
+            else if (/[а-яА-ЯёЁ]/.test(userText)) lang = 'ru';
+            else if (/\b(saya|kamu|di|ke|dari|untuk|bisa|tidak|ya|halo|tolong|ada|berapa|saldo|dompet|transfer|kirim)\b/.test(userText)) lang = 'id';
+
+            let titleLabel = 'DEX Assets';
+            let timeLabel = 'Time:';
+            let walletLabel = 'Wallet:';
+            let chainLabel = 'Chain:';
+            let totalUsdLabel = 'Total USD Value:';
+            let balanceLabel = 'Balance:';
+            let priceLabel = 'Price:';
+            let valueLabel = 'Value:';
+            let riskSafe = 'Safe';
+            let riskWarning = 'Risk Warning';
+            let emptyMsg = `Wallet ${tw.address} (${tw.isDefault ? 'default' : ''}):\n📭 Empty wallet (0 tokens). Fund this wallet with OKB/USDT to start trading.`;
+
+            if (lang === 'vi') {
+                titleLabel = 'Tài sản DEX';
+                timeLabel = 'Thời gian:';
+                walletLabel = 'Ví:';
+                chainLabel = 'Mạng lưới:';
+                totalUsdLabel = 'Tổng giá trị (USD):';
+                balanceLabel = 'Số dư:';
+                priceLabel = 'Giá:';
+                valueLabel = 'Trị giá:';
+                riskSafe = 'An toàn';
+                riskWarning = 'Cảnh báo rủi ro';
+                emptyMsg = `Ví ${tw.address} (${tw.isDefault ? 'mặc định' : ''}):\n📭 Ví rỗng (0 token). Hãy nạp OKB/USDT để bắt đầu giao dịch.`;
+            } else if (lang === 'zh' || lang === 'zh-Hans' || lang === 'zh-cn') {
+                titleLabel = '去中心化资产';
+                timeLabel = '时间:';
+                walletLabel = '钱包:';
+                chainLabel = '网络:';
+                totalUsdLabel = '总价值 (USD):';
+                balanceLabel = '余额:';
+                priceLabel = '价格:';
+                valueLabel = '价值:';
+                riskSafe = '安全';
+                riskWarning = '风险警告';
+                emptyMsg = `钱包 ${tw.address} (${tw.isDefault ? '默认' : ''}):\n📭 钱包为空 (0 个代币). 请充值 OKB/USDT 开始交易.`;
+            }
+
+            if (!balances.length) return { success: true, action: true, displayMessage: emptyMsg };
+
             let totalUsd = 0;
             const lines = [];
             balances.slice(0, 15).forEach((b, i) => {
@@ -337,32 +386,43 @@ module.exports = {
                 const usd = priceUsd * val;
                 totalUsd += usd;
                 const tokenAddr = b.tokenAddress || '';
-                const isRisk = b.isRiskToken ? 'Cảnh báo rủi ro' : 'An toàn';
+                const isRisk = b.isRiskToken ? riskWarning : riskSafe;
 
                 const explorerUrl = _getExplorerUrl(chainIdx);
-                const safeAddrUrl = `[${sym}](${explorerUrl}/token/${tokenAddr})`;
+                const safeAddrUrl = `<a href="${explorerUrl}/token/${tokenAddr}">${sym}</a>`;
                 const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana' };
                 const chainName = chainNames[chainIdx] || `Chain #${chainIdx}`;
-                lines.push(`${i + 1}. 🌕 **${safeAddrUrl}** — ${chainName} (#${chainIdx})`);
-                lines.push(`📊 Số dư: ${val.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${sym}`);
-                lines.push(`💰 Giá: $${priceUsd < 0.01 ? priceUsd.toFixed(8) : priceUsd.toFixed(4)}`);
-                lines.push(`💵 Trị giá: $${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} [${isRisk}]`);
-                lines.push('');
+                lines.push(`&gt; ${i + 1}. 🌕 <b>${safeAddrUrl}</b> — ${chainName} (#${chainIdx})`);
+                lines.push(`&gt; 📊 ${balanceLabel} ${val.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${sym}`);
+                lines.push(`&gt; 💰 ${priceLabel} $${priceUsd < 0.01 ? priceUsd.toFixed(8) : priceUsd.toFixed(4)}`);
+                lines.push(`&gt; 💵 ${valueLabel} $${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} [${isRisk}]`);
+                lines.push(`&gt;`);
             });
             const explorerUrl = _getExplorerUrl(chainIdx);
             const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana' };
             const chainName = chainNames[chainIdx] || `Chain #${chainIdx}`;
-            const safeAddr = `[${tw.address}](${explorerUrl}/address/${tw.address})`;
+            const safeAddr = `<a href="${explorerUrl}/address/${tw.address}">${tw.address}</a>`;
 
-            // Format current time in user's timezone (using UTC+7 as default for VN users based on context)
             const now = new Date();
-            const timeString = new Intl.DateTimeFormat('vi-VN', {
+            const timeString = new Intl.DateTimeFormat('en-GB', {
                 timeZone: 'Asia/Ho_Chi_Minh',
                 year: 'numeric', month: '2-digit', day: '2-digit',
                 hour: '2-digit', minute: '2-digit', second: '2-digit'
             }).format(now);
 
-            return `> IMPORTANT INSTRUCTION: Display this wallet balance EXACTLY as provided below, using blockquotes. DO NOT summarize it. Translate labels into the user's language.\n\n💼 DEX Assets -\n⏰ Time: ${timeString} (GMT+7)\n👛 Wallet: ${safeAddr}\nChain: ${chainName} (#${chainIdx})\n💰 Total USD Value: ${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\n${lines.join('\n')}`;
+            const defaultStr = tw.isDefault ? `(ID ${tw.id} ⭐)` : `(ID ${tw.id})`;
+            const localizedHeader = lang === 'vi' ? 'Chi tiết tài sản ví:' : (lang === 'zh' || lang === 'zh-Hans' ? '钱包资产详情:' : 'Wallet Asset Details:');
+
+            const report = `<b>${localizedHeader}</b> ${defaultStr}\n` +
+                `<code>${tw.address}</code>\n` +
+                `&gt; 💼 <b>${titleLabel} -</b>\n` +
+                `&gt; ⏰ ${timeLabel} ${timeString} (GMT+7)\n` +
+                `&gt; 👛 ${walletLabel} ${safeAddr}\n` +
+                `&gt; 🌐 ${chainLabel} ${chainName} (#${chainIdx})\n` +
+                `&gt; 💰 <b>${totalUsdLabel} $${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>\n` +
+                `&gt;\n` + lines.join('\n');
+
+            return { success: true, action: true, displayMessage: report };
         } catch (error) {
             return `❌ Error fetching balance: ${error.message}`;
         }
@@ -486,7 +546,14 @@ module.exports = {
             const explorer = _getExplorerUrl(chainIndex);
             console.log(`[TRANSFER] Success: tx=${txHash}`);
 
-            const lang = context?.lang || 'en';
+            // Detect user's prompt language dynamically
+            const userText = (context?.msg?.text || context?.msg?.caption || '').toLowerCase();
+            let lang = context?.lang || 'en';
+            if (/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/.test(userText)) lang = 'vi';
+            else if (/[\u4e00-\u9fa5]/.test(userText)) lang = 'zh';
+            else if (/[\uac00-\ud7af]/.test(userText)) lang = 'ko';
+            else if (/[а-яА-ЯёЁ]/.test(userText)) lang = 'ru';
+            else if (/\b(saya|kamu|di|ke|dari|untuk|bisa|tidak|ya|halo|tolong|ada|berapa|saldo|dompet|transfer|kirim)\b/.test(userText)) lang = 'id';
             let title = 'TRANSFER SUCCESS';
             let fromLabel = 'From:';
             let toLabel = 'To:';
@@ -622,7 +689,14 @@ module.exports = {
 
         const successCount = results.filter(r => r.status === '✅').length;
 
-        const lang = context?.lang || 'en';
+        const userText = (context?.msg?.text || context?.msg?.caption || '').toLowerCase();
+        let lang = context?.lang || 'en';
+        if (/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/.test(userText)) lang = 'vi';
+        else if (/[\u4e00-\u9fa5]/.test(userText)) lang = 'zh';
+        else if (/[\uac00-\ud7af]/.test(userText)) lang = 'ko';
+        else if (/[а-яА-ЯёЁ]/.test(userText)) lang = 'ru';
+        else if (/\b(saya|kamu|di|ke|dari|untuk|bisa|tidak|ya|halo|tolong|ada|berapa|saldo|dompet|transfer|kirim)\b/.test(userText)) lang = 'id';
+
         let headerLabel = 'BATCH TRANSFER RESULTS:';
         let successStr = 'success';
         let gasLabel = 'Total Gas Fee:';

@@ -14,6 +14,10 @@ module.exports = {
             let fromTokenAddress = args.fromTokenAddress;
             let toTokenAddress = args.toTokenAddress;
 
+            if (!fromTokenAddress || !toTokenAddress) {
+                return { displayMessage: '> IMPORTANT INSTRUCTION: Display this swap quote error naturally to the user in their language.\n\n❌ **Quote Error:** Missing from/to token address. Please specify both tokens.' };
+            }
+
             // Auto-resolve tokens if they are just symbols
             if (fromTokenAddress && !fromTokenAddress.startsWith('0x') && fromTokenAddress.length < 20) {
                 const resolved = await autoResolveToken(fromTokenAddress, chainIndex);
@@ -26,6 +30,45 @@ module.exports = {
                 if (resolved.error) return { displayMessage: resolved.error };
                 toTokenAddress = resolved.tokenAddress;
             }
+
+            // --- Phase 4 Proactive Security Check ---
+            const isNativeTo = toTokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+            if (!isNativeTo) {
+                try {
+                    const secData = await onchainos.getTokenSecurity(chainIndex, toTokenAddress);
+                    if (secData && secData.length > 0) {
+                        const sec = secData[0];
+                        const isHoneypot = sec.isHoneypot === '1' || sec.is_honeypot === '1' || sec.is_honeypot === true;
+                        const cannotBuy = sec.cannotBuy === '1' || sec.cannot_buy === '1';
+                        const cannotSell = sec.cannotSell === '1' || sec.cannot_sell === '1';
+                        const buyTax = Number(sec.buyTax || sec.buy_tax || '0');
+                        const sellTax = Number(sec.sellTax || sec.sell_tax || '0');
+
+                        if (isHoneypot || buyTax > 0.1 || sellTax > 0.1 || cannotBuy || cannotSell) {
+                            const lang = context?.lang || 'en';
+                            const alertMsg = lang === 'vi'
+                                ? `🚨 **CẢNH BÁO SCAM / RỦI RO CAO** 🚨\nToken đích (\`${toTokenAddress}\`) có dấu hiệu nguy hiểm:\n\n`
+                                : `🚨 **HIGH RISK / SCAM ALERT** 🚨\nTarget token (\`${toTokenAddress}\`) has dangerous flags:\n\n`;
+
+                            let reasons = [];
+                            if (isHoneypot) reasons.push(lang === 'vi' ? '🍯 Là Honeypot (Mã độc cấm bán)' : '🍯 Is a Honeypot (Malicious contract)');
+                            if (cannotBuy) reasons.push(lang === 'vi' ? '❌ Mã bị khóa chức năng mua' : '❌ Cannot buy');
+                            if (cannotSell) reasons.push(lang === 'vi' ? '❌ Mã bị khóa chức năng bán' : '❌ Cannot sell');
+                            if (buyTax > 0.1) reasons.push((lang === 'vi' ? `💸 Phí mua siêu cao: ` : `💸 Massive Buy Tax: `) + (buyTax * 100).toFixed(2) + '%');
+                            if (sellTax > 0.1) reasons.push((lang === 'vi' ? `💸 Phí bán siêu cao: ` : `💸 Massive Sell Tax: `) + (sellTax * 100).toFixed(2) + '%');
+
+                            const advice = lang === 'vi'
+                                ? `\n⛔ **Hệ thống AI từ chối báo giá swap để bảo vệ tài sản của bạn.**`
+                                : `\n⛔ **AI system refused to quote this swap to protect your assets.**`;
+
+                            return { displayMessage: alertMsg + reasons.map(r => `> ${r}`).join('\n') + advice };
+                        }
+                    }
+                } catch (secErr) {
+                    console.warn('[SWAP QUOTE] Security check failed, skipping:', secErr.message);
+                }
+            }
+            // ----------------------------------------
 
             let data;
             try {
@@ -133,6 +176,10 @@ module.exports = {
 
             let fromTokenAddress = args.fromTokenAddress;
             let toTokenAddress = args.toTokenAddress;
+
+            if (!fromTokenAddress || !toTokenAddress || (!args.amount && args.amount !== 0)) {
+                return { displayMessage: '> IMPORTANT INSTRUCTION: Display this swap execution error naturally to the user in their language.\n\n❌ **Swap Error:** Missing from/to token address or swap amount. Please verify your command.' };
+            }
 
             if (fromTokenAddress && !fromTokenAddress.startsWith('0x') && fromTokenAddress.length < 20) {
                 const resolved = await autoResolveToken(fromTokenAddress, chainIndex);
@@ -407,6 +454,10 @@ module.exports = {
             let fromTokenAddress = args.fromTokenAddress;
             let toTokenAddress = args.toTokenAddress;
 
+            if (!fromTokenAddress || !toTokenAddress) {
+                return '❌ Vui lòng cung cấp cả token gốc và token đích để tiến hành batch swap.';
+            }
+
             if (fromTokenAddress && !fromTokenAddress.startsWith('0x') && fromTokenAddress.length < 20) {
                 const resolved = await autoResolveToken(fromTokenAddress, chainIndex);
                 if (resolved.error) return { displayMessage: resolved.error };
@@ -619,6 +670,10 @@ module.exports = {
 
             let fromTokenAddress = args.fromTokenAddress;
             let toTokenAddress = args.toTokenAddress;
+
+            if (!fromTokenAddress || !toTokenAddress) {
+                return '❌ Vui lòng cung cấp token gốc và token đích cho tính năng mô phỏng batch swap.';
+            }
 
             if (fromTokenAddress && !fromTokenAddress.startsWith('0x') && fromTokenAddress.length < 20) {
                 const resolved = await autoResolveToken(fromTokenAddress, chainIndex);

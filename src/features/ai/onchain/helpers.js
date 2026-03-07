@@ -53,7 +53,16 @@ async function autoResolveToken(symbolOrAddress, chainIndex) {
         if (!data || !Array.isArray(data) || data.length === 0) {
             return { error: `❌ Token "${symbolOrAddress}" not found. Please provide a valid contract address or try a different search term.` };
         }
-        // Pick the best match (first result)
+        // Pick the best match by prioritizing verified tokens and high liquidity/volume
+        data.sort((a, b) => {
+            const aVerified = (a.isVerified || a.verified || a.verifiedStatus || false) ? 1 : 0;
+            const bVerified = (b.isVerified || b.verified || b.verifiedStatus || false) ? 1 : 0;
+            if (aVerified !== bVerified) return bVerified - aVerified;
+
+            const aScore = parseFloat(a.liquidityUsd || a.liquidity || a.marketCap || a.volume || 0);
+            const bScore = parseFloat(b.liquidityUsd || b.liquidity || b.marketCap || b.volume || 0);
+            return bScore - aScore;
+        });
         const best = data[0];
         return {
             chainIndex: best.chainIndex || chains,
@@ -63,4 +72,13 @@ async function autoResolveToken(symbolOrAddress, chainIndex) {
         return { error: `❌ Could not resolve token "${symbolOrAddress}": ${error.message}` };
     }
 }
-module.exports = { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken };
+function detectPromptLanguage(userText, defaultLang = 'en') {
+    if (!userText) return defaultLang;
+    if (/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/.test(userText)) return 'vi';
+    if (/[\u4e00-\u9fa5]/.test(userText)) return 'zh';
+    if (/[\uac00-\ud7af]/.test(userText)) return 'ko';
+    if (/[а-яА-ЯёЁ]/.test(userText)) return 'ru';
+    if (/\b(saya|kamu|di|ke|dari|untuk|bisa|tidak|ya|halo|tolong|ada|berapa|saldo|dompet|transfer|kirim)\b/.test(userText)) return 'id';
+    return defaultLang;
+}
+module.exports = { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken, detectPromptLanguage };

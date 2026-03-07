@@ -474,7 +474,7 @@ Bạn chỉ cần nhắn tin bình thường! Bot có khả năng tư duy ngữ 
 * **"Chuyển 2 OKB qua địa chỉ 0x123...456"** *(Lệnh chuyển tiền nhanh)*
 * **"Gom toàn bộ 100 USDT từ ví phụ số 2 ném sang ví chính"** *(Chuyển tiền nội bộ siêu tốc)*
 * **"Hiện cáo cáo lãi lỗ PnL của tôi trong 7 ngày qua"** *(Lịch sử lợi nhuận đầu tư)*
-* **"Lệnh Bảo Mật: Trích xuất mọi Private Key của tôi"** *(Độ an toàn cấp Quốc phòng: Chỉ gửi key qua môi trường nhắn tin riêng tư)*
+* **"Lệnh Bảo Mật: Xuất toàn bộ Private Key của tôi"** *(Độ an toàn cấp Quốc phòng: Chỉ gửi key qua môi trường nhắn tin riêng tư)*
 
 #### 🛡️ 5. Quét Rủi Ro An Ninh An Toàn Thông Tin
 * **"Đồng này có an toàn để mua không? 0x1234..."** *(Rà quét Contract có dính bẫy thanh khoản scam hay không)*
