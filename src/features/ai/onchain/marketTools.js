@@ -9,10 +9,26 @@ module.exports = {
     async get_token_price(args, context) {
         try {
             // Auto-resolve any symbols to contract addresses before fetching price
+            const KNOWN_TOKENS = {
+                'BTC': { chainIndex: '1', addr: '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599' },
+                'WBTC': { chainIndex: '1', addr: '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599' },
+                'ETH': { chainIndex: '1', addr: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+                'USDT': { chainIndex: '1', addr: '0xdac17f958d2ee523a2206206994597c13d831ec7' },
+                'USDC': { chainIndex: '1', addr: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' },
+                'BNB': { chainIndex: '56', addr: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+                'SOL': { chainIndex: '501', addr: '11111111111111111111111111111111' },
+                'OKB': { chainIndex: '196', addr: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+            };
             const resolvedTokens = [];
             for (const token of args.tokens) {
-                // If address looks like a symbol (not 0x...) and not native placeholder
-                if (!token.tokenContractAddress.toLowerCase().startsWith('0x') && token.tokenContractAddress.length < 10) {
+                const upper = (token.tokenContractAddress || '').toUpperCase();
+                // Check KNOWN_TOKENS first for common symbols
+                if (KNOWN_TOKENS[upper]) {
+                    resolvedTokens.push({
+                        chainIndex: KNOWN_TOKENS[upper].chainIndex,
+                        tokenContractAddress: KNOWN_TOKENS[upper].addr
+                    });
+                } else if (!token.tokenContractAddress.toLowerCase().startsWith('0x') && token.tokenContractAddress.length < 10) {
                     const resolved = await autoResolveToken(token.tokenContractAddress, token.chainIndex);
                     if (resolved.error) {
                         return resolved.error;
@@ -37,13 +53,75 @@ module.exports = {
     async search_token(args, context) {
         try {
             const chains = args.chains || '196';
-            const data = await onchainos.getTokenSearch(chains, args.keyword);
+            const keyword = (args.keyword || '').trim();
             const lang = context?.lang || 'en';
-            return formatSearchResult(data, lang);
+            const { msg, bot } = context;
+
+            if (!keyword) {
+                return { success: false, error: 'No keyword provided.' };
+            }
+
+            const data = await onchainos.getTokenSearch(chains, keyword);
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                return formatSearchResult([], lang);
+            }
+
+            // Import shared helpers from aiHandlers
+            const { _buildPriceCard, _buildTokenListPage, _buildTokenListKeyboard, _tokenSearchCache, TKS_PAGE_SIZE } = require('../../../app/aiHandlers');
+            const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '501': 'Solana', '43114': 'Avalanche', '42161': 'Arbitrum', '10': 'Optimism', '8453': 'Base' };
+            const { t } = require('../../../core/i18n');
+
+            if (data.length === 1) {
+                // Single result → detailed price card
+                const sr = data[0];
+                const priceCard = await _buildPriceCard(onchainos, sr.chainIndex, sr.tokenContractAddress, sr.tokenSymbol, sr.tokenFullName, chainNames, t, lang);
+                const cacheKey = `tks_${Date.now()}_${msg.from?.id || 0}`;
+                _tokenSearchCache.set(cacheKey, { results: data, keyword, chainNames, timestamp: Date.now(), t, lang });
+                const keyboard = [
+                    [
+                        { text: '💱 Swap', callback_data: `tks|swap|${cacheKey}|0` },
+                        { text: '📊 Chart', callback_data: `tks|chart|${cacheKey}|0` },
+                        { text: '🔒 Security', callback_data: `tks|sec|${cacheKey}|0` },
+                    ],
+                    [{ text: '📋 Copy CA', callback_data: `tks|copy|${cacheKey}|0` }],
+                    [{ text: t(lang, 'ai_token_search_close') || '✖️ Close', callback_data: 'tks|close' }]
+                ];
+                await bot.sendMessage(msg.chat.id, priceCard, {
+                    parse_mode: 'HTML',
+                    reply_markup: { inline_keyboard: keyboard },
+                    reply_to_message_id: msg.message_id,
+                    message_thread_id: msg.message_thread_id || undefined,
+                    disable_web_page_preview: true
+                });
+                return { success: true, action: 'search_displayed', displayMessage: `Found ${sr.tokenSymbol}. Price card displayed.` };
+            }
+
+            // Multiple results → paginated list with inline keyboard
+            const cacheKey = `tks_${Date.now()}_${msg.from?.id || 0}`;
+            _tokenSearchCache.set(cacheKey, { results: data, keyword, chainNames, timestamp: Date.now(), t, lang });
+            // Clean old cache (>10 min)
+            for (const [k, v] of _tokenSearchCache.entries()) {
+                if (Date.now() - v.timestamp > 600000) _tokenSearchCache.delete(k);
+            }
+            const page = 0;
+            const pageText = _buildTokenListPage(data, keyword, page, chainNames, t, lang);
+            const keyboard = _buildTokenListKeyboard(data, cacheKey, page, t, lang);
+            await bot.sendMessage(msg.chat.id, pageText, {
+                parse_mode: 'HTML',
+                reply_markup: { inline_keyboard: keyboard },
+                reply_to_message_id: msg.message_id,
+                message_thread_id: msg.message_thread_id || undefined
+            });
+            return {
+                success: true,
+                action: 'search_displayed',
+                displayMessage: `Found ${data.length} tokens matching "${keyword}". Selection list displayed.`
+            };
         } catch (error) {
             return `❌ Error searching token: ${error.msg || error.message}`;
         }
     },
+
 
     async get_top_tokens(args, context) {
         try {
@@ -121,10 +199,42 @@ module.exports = {
             }
             const bar = args.bar || '1H';
             const limit = parseInt(args.limit || '24');
-            const [data, priceData] = await Promise.all([
-                onchainos.getMarketCandles(chainIndex, tokenAddress, { bar, limit }),
-                onchainos.getMarketPrice([{ chainIndex, tokenContractAddress: tokenAddress }]).catch(() => null)
-            ]);
+            let data, priceData;
+            try {
+                [data, priceData] = await Promise.all([
+                    onchainos.getMarketCandles(chainIndex, tokenAddress, { bar, limit }),
+                    onchainos.getMarketPrice([{ chainIndex, tokenContractAddress: tokenAddress }]).catch(() => null)
+                ]);
+            } catch (candleErr) {
+                // Fallback: if candle data unavailable (micro-cap tokens), show price + basic info instead
+                const lang = context?.lang || 'en';
+                const noChartL = {
+                    vi: '📉 <b>Không có dữ liệu biểu đồ</b>\n━━━━━━━━━━━━━━━━━━\nToken này chưa có đủ hoạt động giao dịch để tạo biểu đồ K-line.',
+                    en: '📉 <b>No Chart Data Available</b>\n━━━━━━━━━━━━━━━━━━\nThis token doesn\'t have enough trading activity for K-line charts.',
+                    zh: '📉 <b>无图表数据</b>\n━━━━━━━━━━━━━━━━━━\n此代币交易活动不足，无法生成K线图。',
+                    ko: '📉 <b>차트 데이터 없음</b>\n━━━━━━━━━━━━━━━━━━\n이 토큰은 K-line 차트를 생성할 충분한 거래 활동이 없습니다.'
+                };
+                let fallbackMsg = noChartL[lang] || noChartL.en;
+                // Try to get at least the current price
+                try {
+                    const priceInfo = await onchainos.getMarketPrice([{ chainIndex, tokenContractAddress: tokenAddress }]);
+                    if (priceInfo && priceInfo[0]) {
+                        const p = Number(priceInfo[0].price || 0);
+                        const sym = priceInfo[0].tokenSymbol || tokenAddress.slice(0, 8);
+                        const pStr = p < 0.01 ? p.toFixed(8) : p.toFixed(4);
+                        const priceLabel = lang === 'vi' ? 'Giá hiện tại' : lang === 'zh' ? '当前价格' : 'Current Price';
+                        fallbackMsg += `\n\n💰 <b>${priceLabel}:</b> <code>$${pStr}</code> (${sym})`;
+                    }
+                } catch (e) { /* ignore */ }
+                const hintL = {
+                    vi: '\n\n💡 <i>Thử dùng "phân tích token BANMAO" để xem thông tin chi tiết khác.</i>',
+                    en: '\n\n💡 <i>Try "analyze token BANMAO" for other available market details.</i>',
+                    zh: '\n\n💡 <i>尝试"分析代币BANMAO"获取其他市场详情。</i>',
+                    ko: '\n\n💡 <i>"BANMAO 토큰 분석"을 시도하여 다른 시장 세부 정보를 확인하세요.</i>'
+                };
+                fallbackMsg += hintL[lang] || hintL.en;
+                return { displayMessage: fallbackMsg };
+            }
             const realTimePrice = priceData && priceData[0] ? Number(priceData[0].price || 0) : null;
             const lang = context?.lang || 'en';
             return formatCandlesResult(data, bar, realTimePrice, tokenAddress, chainIndex, lang);
@@ -132,6 +242,7 @@ module.exports = {
             return `❌ Error fetching candles: ${error.msg || error.message}`;
         }
     },
+
 
     async get_token_market_detail(args, context) {
         try {
@@ -155,11 +266,56 @@ module.exports = {
                 onchainos.getTokenBasicInfo(tokens).catch(() => null)
             ]);
             const lang = context?.lang || 'en';
+
+            // If both primary APIs returned empty, try getMarketPrice as fallback
+            const hasPrice = priceInfo && Array.isArray(priceInfo) && priceInfo.length > 0;
+            const hasBasic = basicInfo && Array.isArray(basicInfo) && basicInfo.length > 0;
+
+            if (!hasPrice && !hasBasic) {
+                // Fallback: use getMarketPrice which works for more tokens
+                try {
+                    const marketPrice = await onchainos.getMarketPrice(tokens);
+                    if (marketPrice && Array.isArray(marketPrice) && marketPrice.length > 0) {
+                        const mp = marketPrice[0];
+                        const price = Number(mp.price || 0);
+                        const sym = mp.tokenSymbol || '?';
+                        const pStr = price < 0.01 ? price.toFixed(8) : price.toFixed(4);
+                        const addr = tokens[0]?.tokenContractAddress || '';
+                        const chainIdx = tokens[0]?.chainIndex || '196';
+                        const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base' };
+                        const chainName = chainNames[chainIdx] || `Chain #${chainIdx}`;
+                        const okxChainMap = { '196': 'xlayer', '1': 'eth', '56': 'bsc', '42161': 'arbitrum', '8453': 'base', '137': 'polygon', '501': 'sol' };
+                        const chainPath = okxChainMap[String(chainIdx)] || 'bsc';
+                        const explorerUrl = addr ? `https://www.okx.com/web3/explorer/${chainPath}/token/${addr}` : '';
+
+                        const titleL = { vi: 'Thông tin Token', en: 'Token Info', zh: '代币信息', ko: '토큰 정보' };
+                        const priceL = { vi: 'Giá hiện tại', en: 'Current Price', zh: '当前价格', ko: '현재가격' };
+                        const chainL = { vi: 'Mạng', en: 'Chain', zh: '链', ko: '체인' };
+                        const contractL = { vi: 'Hợp đồng', en: 'Contract', zh: '合约', ko: '컨트랙트' };
+                        const noteL = {
+                            vi: 'Token này chưa được lập chỉ mục đầy đủ. Dữ liệu chi tiết (market cap, volume, liquidity) chưa có trên hệ thống on-chain.',
+                            en: 'This token is not fully indexed yet. Detailed data (market cap, volume, liquidity) is not available on-chain.',
+                            zh: '此代币尚未完全索引。链上暂无详细数据（市值、成交量、流动性）。',
+                            ko: '이 토큰은 아직 완전히 인덱싱되지 않았습니다. 온체인에서 상세 데이터를 사용할 수 없습니다.'
+                        };
+
+                        let card = `🪙 <b>${titleL[lang] || titleL.en}: ${sym}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+                        card += `💰 <b>${priceL[lang] || priceL.en}:</b> <code>$${pStr}</code>\n`;
+                        card += `⛓ <b>${chainL[lang] || chainL.en}:</b> ${chainName} (#${chainIdx})\n`;
+                        if (addr) card += `📋 <b>${contractL[lang] || contractL.en}:</b>\n<code>${addr}</code>\n`;
+                        if (explorerUrl) card += `🔗 <a href="${explorerUrl}">Explorer</a>\n`;
+                        card += `\n⚠️ <i>${noteL[lang] || noteL.en}</i>`;
+                        return { displayMessage: card };
+                    }
+                } catch (e) { /* ignore fallback error */ }
+            }
+
             return formatTokenMarketDetail(priceInfo, basicInfo, lang);
         } catch (error) {
             return `❌ Error fetching market detail: ${error.msg || error.message}`;
         }
     },
+
 
     async get_index_price(args) {
         try {
@@ -343,27 +499,32 @@ module.exports = {
         }
     },
 
-    async get_trade_history(args) {
+    async get_trade_history(args, context) {
         try {
+            const lang = context?.lang || 'en';
             const data = await onchainos.getMarketTrades(
                 args.chainIndex,
                 args.tokenContractAddress.toLowerCase(),
                 { limit: args.limit || '20' }
             );
             if (!data || !Array.isArray(data) || data.length === 0) {
-                return '📭 Không tìm thấy lịch sử giao dịch cho token này.';
+                const noData = { vi: '📭 Không tìm thấy lịch sử giao dịch cho token này.', en: '📭 No trade history found for this token.', zh: '📭 未找到该代币的交易记录。', ko: '📭 이 토큰의 거래 내역을 찾을 수 없습니다.' };
+                return noData[lang] || noData.en;
             }
+            const buyLabel = { vi: '🟢 MUA', en: '🟢 BUY', zh: '🟢 买入', ko: '🟢 매수' };
+            const sellLabel = { vi: '🔴 BÁN', en: '🔴 SELL', zh: '🔴 卖出', ko: '🔴 매도' };
+            const headerLabel = { vi: '📊 Lịch sử giao dịch gần đây', en: '📊 Recent Trade History', zh: '📊 最近交易记录', ko: '📊 최근 거래 내역' };
             const lines = data.slice(0, 10).map((t, i) => {
-                const type = t.type === 'buy' ? '🟢 MUA' : '🔴 BÁN';
+                const type = t.type === 'buy' ? (buyLabel[lang] || buyLabel.en) : (sellLabel[lang] || sellLabel.en);
                 const price = Number(t.price || 0);
                 const vol = Number(t.volume || 0);
-                const time = t.time ? new Date(Number(t.time)).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'N/A';
+                const time = t.time ? new Date(Number(t.time)).toLocaleString('en-US', { timeZone: 'UTC', hour12: false }) : 'N/A';
                 const tokens = (t.changedTokenInfo || []).map(tk => `${Number(tk.amount || 0).toLocaleString('en-US', { maximumFractionDigits: 4 })} ${tk.tokenSymbol}`).join(', ');
                 return `${i + 1}. ${type} | $${price < 0.01 ? price.toFixed(8) : price.toFixed(4)} | Vol: $${vol.toFixed(2)}\n> ${tokens}\n> ${time} | ${t.dexName || 'DEX'}`;
             });
-            return `📊 Lịch sử giao dịch gần đây:\n\n${lines.join('\n\n')}`;
+            return `${headerLabel[lang] || headerLabel.en}:\n\n${lines.join('\n\n')}`;
         } catch (error) {
-            return `❌ Lỗi lấy lịch sử giao dịch: ${error.msg || error.message}`;
+            return `❌ Error fetching trade history: ${error.msg || error.message}`;
         }
     },
 
@@ -412,6 +573,106 @@ module.exports = {
             return formatTokenSecurityResult(data, tokenAddress, chainIndex, lang);
         } catch (error) {
             return `❌ Lỗi khi kiểm tra bảo mật: ${error.message}`;
+        }
+    },
+
+    async check_approval_safety(args, context) {
+        try {
+            const { dbGet } = require('../../../../db/core');
+            const https = require('https');
+            const userId = context?.userId;
+            const lang = context?.lang || 'en';
+            let chainIndex = args.chainIndex || '196';
+            let walletAddress = args.walletAddress;
+
+            // If no wallet provided, use user's default trading wallet
+            if (!walletAddress && userId) {
+                const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE userId = ? AND isDefault = 1', [userId]);
+                if (tw) walletAddress = tw.address;
+            }
+            if (!walletAddress) {
+                return lang === 'vi'
+                    ? '❌ Không tìm thấy địa chỉ ví. Vui lòng cung cấp địa chỉ ví hoặc tạo ví trading trước.'
+                    : '❌ No wallet address found. Please provide a wallet address or create a trading wallet first.';
+            }
+
+            // GoPlus token approval security API
+            const goplusChainMap = { '1': '1', '56': '56', '196': '196', '137': '137', '42161': '42161', '8453': '8453' };
+            const goplusChain = goplusChainMap[String(chainIndex)];
+            if (!goplusChain) {
+                return lang === 'vi'
+                    ? `❌ Không hỗ trợ kiểm tra approval trên chain ID ${chainIndex}. Chỉ hỗ trợ EVM chains.`
+                    : `❌ Approval safety check not supported on chain ${chainIndex}. Only EVM chains supported.`;
+            }
+
+            const url = `https://api.gopluslabs.io/api/v2/token_approval_security/${goplusChain}?addresses=${walletAddress}`;
+            const data = await new Promise((resolve, reject) => {
+                const req = https.get(url, (res) => {
+                    let body = '';
+                    res.on('data', (chunk) => body += chunk);
+                    res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { reject(e); } });
+                });
+                req.on('error', reject);
+                req.setTimeout(10000, () => { req.destroy(); reject(new Error('GoPlus API Timeout')); });
+            });
+
+            if (!data || data.code !== 1 || !data.result) {
+                return lang === 'vi'
+                    ? '❌ Không lấy được dữ liệu approval. API GoPlus có thể đang bận.'
+                    : '❌ Could not fetch approval data. GoPlus API may be busy.';
+            }
+
+            const approvals = data.result;
+            const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base' };
+            const chainName = chainNames[chainIndex] || `Chain #${chainIndex}`;
+
+            // Extract token approvals
+            const tokenApprovals = approvals.token_list || [];
+            if (tokenApprovals.length === 0) {
+                const noApprovals = lang === 'vi'
+                    ? `🟢 <b>Không có approval nào</b>\n━━━━━━━━━━━━━━━━━━\nVí <code>${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)}</code> trên ${chainName} không có token approval nào. Tuyệt vời — ví rất an toàn!`
+                    : `🟢 <b>No Approvals Found</b>\n━━━━━━━━━━━━━━━━━━\nWallet <code>${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)}</code> on ${chainName} has no token approvals. Great — wallet is very safe!`;
+                return { displayMessage: noApprovals };
+            }
+
+            // Analyze each approval
+            let riskyCount = 0;
+            let safeCount = 0;
+            const lines = [];
+            for (const token of tokenApprovals.slice(0, 10)) {
+                const symbol = token.token_symbol || '?';
+                const spenders = token.approved_list || [];
+                for (const spender of spenders.slice(0, 3)) {
+                    const isUnlimited = spender.approved_amount === 'unlimited' || Number(spender.approved_amount || 0) > 1e30;
+                    const isRisky = spender.address_risk || spender.is_contract === 0;
+                    const riskIcon = isRisky ? '🔴' : isUnlimited ? '🟡' : '🟢';
+                    if (isRisky) riskyCount++;
+                    else safeCount++;
+
+                    const spenderAddr = spender.approved_spender ? `${spender.approved_spender.slice(0, 8)}...${spender.approved_spender.slice(-4)}` : '?';
+                    const amountStr = isUnlimited ? '∞ UNLIMITED' : Number(spender.approved_amount || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+                    lines.push(`${riskIcon} <b>${symbol}</b> → <code>${spenderAddr}</code>\n   Amount: <code>${amountStr}</code>${isRisky ? ' ⚠️ RISKY SPENDER' : ''}`);
+                }
+            }
+
+            const overallIcon = riskyCount > 0 ? '🔴' : safeCount > 3 ? '🟡' : '🟢';
+            const headerLabel = lang === 'vi' ? 'Kiểm tra Approval' : 'Approval Safety Check';
+            const walletLabel = lang === 'vi' ? 'Ví' : 'Wallet';
+            const summaryLabel = lang === 'vi' ? 'Tóm tắt' : 'Summary';
+            const revokeHint = lang === 'vi'
+                ? '💡 Để thu hồi approval nguy hiểm, dùng <a href="https://revoke.cash">revoke.cash</a>'
+                : '💡 To revoke risky approvals, use <a href="https://revoke.cash">revoke.cash</a>';
+
+            let card = `${overallIcon} <b>${headerLabel}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+            card += `👛 <b>${walletLabel}:</b> <code>${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)}</code>\n`;
+            card += `⛓ ${chainName}\n\n`;
+            card += lines.join('\n\n') + '\n\n';
+            card += `📊 <b>${summaryLabel}:</b> ${riskyCount > 0 ? `🔴 ${riskyCount} risky` : ''}${riskyCount > 0 && safeCount > 0 ? ' · ' : ''}${safeCount > 0 ? `🟢 ${safeCount} safe` : ''}\n`;
+            card += revokeHint;
+
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error checking approval safety: ${error.message}`;
         }
     },
 

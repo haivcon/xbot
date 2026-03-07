@@ -2,7 +2,7 @@ const onchainos = require('../../../services/onchainos');
 const fs = require('fs');
 const path = require('path');
 const { formatPriceResult, formatSearchResult, formatWalletResult, formatSwapQuoteResult, formatTopTokensResult, formatRecentTradesResult, formatSignalChainsResult, formatSignalListResult, formatProfitRoiResult, formatHolderResult, formatGasResult, formatTokenInfoResult, formatCandlesResult, formatTokenMarketDetail, formatSwapExecutionResult, formatSimulationResult, formatLargeNumber } = require('./formatters');
-const { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken } = require('./helpers');
+const { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken, rpcRetry, createNonceManager } = require('./helpers');
 const db = require('../../../../db.js');
 
 module.exports = {
@@ -71,7 +71,20 @@ module.exports = {
                 const existing = await dbGet('SELECT id FROM user_trading_wallets WHERE userId = ? LIMIT 1', [userId]);
                 const isDefault = existing ? 0 : 1;
                 const countRow = await dbGet('SELECT COUNT(*) as cnt FROM user_trading_wallets WHERE userId = ?', [userId]);
-                const autoName = `Ví ${(countRow?.cnt || 0) + 1}`;
+
+                // ── i18n for wallet creation ──
+                const _wcI18n = {
+                    wallet_prefix: { vi: 'Ví', en: 'Wallet', zh: '钱包', ko: '지갑', ru: 'Кошелёк', id: 'Dompet' },
+                    created_ok: { vi: '✅ Ví giao dịch mới đã được tạo thành công!', en: '✅ New trading wallet created successfully!', zh: '✅ 新交易钱包创建成功！', ko: '✅ 새 거래 지갑이 생성되었습니다!', ru: '✅ Новый торговый кошелёк успешно создан!', id: '✅ Dompet trading baru berhasil dibuat!' },
+                    address_label: { vi: 'Địa chỉ', en: 'Address', zh: '地址', ko: '주소', ru: 'Адрес', id: 'Alamat' },
+                    pk_sent: { vi: 'Khoá Private đã được gửi vào tin nhắn riêng tư của bạn (tự xoá sau 30 giây). Vui lòng kiểm tra DM.', en: 'The private key has been sent to your Direct Messages securely (auto-delete in 30s). Please check your DM.', zh: '私钥已安全发送到您的私信（30秒后自动删除），请查收 DM。', ko: '개인 키가 DM으로 안전하게 전송되었습니다 (30초 후 자동 삭제). DM을 확인하세요.', ru: 'Приватный ключ отправлен в личные сообщения (автоудаление через 30 сек). Проверьте ЛС.', id: 'Private key telah dikirim ke DM Anda dengan aman (otomatis terhapus dalam 30 detik). Cek DM Anda.' },
+                    pk_fail: { vi: 'Cảnh báo: Không thể gửi khoá Private qua DM. Hãy dùng lệnh /mywallet để xuất thủ công.', en: 'Note: Could not send private key to your DM. Please use /mywallet to export it manually.', zh: '注意：无法将私钥发送至私信。请使用 /mywallet 手动导出。', ko: '참고: 개인 키를 DM으로 전송하지 못했습니다. /mywallet 을 사용하여 직접 내보내세요.', ru: 'Примечание: Не удалось отправить ключ в ЛС. Используйте /mywallet для ручного экспорта.', id: 'Catatan: Tidak bisa mengirim private key ke DM. Gunakan /mywallet untuk mengekspornya.' },
+                    err_create: { vi: '❌ Lỗi khi tạo ví:', en: '❌ Error creating wallet:', zh: '❌ 创建钱包时出错：', ko: '❌ 지갑 생성 오류:', ru: '❌ Ошибка при создании кошелька:', id: '❌ Gagal membuat dompet:' },
+                };
+                const lang = context?.lang || 'en';
+                const _wc = (key) => (_wcI18n[key] || {})[lang] || (_wcI18n[key] || {}).en || key;
+                const walletPrefix = _wc('wallet_prefix');
+                const autoName = `${walletPrefix} ${(countRow?.cnt || 0) + 1}`;
                 await dbRun('INSERT INTO user_trading_wallets (userId, walletName, address, encryptedKey, chainIndex, isDefault, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
                     [userId, autoName, newWallet.address, encryptedKey, '196', isDefault, Math.floor(Date.now() / 1000)]);
 
@@ -79,12 +92,17 @@ module.exports = {
                 if (context && context.bot && context.msg) {
                     try {
                         const dbModule = require('../../../../db.js');
-                        // Use english or vietnamese depending on context if available, otherwise fallback
-                        const lang = context.lang || 'vi';
-                        await dbModule.addWalletToUser(userId, lang, newWallet.address, { name: 'Ví AI' });
+                        await dbModule.addWalletToUser(userId, lang, newWallet.address, { name: autoName });
 
-                        // Send the private key directly to DM
-                        const keyMsg = `👛 **Ví mới được tạo**\n━━━━━━━━━━━━━━━━━━\nĐịa chỉ: \`${newWallet.address}\`\nKhóa Private: \`${newWallet.privateKey}\`\n\n⚠️ Tin nhắn này sẽ tự hủy sau 30 giây để bảo mật!`;
+                        // Send the private key directly to DM (localized)
+                        const keyMsgI18n = {
+                            title: { vi: '👛 Ví mới được tạo', en: '👛 New wallet created', zh: '👛 新钱包已创建', ko: '👛 새 지갑 생성됨', ru: '👛 Новый кошелёк создан', id: '👛 Dompet baru dibuat' },
+                            addrLbl: { vi: 'Địa chỉ', en: 'Address', zh: '地址', ko: '주소', ru: 'Адрес', id: 'Alamat' },
+                            pkLbl: { vi: 'Khoá Private', en: 'Private Key', zh: '私钥', ko: '개인 키', ru: 'Приватный ключ', id: 'Private Key' },
+                            warn: { vi: '⚠️ Tin nhắn này sẽ tự hủy sau 30 giây để bảo mật!', en: '⚠️ This message will auto-delete in 30 seconds for security!', zh: '⚠️ 此消息将在 30 秒后自动删除以保障安全！', ko: '⚠️ 이 메시지는 30초 후 보안을 위해 자동 삭제됩니다!', ru: '⚠️ Это сообщение автоматически удалится через 30 секунд!', id: '⚠️ Pesan ini akan otomatis terhapus dalam 30 detik demi keamanan!' },
+                        };
+                        const _km = (key) => (keyMsgI18n[key] || {})[lang] || (keyMsgI18n[key] || {}).en || key;
+                        const keyMsg = `👛 **${_km('title')}**\n━━━━━━━━━━━━━━━━━━\n${_km('addrLbl')}: \`${newWallet.address}\`\n${_km('pkLbl')}: \`${newWallet.privateKey}\`\n\n${_km('warn')}`;
                         const sent = await context.bot.sendMessage(userId, keyMsg, { parse_mode: 'Markdown' });
                         setTimeout(() => { context.bot.deleteMessage(userId, sent.message_id).catch(() => { }); }, 30000);
                         dmSent = true;
@@ -109,17 +127,17 @@ module.exports = {
                     return {
                         success: true,
                         action: true,
-                        displayMessage: `✅ Trading wallet created successfully!\nAddress: ${newWallet.address}\n\nThe private key has been sent to your Direct Messages securely (it will auto-delete in 30s). Please check your DM.`
+                        displayMessage: `${_wc('created_ok')}\n${_wc('address_label')}: ${newWallet.address}\n\n${_wc('pk_sent')}`
                     };
                 } else {
                     return {
                         success: true,
                         action: true,
-                        displayMessage: `✅ Trading wallet created! Address: ${newWallet.address}\n\n⚠️ Note: Could not send private key to your DM via bot. Please use the 'manage_trading_wallet' tool with 'export' action to view it.`
+                        displayMessage: `${_wc('created_ok')}\n${_wc('address_label')}: ${newWallet.address}\n\n⚠️ ${_wc('pk_fail')}`
                     };
                 }
             } catch (error) {
-                return { success: false, action: true, displayMessage: `❌ Error creating wallet: ${error.message}` };
+                return { success: false, action: true, displayMessage: `${_wc('err_create')} ${error.message}` };
             }
         } else if (action === 'delete') {
             try {
@@ -502,8 +520,19 @@ module.exports = {
                 balBeforeSrc = ethers.formatEther(await provider.getBalance(wallet.address));
                 balBeforeDst = ethers.formatEther(await provider.getBalance(toAddr));
 
+                // Enhancement #4: Dynamic gas pricing via getFeeData (EIP-1559 compatible)
                 const amountWei = ethers.parseEther(args.amount);
-                const tx = await wallet.sendTransaction({ to: toAddr, value: amountWei });
+                const feeData = await provider.getFeeData();
+                const txOptions = { to: toAddr, value: amountWei };
+                if (feeData.maxFeePerGas) {
+                    // EIP-1559 supported
+                    txOptions.maxFeePerGas = feeData.maxFeePerGas;
+                    txOptions.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+                } else if (feeData.gasPrice) {
+                    txOptions.gasPrice = feeData.gasPrice;
+                }
+                // Enhancement #1: Retry for RPC failures
+                const tx = await rpcRetry(() => wallet.sendTransaction(txOptions), 3, 'TRANSFER');
                 const receipt = await tx.wait();
 
                 txHash = receipt.hash;
@@ -534,7 +563,8 @@ module.exports = {
                 }
 
                 const amountWei = ethers.parseUnits(args.amount, decimals);
-                const tx = await contract.transfer(toAddr, amountWei);
+                // Enhancement #1: Retry for RPC failures
+                const tx = await rpcRetry(() => contract.transfer(toAddr, amountWei), 3, 'TRANSFER-ERC20');
                 const receipt = await tx.wait();
 
                 txHash = receipt.hash;
@@ -556,14 +586,12 @@ module.exports = {
             const explorer = _getExplorerUrl(chainIndex);
             console.log(`[TRANSFER] Success: tx=${txHash}`);
 
-            // Detect user's prompt language dynamically
-            const userText = (context?.msg?.text || context?.msg?.caption || '').toLowerCase();
+            // Use user's DB-stored language preference (reliable even for short prompts like "ok")
             let lang = context?.lang || 'en';
-            if (/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/.test(userText)) lang = 'vi';
-            else if (/[\u4e00-\u9fa5]/.test(userText)) lang = 'zh';
-            else if (/[\uac00-\ud7af]/.test(userText)) lang = 'ko';
-            else if (/[а-яА-ЯёЁ]/.test(userText)) lang = 'ru';
-            else if (/\b(saya|kamu|di|ke|dari|untuk|bisa|tidak|ya|halo|tolong|ada|berapa|saldo|dompet|transfer|kirim)\b/.test(userText)) lang = 'id';
+            try {
+                const { getLang } = require('../../../app/language');
+                if (context?.msg) lang = await getLang(context.msg);
+            } catch (e) { /* fallback to context.lang */ }
             let title = 'TRANSFER SUCCESS';
             let fromLabel = 'From:';
             let toLabel = 'To:';
@@ -615,8 +643,12 @@ module.exports = {
             return { success: true, action: true, displayMessage: report };
         } catch (error) {
             console.error('[TRANSFER] Error:', error.message);
-            const lang = context?.lang || 'en';
-            const errorMsg = lang === 'vi' ? 'Lỗi chuyển token:' : (lang === 'zh' || lang === 'zh-cn' ? '转账失败:' : 'Token transfer error:');
+            let errLang = context?.lang || 'en';
+            try {
+                const { getLang } = require('../../../app/language');
+                if (context?.msg) errLang = await getLang(context.msg);
+            } catch (e) { /* fallback */ }
+            const errorMsg = errLang === 'vi' ? 'Lỗi chuyển token:' : (errLang === 'zh' || errLang === 'zh-cn' ? '转账失败:' : 'Token transfer error:');
             return { success: false, action: true, displayMessage: `❌ ${errorMsg} ${error.message?.slice(0, 150)}` };
         }
     },
@@ -644,6 +676,8 @@ module.exports = {
         const isNative = !tokenAddr || tokenAddr === 'native' || tokenAddr === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
         const symbol = args.symbol || (isNative ? (chainIndex === '196' ? 'OKB' : 'ETH') : 'Token');
         const results = [];
+        // Enhancement #2: Shared nonce manager for batch operations
+        const nonceManager = createNonceManager(provider);
 
         let totalGasEth = 0;
 
@@ -658,7 +692,17 @@ module.exports = {
 
                 if (isNative) {
                     balBeforeSrc = ethers.formatEther(await provider.getBalance(wallet.address));
-                    const tx = await wallet.sendTransaction({ to: destAddr, value: ethers.parseEther(t.amount) });
+                    // Enhancement #4: Dynamic gas pricing
+                    const feeData = await provider.getFeeData();
+                    const txOpts = { to: destAddr, value: ethers.parseEther(t.amount) };
+                    if (feeData.maxFeePerGas) {
+                        txOpts.maxFeePerGas = feeData.maxFeePerGas;
+                        txOpts.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+                    } else if (feeData.gasPrice) {
+                        txOpts.gasPrice = feeData.gasPrice;
+                    }
+                    // Enhancement #1: Retry for RPC failures
+                    const tx = await rpcRetry(() => wallet.sendTransaction(txOpts), 3, 'BATCH-TRANSFER');
                     const receipt = await tx.wait();
                     txHash = receipt.hash;
                     if (receipt.gasUsed && receipt.gasPrice) gasFeeEth = ethers.formatEther(receipt.gasUsed * receipt.gasPrice);
@@ -675,7 +719,8 @@ module.exports = {
                     }
 
                     balBeforeSrc = ethers.formatUnits(await contract.balanceOf(wallet.address), decimals);
-                    const tx = await contract.transfer(destAddr, ethers.parseUnits(t.amount, decimals));
+                    // Enhancement #1: Retry for RPC failures
+                    const tx = await rpcRetry(() => contract.transfer(destAddr, ethers.parseUnits(t.amount, decimals)), 3, 'BATCH-TRANSFER-ERC20');
                     const receipt = await tx.wait();
                     txHash = receipt.hash;
                     if (receipt.gasUsed && receipt.gasPrice) gasFeeEth = ethers.formatEther(receipt.gasUsed * receipt.gasPrice);
@@ -705,13 +750,11 @@ module.exports = {
 
         const successCount = results.filter(r => r.status === '✅').length;
 
-        const userText = (context?.msg?.text || context?.msg?.caption || '').toLowerCase();
         let lang = context?.lang || 'en';
-        if (/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/.test(userText)) lang = 'vi';
-        else if (/[\u4e00-\u9fa5]/.test(userText)) lang = 'zh';
-        else if (/[\uac00-\ud7af]/.test(userText)) lang = 'ko';
-        else if (/[а-яА-ЯёЁ]/.test(userText)) lang = 'ru';
-        else if (/\b(saya|kamu|di|ke|dari|untuk|bisa|tidak|ya|halo|tolong|ada|berapa|saldo|dompet|transfer|kirim)\b/.test(userText)) lang = 'id';
+        try {
+            const { getLang } = require('../../../app/language');
+            if (context?.msg) lang = await getLang(context.msg);
+        } catch (e) { /* fallback to context.lang */ }
 
         let headerLabel = 'BATCH TRANSFER RESULTS:';
         let successStr = 'success';

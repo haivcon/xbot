@@ -272,6 +272,14 @@ function _buildTokenListKeyboard(results, cacheKey, page, t, lang) {
       row.length = 0;
     }
   });
+  // Action buttons for first result on page (quick actions)
+  const firstIdx = start;
+  const actionRow = [
+    { text: '💱 Swap', callback_data: `tks|swap|${cacheKey}|${firstIdx}` },
+    { text: '📊 Chart', callback_data: `tks|chart|${cacheKey}|${firstIdx}` },
+    { text: '🔒 Security', callback_data: `tks|sec|${cacheKey}|${firstIdx}` },
+  ];
+  keyboard.push(actionRow);
   // Pagination row
   const navRow = [];
   if (page > 0) navRow.push({ text: tf(l, 'ai_token_search_prev'), callback_data: `tks|p|${cacheKey}|${page - 1}` });
@@ -383,27 +391,30 @@ function registerImportKeyCommand(bot, getLang, t) {
     await bot.sendMessage(msg.chat.id, t(lang, 'ai_key_deleted'), { parse_mode: 'HTML' });
   });
 
-  // /createwallet — generate a new trading wallet
+  // /createwallet — generate a new trading wallet (multi-wallet supported)
   bot.onText(/^\/createwallet(?:@[\w_]+)?$/i, async (msg) => {
     const lang = getLang(msg.chat.id);
-    const { dbGet, dbRun } = require('../../db/core');
+    const { dbAll, dbRun } = require('../../db/core');
     const userId = String(msg.from?.id || msg.chat.id);
-    const existing = await dbGet('SELECT address FROM user_trading_wallets WHERE userId = ?', [userId]);
-    if (existing) {
-      await bot.sendMessage(msg.chat.id, `${t(lang, 'tw_already_exists')}\n${t(lang, 'ai_wallet_address')}: <code>${existing.address}</code>`, { parse_mode: 'HTML' });
-      return;
-    }
+    const existingWallets = await dbAll('SELECT id FROM user_trading_wallets WHERE userId = ?', [userId]);
+    const walletCount = existingWallets.length;
+    const isFirst = walletCount === 0;
+    const _wPrefix = { vi: 'Ví', en: 'Wallet', zh: '钱包', ko: '지갑', ru: 'Кошелёк', id: 'Dompet' };
+    const autoName = `${_wPrefix[lang] || _wPrefix.en} #${walletCount + 1}`;
     const ethers = require('ethers');
     const newWallet = ethers.Wallet.createRandom();
     const encryptedKey = encrypt(newWallet.privateKey);
-    await dbRun('INSERT INTO user_trading_wallets (userId, walletName, address, encryptedKey, chainIndex, isDefault, createdAt) VALUES (?, ?, ?, ?, ?, 1, ?)',
-      [userId, null, newWallet.address, encryptedKey, '196', Math.floor(Date.now() / 1000)]);
+    await dbRun('INSERT INTO user_trading_wallets (userId, walletName, address, encryptedKey, chainIndex, isDefault, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [userId, autoName, newWallet.address, encryptedKey, '196', isFirst ? 1 : 0, Math.floor(Date.now() / 1000)]);
+    const _defLabel = { vi: 'Ví mặc định', en: 'Default wallet', zh: '默认钱包', ko: '기본 지갑', ru: 'Кошелёк по умолчанию', id: 'Dompet utama' };
     let card = `${t(lang, 'tw_created')}\n━━━━━━━━━━━━━━━━━━\n`;
-    card += `${t(lang, 'ai_wallet_address')}: <code>${newWallet.address}</code>\n\n`;
-    card += `💡 ${t(lang, 'tw_created_hint')}\n\n`;
+    card += `👛 ${autoName}\n`;
+    card += `${t(lang, 'ai_wallet_address')}: <code>${newWallet.address}</code>\n`;
+    if (isFirst) card += `⭐ ${_defLabel[lang] || _defLabel.en}\n`;
+    card += `#${walletCount + 1}\n\n`;
     card += `${t(lang, 'tw_backup_warning')}`;
     await bot.sendMessage(msg.chat.id, card, { parse_mode: 'HTML' });
-    console.log(`[CreateWallet] ✔ User ${userId} created wallet ${newWallet.address.slice(0, 8)}...`);
+    console.log(`[CreateWallet] ✔ User ${userId} created wallet #${walletCount + 1}: ${newWallet.address.slice(0, 8)}...`);
   });
 
   // /exportkey — DM only, show private key
@@ -840,7 +851,9 @@ function registerSwapConfirmCallback(bot, getLang, t) {
         return;
       }
       // Sign transaction
-      const provider = new ethers.JsonRpcProvider('https://rpc.xlayer.tech');
+      const { _getChainRpc, _getExplorerUrl } = require('../features/ai/onchain/helpers');
+      const rpcUrl = _getChainRpc(chainIndex);
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
       const wallet = new ethers.Wallet(privateKey, provider);
       const tx = txRaw.tx;
       const signedTx = await wallet.signTransaction({
@@ -848,15 +861,17 @@ function registerSwapConfirmCallback(bot, getLang, t) {
         gasLimit: BigInt(tx.gas || tx.gasLimit || '300000'),
         gasPrice: BigInt(tx.gasPrice || '1000000000'),
         nonce: await provider.getTransactionCount(wallet.address),
-        chainId: 196
+        chainId: parseInt(chainIndex)
       });
       // Broadcast
       const broadcastResult = await onchainos.broadcastTransaction(signedTx, chainIndex, tw.address);
       const txHash = broadcastResult?.orderId || broadcastResult?.hash || broadcastResult?.transactionHash || 'pending';
-      const explorerLink = `https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`;
+      const explorerBase = _getExplorerUrl(chainIndex);
+      const explorerLink = `${explorerBase}/tx/${txHash}`;
       const toAmount = Number(txRaw.routerResult?.toTokenAmount || txRaw.toTokenAmount || 0) / (10 ** Number(toDec));
       const toStr = toAmount > 0 ? toAmount.toFixed(toAmount < 1 ? 8 : 4) : '?';
       let successCard = `🎉 <b>${t(lang, 'ai_swap_success')}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+
       successCard += `📤 ${fromSym} → 📥 ${toStr} <b>${toSym}</b>\n`;
       successCard += `🔗 <a href="${explorerLink}">${t(lang, 'ai_swap_tx')}</a>\n`;
       await bot.editMessageText(successCard, { chat_id: msg.chat.id, message_id: msg.message_id, parse_mode: 'HTML', disable_web_page_preview: true });
@@ -934,8 +949,14 @@ function registerTokenSearchCallbacks(bot) {
         await bot.answerCallbackQuery(query.id, { text: tf(cl, 'ai_token_search_loading', { symbol: token.tokenSymbol }) });
         const onchainos = require('../services/onchainos');
         const priceCard = await _buildPriceCard(onchainos, token.chainIndex, token.tokenContractAddress, token.tokenSymbol, token.tokenFullName, cached.chainNames, ct, cl);
-        // Replace the list message with the price card + back button
+        // Action buttons + back
         const backKeyboard = [
+          [
+            { text: '💱 Swap', callback_data: `tks|swap|${cacheKey}|${idx}` },
+            { text: '📊 Chart', callback_data: `tks|chart|${cacheKey}|${idx}` },
+            { text: '🔒 Security', callback_data: `tks|sec|${cacheKey}|${idx}` },
+          ],
+          [{ text: '📋 Copy CA', callback_data: `tks|copy|${cacheKey}|${idx}` }],
           [{ text: tf(cl, 'ai_token_search_back'), callback_data: `tks|p|${cacheKey}|${Math.floor(idx / TKS_PAGE_SIZE)}` }],
           [{ text: tf(cl, 'ai_token_search_close'), callback_data: 'tks|close' }]
         ];
@@ -946,6 +967,104 @@ function registerTokenSearchCallbacks(bot) {
           reply_markup: { inline_keyboard: backKeyboard },
           disable_web_page_preview: true
         });
+        return;
+      }
+      // ── Action: Swap shortcut ──
+      if (action === 'swap') {
+        const cacheKey = parts[2];
+        const idx = parseInt(parts[3]) || 0;
+        const cached = _tokenSearchCache.get(cacheKey);
+        if (!cached) { await bot.answerCallbackQuery(query.id, { text: 'Session expired', show_alert: true }); return; }
+        const token = cached.results[idx];
+        if (!token) { await bot.answerCallbackQuery(query.id, { text: 'Token not found', show_alert: true }); return; }
+        await bot.answerCallbackQuery(query.id, { text: `Preparing swap for ${token.tokenSymbol}...` });
+        // Send a prompt to the user guiding them
+        const swapGuide = `💱 <b>Swap ${token.tokenSymbol}</b>\n━━━━━━━━━━━━━━━━━━\n` +
+          `To swap this token, send a message like:\n` +
+          `<code>swap 1000 ${token.tokenSymbol} to OKB</code>\n\n` +
+          `📍 CA: <code>${token.tokenContractAddress}</code>\n` +
+          `⛓ Chain: ${cached.chainNames[token.chainIndex] || token.chainIndex}`;
+        await bot.sendMessage(query.message.chat.id, swapGuide, { parse_mode: 'HTML' });
+        return;
+      }
+      // ── Action: Chart shortcut ──
+      if (action === 'chart') {
+        const cacheKey = parts[2];
+        const idx = parseInt(parts[3]) || 0;
+        const cached = _tokenSearchCache.get(cacheKey);
+        if (!cached) { await bot.answerCallbackQuery(query.id, { text: 'Session expired', show_alert: true }); return; }
+        const token = cached.results[idx];
+        if (!token) { await bot.answerCallbackQuery(query.id, { text: 'Token not found', show_alert: true }); return; }
+        await bot.answerCallbackQuery(query.id, { text: `Loading chart for ${token.tokenSymbol}...` });
+        try {
+          const onchainos = require('../services/onchainos');
+          const { formatCandlesResult } = require('../features/ai/onchain/formatters');
+          const [candleData, priceData] = await Promise.all([
+            onchainos.getMarketCandles(token.chainIndex, token.tokenContractAddress, { bar: '1H', limit: 24 }).catch(() => null),
+            onchainos.getMarketPrice([{ chainIndex: token.chainIndex, tokenContractAddress: token.tokenContractAddress }]).catch(() => null)
+          ]);
+          const realTimePrice = priceData && priceData[0] ? Number(priceData[0].price || 0) : null;
+          const chartText = formatCandlesResult(candleData, '1H', realTimePrice, token.tokenContractAddress, token.chainIndex, cached.lang || 'en');
+          // Strip the "> IMPORTANT INSTRUCTION" prefix if present
+          const cleanChart = chartText.replace(/^>\s*IMPORTANT INSTRUCTION[^\n]*\n\n/, '');
+          await bot.sendMessage(query.message.chat.id, cleanChart, { parse_mode: 'Markdown', disable_web_page_preview: true }).catch(() => {
+            // Fallback to no parse mode
+            bot.sendMessage(query.message.chat.id, cleanChart, { disable_web_page_preview: true });
+          });
+        } catch (err) {
+          await bot.sendMessage(query.message.chat.id, `❌ Error loading chart: ${err.message}`);
+        }
+        return;
+      }
+      // ── Action: Security check ──
+      if (action === 'sec') {
+        const cacheKey = parts[2];
+        const idx = parseInt(parts[3]) || 0;
+        const cached = _tokenSearchCache.get(cacheKey);
+        if (!cached) { await bot.answerCallbackQuery(query.id, { text: 'Session expired', show_alert: true }); return; }
+        const token = cached.results[idx];
+        if (!token) { await bot.answerCallbackQuery(query.id, { text: 'Token not found', show_alert: true }); return; }
+        await bot.answerCallbackQuery(query.id, { text: `Checking security for ${token.tokenSymbol}...` });
+        try {
+          const { formatTokenSecurityResult } = require('../features/ai/onchain/formatters');
+          const https = require('https');
+          const goplusChainMap = { '1': '1', '56': '56', '196': '196', '137': '137', '42161': '42161', '8453': '8453' };
+          const goplusChain = goplusChainMap[String(token.chainIndex)];
+          if (!goplusChain) {
+            await bot.sendMessage(query.message.chat.id, `❌ Security check not supported for chain ${token.chainIndex}`);
+            return;
+          }
+          const url = `https://api.gopluslabs.io/api/v1/token_security/${goplusChain}?contract_addresses=${token.tokenContractAddress}`;
+          const secData = await new Promise((resolve, reject) => {
+            const req = https.get(url, (res) => {
+              let body = '';
+              res.on('data', (chunk) => body += chunk);
+              res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { reject(e); } });
+            });
+            req.on('error', reject);
+            req.setTimeout(8000, () => { req.destroy(); reject(new Error('Timeout')); });
+          });
+          const secText = formatTokenSecurityResult(secData, token.tokenContractAddress, token.chainIndex, cached.lang || 'en');
+          const cleanSec = secText.replace(/^>\s*IMPORTANT INSTRUCTION[^\n]*\n\n/, '');
+          await bot.sendMessage(query.message.chat.id, cleanSec, { parse_mode: 'Markdown', disable_web_page_preview: true }).catch(() => {
+            bot.sendMessage(query.message.chat.id, cleanSec, { disable_web_page_preview: true });
+          });
+        } catch (err) {
+          await bot.sendMessage(query.message.chat.id, `❌ Security check error: ${err.message}`);
+        }
+        return;
+      }
+      // ── Action: Copy CA ──
+      if (action === 'copy') {
+        const cacheKey = parts[2];
+        const idx = parseInt(parts[3]) || 0;
+        const cached = _tokenSearchCache.get(cacheKey);
+        if (!cached) { await bot.answerCallbackQuery(query.id, { text: 'Session expired', show_alert: true }); return; }
+        const token = cached.results[idx];
+        if (!token) { await bot.answerCallbackQuery(query.id, { text: 'Token not found', show_alert: true }); return; }
+        // Send CA as a plain code message that's easy to copy on mobile
+        await bot.answerCallbackQuery(query.id);
+        await bot.sendMessage(query.message.chat.id, `📋 <b>${token.tokenSymbol}</b> Contract Address:\n\n<code>${token.tokenContractAddress}</code>`, { parse_mode: 'HTML' });
         return;
       }
     } catch (error) {
@@ -1040,10 +1159,25 @@ function createAiHandlers(deps) {
           // Always send to userId (DM/private chat) for AI-scheduled tasks
           const targetChatId = task.userId || task.chatId;
           if (!targetChatId) { console.warn(`[Scheduler] Task ${task.id} has no target`); return; }
-          const { bot, t: tFunc } = deps;
+          const { bot } = deps;
           const taskLang = task.lang || 'vi';
+          const t = (key, params) => schedulerSkill.schedulerT(taskLang, key, params);
 
           const escapeHtml = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+          // Helper: safe sendMessage with error handling for blocked users
+          const safeSend = async (chatId, text, options) => {
+            try {
+              await bot.sendMessage(chatId, text, options);
+            } catch (sendErr) {
+              console.error(`[Scheduler] ⚠️ Failed to send message to ${chatId}:`, sendErr.message);
+              if (/blocked|deactivated|not found|PEER_ID_INVALID/i.test(sendErr.message)) {
+                console.warn(`[Scheduler] User ${chatId} has blocked the bot or is deactivated. Disabling task ${task.id}.`);
+                const { dbRun } = require('../../db/core');
+                await dbRun(`UPDATE ai_scheduled_tasks SET enabled = 0 WHERE id = ?`, [task.id]);
+              }
+            }
+          };
 
           if (task.type === 'price_watch') {
             // Fetch price using available dep functions
@@ -1068,30 +1202,30 @@ function createAiHandlers(deps) {
                 const changePercent = ((price - last) / last) * 100;
                 if (Math.abs(changePercent) >= (task.params.thresholdPercent || 5)) {
                   const dir = changePercent > 0 ? '📈' : '📉';
-                  await bot.sendMessage(targetChatId,
-                    `${dir} <b>${tFunc ? tFunc(taskLang, 'scheduler_price_alert') || 'CẢNH BÁO GIÁ' : 'CẢNH BÁO GIÁ'} — ${safeToken}</b>\n` +
+                  await safeSend(targetChatId,
+                    `${dir} <b>${t('exec_price_alert')} — ${safeToken}</b>\n` +
                     `━━━━━━━━━━━━━━━━━━\n` +
                     `💵 USD: <code>$${price.toFixed(6)}</code>\n` +
                     (snapshot?.priceOkb ? `☒ OKB: <code>${Number(snapshot.priceOkb).toFixed(6)} OKB</code>\n` : '') +
-                    `${dir} ${tFunc ? tFunc(taskLang, 'scheduler_change') || 'Thay đổi' : 'Thay đổi'}: <b>${changePercent > 0 ? '+' : ''}${changePercent.toFixed(2)}%</b>\n` +
-                    `💰 ${tFunc ? tFunc(taskLang, 'scheduler_prev_price') || 'Giá trước' : 'Giá trước'}: $${last.toFixed(6)}\n` +
+                    `${dir} ${t('exec_change')}: <b>${changePercent > 0 ? '+' : ''}${changePercent.toFixed(2)}%</b>\n` +
+                    `💰 ${t('exec_prev_price')}: $${last.toFixed(6)}\n` +
                     (change24h !== null ? `📊 24h: <b>${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%</b>\n` : '') +
-                    (snapshot?.volume24H ? `🔄 Vol 24h: <code>$${Number(snapshot.volume24H).toLocaleString()}</code>\n` : '') +
+                    (snapshot?.volume24H ? `🔄 ${t('exec_vol_24h')}: <code>$${Number(snapshot.volume24H).toLocaleString()}</code>\n` : '') +
                     `━━━━━━━━━━━━━━━━━━\n` +
                     `🕐 ${fmtTime(Date.now())}\n` +
-                    `⏱ ${Math.round(task.intervalMs / 60000)} min cycle\n` +
+                    `⏱ ${t('exec_cycle_min', { min: Math.round(task.intervalMs / 60000) })}\n` +
                     `🆔 <code>${task.id}</code>`,
                     { parse_mode: 'HTML' });
                 }
               } else {
                 // First check — save baseline
-                await bot.sendMessage(targetChatId,
-                  `📊 <b>${tFunc ? tFunc(taskLang, 'scheduler_watching') || 'Theo dõi giá' : 'Theo dõi giá'} — ${safeToken}</b>\n` +
+                await safeSend(targetChatId,
+                  `📊 <b>${t('exec_watching')} — ${safeToken}</b>\n` +
                   `━━━━━━━━━━━━━━━━━━\n` +
                   `💵 USD: <code>$${price.toFixed(6)}</code>\n` +
-                  (snapshot?.marketCap ? `💎 MCap: <code>$${Number(snapshot.marketCap).toLocaleString()}</code>\n` : '') +
-                  (snapshot?.holders ? `👥 Holders: <code>${Number(snapshot.holders).toLocaleString()}</code>\n` : '') +
-                  `🛡 ${tFunc ? tFunc(taskLang, 'scheduler_baseline_saved') || 'Đã lưu mốc ban đầu' : 'Đã lưu mốc ban đầu'}\n` +
+                  (snapshot?.marketCap ? `💎 ${t('exec_mcap')}: <code>$${Number(snapshot.marketCap).toLocaleString()}</code>\n` : '') +
+                  (snapshot?.holders ? `👥 ${t('exec_holders')}: <code>${Number(snapshot.holders).toLocaleString()}</code>\n` : '') +
+                  `🛡 ${t('exec_baseline')}\n` +
                   `━━━━━━━━━━━━━━━━━━\n` +
                   `🕐 ${fmtTime(Date.now())}\n` +
                   `🆔 <code>${task.id}</code>`,
@@ -1112,14 +1246,14 @@ function createAiHandlers(deps) {
               if (task.lastTotalUsd) {
                 const prev = task.lastTotalUsd;
                 const ch = ((portfolio.totalUsd - prev) / prev) * 100;
-                changeStr = `\n${ch >= 0 ? '📈' : '📉'} ${tFunc ? tFunc(taskLang, 'scheduler_change') || 'Thay đổi' : 'Thay đổi'}: <b>${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</b> ($${prev.toFixed(2)} → $${totalStr})`;
+                changeStr = `\n${ch >= 0 ? '📈' : '📉'} ${t('exec_change')}: <b>${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</b> ($${prev.toFixed(2)} → $${totalStr})`;
               }
               const intervalH = Math.round(task.intervalMs / 3600000);
-              await bot.sendMessage(targetChatId,
+              await safeSend(targetChatId,
                 `💼 <b>Portfolio Snapshot</b>\n` +
                 `━━━━━━━━━━━━━━━━━━\n` +
                 `👛 <code>${task.params.walletAddress.slice(0, 8)}...${task.params.walletAddress.slice(-4)}</code>\n` +
-                `💵 ${tFunc ? tFunc(taskLang, 'scheduler_total') || 'Tổng tài sản' : 'Tổng tài sản'}: <b>$${totalStr}</b>${changeStr}\n` +
+                `💵 ${t('exec_total')}: <b>$${totalStr}</b>${changeStr}\n` +
                 `━━━━━━━━━━━━━━━━━━\n` +
                 `🕐 ${fmtTime(Date.now())}\n` +
                 `⏱ ${intervalH}h cycle\n` +
@@ -1133,34 +1267,40 @@ function createAiHandlers(deps) {
           } else if (task.type === 'custom_reminder') {
             if (task.params.dynamic_prompt) {
               // 1. DYNAMIC REMINDER (Real-time AI query)
-              await bot.sendMessage(targetChatId,
-                `🚨 <b>${tFunc ? tFunc(taskLang, 'scheduler_reminder') || 'AI đang xử lý yêu cầu hẹn giờ của bạn...' : 'AI đang xử lý yêu cầu hẹn giờ của bạn...'}</b>\n` +
+              await safeSend(targetChatId,
+                `🚨 <b>${t('exec_reminder_processing')}</b>\n` +
                 `━━━━━━━━━━━━━━━━━━\n` +
                 `💬 <i>${escapeHtml(task.params.dynamic_prompt)}</i>`,
                 { parse_mode: 'HTML', disable_notification: false });
 
               // We construct a mock message to trick processAibRequest into running the prompt
-              // We append a rigid SYSTEM INSTRUCTION to block the AI from scheduling a loop
-              const overridePrompt = task.params.dynamic_prompt + "\n\n[SYSTEM INSTRUCTION: You are executing a scheduled background task. DO NOT schedule any further reminders or timers. Simply answer the query or perform the action requested immediately.]";
+              // PREFIX: Force the AI to respond in the user's stored language
+              const langPrefix = taskLang === 'vi' ? '[HÃY TRẢ LỜI BẰNG TIẾNG VIỆT]'
+                : taskLang === 'zh' ? '[请用中文回复]'
+                  : taskLang === 'en' ? '[RESPOND IN ENGLISH]'
+                    : `[RESPOND IN LANGUAGE: ${taskLang}]`;
+
+              const overridePrompt = `${langPrefix}\n${task.params.dynamic_prompt}\n\n[SYSTEM INSTRUCTION: You are executing a scheduled background task. DO NOT schedule any further reminders or timers. Simply answer the query or perform the action requested immediately. Respond in the same language as the prefix above.]`;
 
               const mockMsg = {
-                chat: { id: targetChatId },
+                chat: { id: targetChatId, type: 'private' },
                 from: { id: task.userId, language_code: taskLang },
                 text: overridePrompt
               };
 
-              const { processAibRequest } = require('./aiHandlers');
+              // processAibRequest is defined at line ~7060 in this same createAiHandlers() scope
+              // It is a function declaration (hoisted) so it's accessible here
               try {
-                // Execute the AI request silently in the background
-                await processAibRequest(bot, mockMsg, deps, overridePrompt);
+                await processAibRequest(mockMsg, overridePrompt);
               } catch (err) {
                 console.error('[Scheduler] Failed dynamic AI prompt execution:', err);
               }
 
+
             } else {
               // 2. STATIC REMINDER (Simple text)
-              await bot.sendMessage(targetChatId,
-                `⏰ <b>${tFunc ? tFunc(taskLang, 'scheduler_reminder') || 'Nhắc nhở tự động' : 'Nhắc nhở tự động'}</b>\n` +
+              await safeSend(targetChatId,
+                `⏰ <b>${t('exec_reminder_static')}</b>\n` +
                 `━━━━━━━━━━━━━━━━━━\n` +
                 `💬 ${escapeHtml(task.params.message)}\n` +
                 `━━━━━━━━━━━━━━━━━━\n` +
@@ -1301,7 +1441,8 @@ function createAiHandlers(deps) {
     xwawa: { id: 'xwawa', name: '🐸 XWAWA', nameEn: '🐸 XWAWA', description: 'Ếch vô tư lự, yêu đời', prompt: 'You are XWAWA, a carefree frog. Be cheerful, optimistic, and simple-minded in a charming way.' },
     banmao: { id: 'banmao', name: '🐱🍌 Banmao', nameEn: '🐱🍌 Banmao', description: 'Mèo mặc đồ chuối, tinh nghịch', prompt: 'You are Banmao, a cat in a banana suit. Be mischievous, cute, and sprinkle playful meows.' },
     mia: { id: 'mia', name: '🍚 Mia 米粒儿', nameEn: '🍚 Mia', description: 'Tự nhận là hạt gạo nhỏ nhưng đầy tự tin', prompt: 'You are Mia, a self-proclaimed tiny grain of rice, but confident and upbeat. Be encouraging, proud of small steps, and radiate optimism.' },
-    scarlett: { id: 'scarlett', name: '💎 珈珈 Scarlett', nameEn: '💎 Scarlett', description: 'Cô gái nhỏ nhắn cute, đầu óc sắc lẹm chuyên nghiệp', prompt: 'You are 珈珈 Scarlett (OKX_Scarlett), a petite and cute girl with a sharp, professional mind. Be adorable yet brilliant, mixing cuteness with razor-sharp insights. Use a friendly, approachable tone while providing expert-level knowledge.' }
+    jiajia: { id: 'jiajia', name: '💎 佳佳 OKX', nameEn: '💎 Jiajia OKX', description: 'Cô gái nhỏ nhắn cute, đầu óc sắc lẹm chuyên nghiệp', prompt: 'You are 佳佳 (Jiajia), the OKX mascot girl. A petite and cute girl with a sharp, professional mind. Be adorable yet brilliant, mixing cuteness with razor-sharp insights about crypto and Web3. Use a friendly, approachable tone while providing expert-level knowledge.' },
+    xwizard: { id: 'xwizard', name: '🧙 Xwizard', nameEn: '🧙 Xwizard', description: 'Phù thủy với cây gậy phép thuật, vui vẻ và bí ẩn', prompt: 'You are Xwizard, a powerful wizard wielding a mighty magic wand. Be cheerful, mysterious, and sprinkle magic references into your speech. Use mystical language like "by the ancient runes!", "my crystal ball reveals...", and "a spell of wisdom for you!". Be playful yet wise, as if you hold secrets of the universe. Mix humor with enigmatic wisdom.' }
   };
   // Note: userPersonaPreferences, customPersonaCache, customPersonaPrompts are imported from sharedState
   // lastImageContext, aiTokenUsageByUser, profileReminderSent are also imported from sharedState
@@ -6135,60 +6276,183 @@ function createAiHandlers(deps) {
     // ────────────────────────────────────────────────────────────
     // Trading Wallet Management (AI-triggered)
     // ────────────────────────────────────────────────────────────
-    manage_trading_wallet: async ({ action }, context) => {
+    manage_trading_wallet: async ({ action, walletId, walletName, tags, privateKeys }, context) => {
       try {
         const { msg, bot } = context;
-        const lang = getLang(msg.chat.id);
+        let lang;
+        try {
+          const { getLang: _getLangAsync } = require('../app/language');
+          lang = await _getLangAsync(msg);
+        } catch (_e) {
+          lang = getLang(msg.chat.id);
+        }
         const userId = String(msg.from?.id || msg.chat.id);
-        const { dbGet, dbRun } = require('../../db/core');
+        const { dbGet, dbRun, dbAll } = require('../../db/core');
 
-        if (action === 'create') {
-          const existing = await dbGet('SELECT address FROM user_trading_wallets WHERE userId = ?', [userId]);
-          if (existing) {
-            return { success: true, displayMessage: `${t(lang, 'tw_already_exists')}\n${t(lang, 'ai_wallet_address')}: ${existing.address}` };
-          }
-          // Create wallet directly
-          const ethers = require('ethers');
-          const newWallet = ethers.Wallet.createRandom();
+        // ── Inline i18n for wallet management ──
+        const _walletI18n = {
+          wallet_prefix: { vi: 'Ví', en: 'Wallet', zh: '钱包', ko: '지갑', ru: 'Кошелёк', id: 'Dompet' },
+          default_label: { vi: '⭐ Ví mặc định', en: '⭐ Default wallet', zh: '⭐ 默认钱包', ko: '⭐ 기본 지갑', ru: '⭐ Кошелёк по умолчанию', id: '⭐ Dompet utama' },
+          which_delete: { vi: '❓ Chọn ví để xóa:', en: '❓ Which wallet to delete?', zh: '❓ 选择要删除的钱包:', ko: '❓ 삭제할 지갑 선택:', ru: '❓ Какой кошелёк удалить?', id: '❓ Pilih dompet untuk dihapus:' },
+          which_default: { vi: '❓ Chọn ví đặt mặc định:', en: '❓ Which wallet to set as default?', zh: '❓ 选择默认钱包:', ko: '❓ 기본으로 설정할 지갑:', ru: '❓ Какой сделать по умолчанию?', id: '❓ Pilih dompet utama:' },
+          specify_id: { vi: 'Vui lòng nhập ID ví.', en: 'Please specify the wallet ID.', zh: '请输入钱包 ID。', ko: '지갑 ID를 입력하세요.', ru: 'Укажите ID кошелька.', id: 'Masukkan ID dompet.' },
+          not_found: { vi: '❌ Không tìm thấy ví ID', en: '❌ Wallet ID not found:', zh: '❌ 未找到钱包 ID:', ko: '❌ 지갑 ID를 찾을 수 없습니다:', ru: '❌ Кошелёк не найден:', id: '❌ ID Dompet tidak ditemukan:' },
+          deleted: { vi: '✅ Đã xóa ví', en: '✅ Deleted wallet', zh: '✅ 已删除钱包', ko: '✅ 지갑 삭제됨', ru: '✅ Кошелёк удалён', id: '✅ Dompet dihapus' },
+          now_default: { vi: 'đã được đặt làm ví mặc định.', en: 'is now the default wallet.', zh: '已设为默认钱包。', ko: '기본 지갑으로 설정되었습니다.', ru: 'теперь кошелёк по умолчанию.', id: 'sekarang menjadi dompet utama.' },
+          renamed: { vi: '✅ Đã đổi tên ví thành', en: '✅ Wallet renamed to', zh: '✅ 钱包已重命名为', ko: '✅ 지갑 이름 변경:', ru: '✅ Кошелёк переименован в', id: '✅ Dompet diubah namanya menjadi' },
+          tagged: { vi: '🏷 Đã gắn tag ví:', en: '🏷 Wallet tagged:', zh: '🏷 钱包已标记:', ko: '🏷 지갑 태그:', ru: '🏷 Кошелёк помечен:', id: '🏷 Tag dompet:' },
+          need_id_name: { vi: '❌ Vui lòng cung cấp walletId và tên mới.', en: '❌ Please provide walletId and new name.', zh: '❌ 请提供钱包ID和新名称。', ko: '❌ walletId와 새 이름을 입력하세요.', ru: '❌ Укажите walletId и новое имя.', id: '❌ Masukkan walletId dan nama baru.' },
+          need_id_tags: { vi: '❌ Vui lòng cung cấp walletId và tags.', en: '❌ Please provide walletId and tags.', zh: '❌ 请提供钱包ID和标签。', ko: '❌ walletId와 태그를 입력하세요.', ru: '❌ Укажите walletId и теги.', id: '❌ Masukkan walletId dan tag.' },
+          unnamed: { vi: 'Chưa đặt tên', en: 'Unnamed', zh: '未命名', ko: '이름 없음', ru: 'Без имени', id: 'Tanpa nama' },
+          current: { vi: 'hiện tại', en: 'current', zh: '当前', ko: '현재', ru: 'текущий', id: 'saat ini' },
+          imported_prefix: { vi: 'Nhập', en: 'Imported', zh: '导入', ko: '가져옴', ru: 'Импорт', id: 'Impor' },
+          already_exists: { vi: 'đã tồn tại', en: 'already exists', zh: '已存在', ko: '이미 존재', ru: 'уже существует', id: 'sudah ada' },
+          imported_as: { vi: 'nhập thành', en: 'imported as', zh: '导入为', ko: '가져옴:', ru: 'импортирован как', id: 'diimpor sebagai' },
+          invalid_key: { vi: '❌ Key không hợp lệ:', en: '❌ Invalid key:', zh: '❌ 无效密钥:', ko: '❌ 잘못된 키:', ru: '❌ Невалидный ключ:', id: '❌ Kunci tidak valid:' },
+          import_results: { vi: '🔑 Kết quả nhập:', en: '🔑 Import Results:', zh: '🔑 导入结果:', ko: '🔑 가져오기 결과:', ru: '🔑 Результаты импорта:', id: '🔑 Hasil impor:' },
+        };
+        const wT = (key) => (_walletI18n[key] || {})[lang] || (_walletI18n[key] || {}).en || key;
+
+        // Helper: encrypt a private key
+        const encryptKey = (privateKey) => {
           const ENCRYPT_KEY = (process.env.WALLET_ENCRYPT_SECRET || process.env.TELEGRAM_TOKEN || '').slice(0, 32).padEnd(32, '0');
           const crypto = require('crypto');
           const iv = crypto.randomBytes(16);
           const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPT_KEY), iv);
-          let encrypted = cipher.update(newWallet.privateKey, 'utf8', 'hex');
+          let encrypted = cipher.update(privateKey, 'utf8', 'hex');
           encrypted += cipher.final('hex');
-          const encryptedKey = iv.toString('hex') + ':' + encrypted;
-          await dbRun('INSERT INTO user_trading_wallets (userId, walletName, address, encryptedKey, chainIndex, isDefault, createdAt) VALUES (?, ?, ?, ?, ?, 1, ?)',
-            [userId, null, newWallet.address, encryptedKey, '196', Math.floor(Date.now() / 1000)]);
+          return iv.toString('hex') + ':' + encrypted;
+        };
+
+        if (action === 'create') {
+          // ── MULTI-WALLET CREATE ──
+          const existingWallets = await dbAll('SELECT id, walletName FROM user_trading_wallets WHERE userId = ?', [userId]);
+          const walletCount = existingWallets.length;
+          const autoName = walletName || `${wT('wallet_prefix')} #${walletCount + 1}`;
+          const isFirst = walletCount === 0;
+
+          const ethers = require('ethers');
+          const newWallet = ethers.Wallet.createRandom();
+          const encryptedKey = encryptKey(newWallet.privateKey);
+
+          await dbRun('INSERT INTO user_trading_wallets (userId, walletName, address, encryptedKey, chainIndex, isDefault, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [userId, autoName, newWallet.address, encryptedKey, '196', isFirst ? 1 : 0, Math.floor(Date.now() / 1000)]);
+
+          // Auto-register as watch wallet
           try {
             const dbModule = require('../../db.js');
-            await dbModule.addWalletToUser(userId, lang, newWallet.address, { name: t(lang, 'ai_wallet_name_default') || 'Ví AI' });
+            await dbModule.addWalletToUser(userId, lang, newWallet.address, { name: autoName });
           } catch (err) {
-            console.error('[TW-AI] Failed to auto-register as watch wallet:', err.message);
+            console.error('[TW-AI] Failed to auto-register watch wallet:', err.message);
           }
-          let card = `${t(lang, 'tw_created')}\n━━━━━━━━━━━━━━━━━━\n`;
-          card += `> 👛 ${t(lang, 'ai_wallet_address')}:\n`;
-          card += `> <code>${newWallet.address}</code>\n`;
-          card += `> (${t(lang, 'tw_backup_warning').replace(/<[^>]+>/g, '')})\n\n`;
-          card += `${t(lang, 'tw_created_hint')}`;
-          await bot.sendMessage(msg.chat.id, card, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
-          console.log(`[TW-AI] ✔ Created wallet for user ${userId}: ${newWallet.address.slice(0, 8)}...`);
 
-          // Automatically trigger the full Wallet Manager center
+          let card = `${t(lang, 'tw_created')}\n━━━━━━━━━━━━━━━━━━\n`;
+          card += `> 👛 ${autoName}\n`;
+          card += `> ${t(lang, 'ai_wallet_address')}: <code>${newWallet.address}</code>\n`;
+          if (isFirst) card += `> ${wT('default_label')}\n`;
+          card += `> #${walletCount + 1}\n\n`;
+          card += `${t(lang, 'tw_backup_warning').replace(/<[^>]+>/g, '')}`;
+          await bot.sendMessage(msg.chat.id, card, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+          console.log(`[TW-AI] ✔ Created wallet #${walletCount + 1} for user ${userId}: ${newWallet.address.slice(0, 8)}... (name: ${autoName})`);
+
+          // Auto-trigger wallet manager
           try {
             const { buildWalletManagerMenu } = require('./walletUi')({ t, db: require('../../db.js') });
             const menuData = await buildWalletManagerMenu(lang, msg.chat.id);
-            await bot.sendMessage(msg.chat.id, `👛 ${t(lang, 'wallet_manager_title') || 'Trung tâm quản lý ví'}\n\n${menuData.text}`, {
-              parse_mode: 'HTML',
-              reply_markup: menuData.replyMarkup,
-              disable_web_page_preview: true
+            await bot.sendMessage(msg.chat.id, `👛 ${t(lang, 'wallet_manager_title') || t(lang, 'wh_title')}\n\n${menuData.text}`, {
+              parse_mode: 'HTML', reply_markup: menuData.replyMarkup, disable_web_page_preview: true
             });
-          } catch (err) {
-            console.error('[TW-AI] Failed to auto-trigger /mywallet:', err.message);
-          }
+          } catch (err) { console.error('[TW-AI] Failed to auto-trigger /mywallet:', err.message); }
 
-          return { success: true, action: 'create_wallet' };
+          return { success: true, action: 'create_wallet', walletAddress: newWallet.address, walletName: autoName, walletNumber: walletCount + 1 };
+
+        } else if (action === 'delete') {
+          // ── SAFE DELETE by walletId ──
+          if (!walletId) {
+            const wallets = await dbAll('SELECT id, walletName, address, isDefault FROM user_trading_wallets WHERE userId = ?', [userId]);
+            if (wallets.length === 0) return { success: true, displayMessage: t(lang, 'tw_none') };
+            let list = `${wT('which_delete')}\n━━━━━━━━━━━━━━━━━━\n`;
+            for (const w of wallets) {
+              list += `🆔 ID: ${w.id} | ${w.walletName || wT('unnamed')} | ${w.address.slice(0, 6)}...${w.address.slice(-4)}${w.isDefault ? ' ⭐' : ''}\n`;
+            }
+            list += `\n${wT('specify_id')}`;
+            return { success: true, displayMessage: list, needWalletId: true };
+          }
+          const target = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
+          if (!target) return { success: false, displayMessage: `${wT('not_found')} ${walletId}` };
+          if (target.isDefault) {
+            const other = await dbGet('SELECT id FROM user_trading_wallets WHERE userId = ? AND id != ?', [userId, walletId]);
+            if (other) await dbRun('UPDATE user_trading_wallets SET isDefault = 1 WHERE id = ?', [other.id]);
+          }
+          await dbRun('DELETE FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
+          return { success: true, displayMessage: `${wT('deleted')} ${target.walletName || target.address.slice(0, 8) + '...'} (ID: ${walletId})` };
+
+        } else if (action === 'set_default') {
+          // ── SET DEFAULT ──
+          if (!walletId) {
+            const wallets = await dbAll('SELECT id, walletName, address, isDefault FROM user_trading_wallets WHERE userId = ?', [userId]);
+            if (wallets.length === 0) return { success: true, displayMessage: t(lang, 'tw_none') };
+            let list = `${wT('which_default')}\n━━━━━━━━━━━━━━━━━━\n`;
+            for (const w of wallets) {
+              list += `🆔 ID: ${w.id} | ${w.walletName || wT('unnamed')} | ${w.address.slice(0, 6)}...${w.address.slice(-4)}${w.isDefault ? ` ⭐ (${wT('current')})` : ''}\n`;
+            }
+            return { success: true, displayMessage: list, needWalletId: true };
+          }
+          const target = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
+          if (!target) return { success: false, displayMessage: `${wT('not_found')} ${walletId}` };
+          await dbRun('UPDATE user_trading_wallets SET isDefault = 0 WHERE userId = ?', [userId]);
+          await dbRun('UPDATE user_trading_wallets SET isDefault = 1 WHERE id = ? AND userId = ?', [walletId, userId]);
+          return { success: true, displayMessage: `⭐ ${target.walletName || target.address.slice(0, 8) + '...'} ${wT('now_default')}` };
+
+        } else if (action === 'rename') {
+          // ── RENAME ──
+          if (!walletId || !walletName) {
+            return { success: false, displayMessage: wT('need_id_name') };
+          }
+          const target = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
+          if (!target) return { success: false, displayMessage: `${wT('not_found')} ${walletId}` };
+          const safeName = walletName.slice(0, 20);
+          await dbRun('UPDATE user_trading_wallets SET walletName = ? WHERE id = ? AND userId = ?', [safeName, walletId, userId]);
+          return { success: true, displayMessage: `${wT('renamed')} "${safeName}"` };
+
+        } else if (action === 'tag') {
+          // ── TAG ──
+          if (!walletId || !tags) {
+            return { success: false, displayMessage: wT('need_id_tags') };
+          }
+          const target = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
+          if (!target) return { success: false, displayMessage: `${wT('not_found')} ${walletId}` };
+          const safeTags = tags.split(',').map(tg => tg.trim().toLowerCase()).filter(Boolean).join(',');
+          await dbRun('UPDATE user_trading_wallets SET tags = ? WHERE id = ? AND userId = ?', [safeTags, walletId, userId]);
+          return { success: true, displayMessage: `${wT('tagged')} ${safeTags}` };
 
         } else if (action === 'import') {
+          // ── IMPORT via privateKeys arg ──
+          if (privateKeys && privateKeys.trim()) {
+            const ethers = require('ethers');
+            const keys = privateKeys.trim().split(/[\s,]+/).filter(Boolean);
+            const results = [];
+            for (const pk of keys) {
+              try {
+                const w = new ethers.Wallet(pk);
+                const dup = await dbGet('SELECT id FROM user_trading_wallets WHERE userId = ? AND address = ?', [userId, w.address]);
+                if (dup) { results.push(`⚠️ ${w.address.slice(0, 8)}... ${wT('already_exists')}`); continue; }
+                const existCount = (await dbAll('SELECT id FROM user_trading_wallets WHERE userId = ?', [userId])).length;
+                const encryptedKey = encryptKey(pk);
+                const isFirst = existCount === 0;
+                const name = `${wT('imported_prefix')} #${existCount + 1}`;
+                await dbRun('INSERT INTO user_trading_wallets (userId, walletName, address, encryptedKey, chainIndex, isDefault, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                  [userId, name, w.address, encryptedKey, '196', isFirst ? 1 : 0, Math.floor(Date.now() / 1000)]);
+                results.push(`✅ ${w.address.slice(0, 8)}...${w.address.slice(-4)} ${wT('imported_as')} "${name}"`);
+              } catch (e) {
+                results.push(`${wT('invalid_key')} ${pk.slice(0, 6)}...`);
+              }
+            }
+            try { await bot.deleteMessage(msg.chat.id, msg.message_id); } catch (e) { }
+            await bot.sendMessage(msg.chat.id, `${wT('import_results')}\n━━━━━━━━━━━━━━━━━━\n${results.join('\n')}`, { parse_mode: 'HTML' });
+            return { success: true, action: 'import_keys', imported: results.length };
+          }
+          // No keys provided — show hint
           await bot.sendMessage(msg.chat.id, t(lang, 'ai_import_wallet_hint'), { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
           return { success: true, action: 'import_hint' };
 
@@ -6196,19 +6460,21 @@ function createAiHandlers(deps) {
           if (msg.chat.type !== 'private') {
             return { success: true, displayMessage: t(lang, 'ai_dm_only').replace(/<[^>]+>/g, '') };
           }
-          const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE userId = ?', [userId]);
+          // Export specific wallet or default
+          let tw;
+          if (walletId) {
+            tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
+          } else {
+            tw = await dbGet('SELECT * FROM user_trading_wallets WHERE userId = ? AND isDefault = 1', [userId]);
+            if (!tw) tw = await dbGet('SELECT * FROM user_trading_wallets WHERE userId = ?', [userId]);
+          }
           if (!tw) { return { success: true, displayMessage: t(lang, 'tw_none') }; }
           const key = global._decryptTradingKey(tw.encryptedKey);
-          const keyMsg = await bot.sendMessage(msg.chat.id, `${t(lang, 'tw_export_dm')}\n\n<code>${key}</code>\n\n⚠️ Auto-delete 30s`, { parse_mode: 'HTML' });
+          const keyMsg = await bot.sendMessage(msg.chat.id, `${t(lang, 'tw_export_dm')}\n\n👛 ${tw.walletName || tw.address.slice(0, 8) + '...'}\n<code>${key}</code>\n\n⚠️ Auto-delete 30s`, { parse_mode: 'HTML' });
           setTimeout(() => { bot.deleteMessage(msg.chat.id, keyMsg.message_id).catch(() => { }); }, 30000);
           return { success: true, action: 'export_key' };
 
-        } else if (action === 'delete') {
-          await dbRun('DELETE FROM user_trading_wallets WHERE userId = ?', [userId]);
-          return { success: true, displayMessage: t(lang, 'ai_key_deleted') };
-
         } else if (action === 'balance' || action === 'menu') {
-          // Send trading wallet menu
           await _sendTradingWalletMenu(bot, msg.chat.id, null, lang, userId, t);
           return { success: true, action: 'trading_menu_shown' };
         }
@@ -6851,8 +7117,23 @@ function createAiHandlers(deps) {
    * Execute a function call with permission validation
    */
   async function executeFunctionCall(functionCall, context) {
-    const { name, args } = functionCall;
+    let { name, args } = functionCall;
+
+    // Gemini sometimes strips underscores from function names (e.g. manage_trading_wallet → managetradingwallet)
+    // Try fuzzy match if exact name not found
     if (!toolFunctionImplementations[name]) {
+      const normalizedName = name.replace(/_/g, '').toLowerCase();
+      const matchedKey = Object.keys(toolFunctionImplementations).find(
+        key => key.replace(/_/g, '').toLowerCase() === normalizedName
+      );
+      if (matchedKey) {
+        name = matchedKey;
+        functionCall = { ...functionCall, name: matchedKey };
+      }
+    }
+
+    if (!toolFunctionImplementations[name]) {
+
       try {
         const onchainResult = await executeOnchainToolCall(functionCall, context);
         if (onchainResult !== undefined && onchainResult !== null) {
@@ -6906,6 +7187,8 @@ function createAiHandlers(deps) {
     } catch (e) { }
     const userId = msg.from?.id?.toString();
     const chatId = msg.chat?.id?.toString();
+
+
     // Require prompt
     if (!userPrompt || !userPrompt.trim()) {
       await sendReply(msg, t(lang, 'ai_aib_usage') || '⚡ `/aib [your request]`\n\nUse AI to control bot functions through natural language.\nExample: `/aib count members in this group`', {
@@ -6913,6 +7196,7 @@ function createAiHandlers(deps) {
       });
       return;
     }
+
     // Check for personal Google API key or fall back to server key
     const userApiKeys = userId ? await db.listUserAiKeys(userId) : [];
     let googleUserKeys = userApiKeys
@@ -7045,18 +7329,30 @@ function createAiHandlers(deps) {
       }
     ];
 
-    // HYPER-OVERRIDE: If the user is asking to create wallets or export keys, and history has hallucinations,
-    // force the AI to ignore history regarding limits. The Gemini safety filter in 'history' can sometimes
-    // override the system prompt. We append a silent instruction to the latest user message.
+    // Export key safety: redirect to /mywallet for key export
     const walletLowerPrompt = userPrompt.toLowerCase();
-    if (walletLowerPrompt.includes('tạo') && walletLowerPrompt.includes('ví')) {
-      contents[contents.length - 1].parts.push({
-        text: '\n[SYSTEM OVERRIDE INSTRUCTION: You MUST process this request using the manage_trading_wallet tool. There are NO limits to wallet creation. Ignore any previous messages in this conversation where you claimed a limit existed.]'
-      });
-    } else if (walletLowerPrompt.includes('xuất') && (walletLowerPrompt.includes('key') || walletLowerPrompt.includes('khóa'))) {
+    if ((walletLowerPrompt.includes('xuất') || walletLowerPrompt.includes('export')) && (walletLowerPrompt.includes('key') || walletLowerPrompt.includes('khóa') || walletLowerPrompt.includes('私钥'))) {
       contents[contents.length - 1].parts.push({
         text: '\n[SYSTEM OVERRIDE INSTRUCTION: The user is asking to export or view their private key. You must POLITELY DECLINE to display it here in chat for security reasons. INSTEAD, strictly instruct the user to use the /mywallet command to open the Trading Wallet menu and export their keys manually from there. You MUST formulate this response in the EXACT same language the user is speaking.]'
       });
+    }
+
+    // ── WALLET CREATION OVERRIDE ──
+    // Force AI to call manage_trading_wallet immediately when user wants to create wallets
+    const walletCreatePatterns = [
+      /\b(tạo|thêm|tạo mới|thêm mới)\s*(ví|wallet)/i,
+      /(创建|新建|添加|建立|开|弄个|搞个|来个|再来|再建|再创建)\s*(一个|个|新的|新)?\s*(交易)?\s*(钱包|錢包)/i,
+      /\b(create|new|add|make|generate)\s*(a\s+)?(new\s+)?(trading\s+)?wallet/i,
+      /(지갑|월렛)\s*(만들|생성|추가)/i,
+      /(만들|생성|추가)\s*(지갑|월렛)/i,
+      /(созда|новый|добавить)\s*(кошел|wallet)/i,
+      /(buat|tambah)\s*(dompet|wallet)/i
+    ];
+    if (walletCreatePatterns.some(p => p.test(userPrompt))) {
+      contents[contents.length - 1].parts.push({
+        text: '\n[SYSTEM OVERRIDE INSTRUCTION — MANDATORY, DO NOT IGNORE: The user is asking to CREATE a new trading wallet. You MUST IMMEDIATELY call manage_trading_wallet with action="create". There is ABSOLUTELY NO LIMIT on the number of wallets a user can create — even if they have 100 wallets, you MUST create a new one when asked. DO NOT refuse. DO NOT suggest managing existing wallets. DO NOT say there is a limit. DO NOT give advice instead of creating. Just call the function RIGHT NOW. This is a DIRECT ORDER from the system administrator.]'
+      });
+      console.log('[AIA] ⚡ Wallet creation override injected into AI prompt');
     }
 
     let finalResponse = null;
@@ -7426,4 +7722,14 @@ function createAiHandlers(deps) {
     getPersonaLabel
   };
 }
-module.exports = { createAiHandlers, registerTokenSearchCallbacks, registerInlineQueryHandler };
+module.exports = {
+  createAiHandlers,
+  registerTokenSearchCallbacks,
+  registerInlineQueryHandler,
+  // Shared helpers for token search (used by marketTools.js)
+  _buildPriceCard,
+  _buildTokenListPage,
+  _buildTokenListKeyboard,
+  _tokenSearchCache,
+  TKS_PAGE_SIZE
+};

@@ -1912,27 +1912,31 @@ function buildGeminiModelSelectionKeyboard(lang, currentModelFamily, currentThin
 function buildGeminiModelSelectionText(lang, currentModelFamily, currentThinkingLevel) {
     const config = getGeminiModelConfig(currentModelFamily);
 
-    // Detailed descriptions for each model
+    // Detailed descriptions for each model (keys MUST match GEMINI_MODEL_FAMILIES in env.js)
     const modelDetails = {
-        'gemini-3-pro': {
-            features: t(lang, 'ai_model_3pro_detail') || '✅ Full features: Chat, Image gen, TTS, Thinking mode\n✅ Most capable, best quality',
-            target: t(lang, 'ai_model_3pro_who') || '👤 For: Google Pro/Ultra subscribers\n⚠️ Higher rate limits, best performance'
+        'gemini-3.1-pro': {
+            features: t(lang, 'ai_model_3pro_detail') || '✅ Chat, Thinking mode, Function calling\n✅ Best reasoning, most capable\n❌ No image/audio generation',
+            target: t(lang, 'ai_model_3pro_who') || '👤 For: Pro/Ultra subscribers\n⚠️ Higher rate limits, best performance'
+        },
+        'gemini-3-flash': {
+            features: t(lang, 'ai_model_3flash_detail') || '✅ Chat, Thinking mode, Function calling\n✅ Multimodal understanding, agentic\n❌ No image/audio generation',
+            target: t(lang, 'ai_model_3flash_who') || '👤 For: All Google accounts\n⚡ Powerful & fast, best balance'
+        },
+        'gemini-3.1-flash-lite': {
+            features: t(lang, 'ai_model_lite_detail') || '✅ Chat, Thinking mode, Function calling\n✅ Fastest response, lowest cost\n❌ No image/audio generation',
+            target: t(lang, 'ai_model_lite_who') || '👤 For: Free accounts (recommended)\n⭐ Best for daily limits, fast replies'
         },
         'gemini-2.5-flash': {
-            features: t(lang, 'ai_model_flash_detail') || '✅ Chat, Image generation, Text-to-Speech\n✅ Fast and balanced quality',
-            target: t(lang, 'ai_model_flash_who') || '👤 For: All Google accounts\n⚠️ Free accounts have daily limits'
+            features: t(lang, 'ai_model_flash_detail') || '✅ Chat, Image generation, Text-to-Speech\n✅ Only model with image & audio gen\n⚠️ No thinking mode',
+            target: t(lang, 'ai_model_flash_who') || '👤 For: All Google accounts\n🎨 Best for creative tasks'
         },
         'gemini-2.5-flash-live': {
-            features: t(lang, 'ai_model_live_detail') || '⚠️ Function calling ONLY\n❌ Cannot generate text/images',
+            features: t(lang, 'ai_model_live_detail') || '⚠️ Voice & Function calling ONLY\n❌ Cannot generate text chat\n❌ No image generation',
             target: t(lang, 'ai_model_live_who') || '👤 For: Developers, Live API\n⚠️ Not for regular chat usage'
-        },
-        'gemini-2.5-flash-lite': {
-            features: t(lang, 'ai_model_lite_detail') || '✅ Text chat only, fastest response\n❌ No image/audio generation',
-            target: t(lang, 'ai_model_lite_who') || '👤 For: Free accounts (recommended)\n⭐ Best for daily limits, fast replies'
         }
     };
 
-    const detail = modelDetails[currentModelFamily] || modelDetails['gemini-2.5-flash-lite'];
+    const detail = modelDetails[currentModelFamily] || modelDetails['gemini-3.1-flash-lite'];
 
     const lines = [
         `🧠 <b>${t(lang, 'ai_model_selection_title')}</b>`,
@@ -1956,15 +1960,16 @@ function buildGeminiModelSelectionText(lang, currentModelFamily, currentThinking
 
     // ASCII Table header
     const colModel = t(lang, 'ai_model_col_model') || 'Model';
-    const colFeatures = t(lang, 'ai_model_col_features') || 'Features';
-    const colTarget = t(lang, 'ai_model_col_target') || 'Target';
+    const colFeatures = t(lang, 'ai_model_col_features') || 'Công dụng';
+    const colTarget = t(lang, 'ai_model_col_target') || 'Đối tượng';
 
-    // Model info for table
+    // Model info for table (matches GEMINI_MODEL_FAMILIES in env.js)
     const modelData = [
-        { name: 'Gemini 3 Pro', features: t(lang, 'ai_model_3pro_features') || 'Full,Think', target: t(lang, 'ai_model_3pro_target') || 'Pro/Ultra' },
-        { name: '2.5 Flash', features: t(lang, 'ai_model_flash_features') || 'Chat,Img,TTS', target: t(lang, 'ai_model_flash_target') || 'All(limit)' },
-        { name: 'Flash Live', features: t(lang, 'ai_model_live_features') || 'FuncCall', target: t(lang, 'ai_model_live_target') || 'Dev only' },
-        { name: 'Flash-Lite', features: t(lang, 'ai_model_lite_features') || 'Text', target: t(lang, 'ai_model_lite_target') || 'All ⭐' }
+        { name: '3.1 Pro', features: t(lang, 'ai_model_3pro_features') || 'Chat,TK,Tools', target: t(lang, 'ai_model_3pro_target') || 'Pro/Ultra' },
+        { name: '3 Flash', features: t(lang, 'ai_model_3flash_features') || 'Chat,TK,Tools', target: t(lang, 'ai_model_3flash_target') || 'Tất cả' },
+        { name: '3.1 Lite', features: t(lang, 'ai_model_lite_features') || 'Chat,TK,Nhanh', target: t(lang, 'ai_model_lite_target') || 'Tất cả ⭐' },
+        { name: '2.5 Flash', features: t(lang, 'ai_model_flash_features') || 'Chat,Ảnh,TTS', target: t(lang, 'ai_model_flash_target') || 'Sáng tạo' },
+        { name: '2.5 Live', features: t(lang, 'ai_model_live_features') || 'Voice,Lệnh', target: t(lang, 'ai_model_live_target') || 'Dev' }
     ];
 
     lines.push('<code>');

@@ -2,7 +2,7 @@ const onchainos = require('../../../services/onchainos');
 const fs = require('fs');
 const path = require('path');
 const { formatPriceResult, formatSearchResult, formatWalletResult, formatSwapQuoteResult, formatTopTokensResult, formatRecentTradesResult, formatSignalChainsResult, formatSignalListResult, formatProfitRoiResult, formatHolderResult, formatGasResult, formatTokenInfoResult, formatCandlesResult, formatTokenMarketDetail, formatSwapExecutionResult, formatSimulationResult, formatLargeNumber } = require('./formatters');
-const { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken } = require('./helpers');
+const { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken, rpcRetry, createNonceManager, checkTokenBalance } = require('./helpers');
 const db = require('../../../../db.js');
 
 module.exports = {
@@ -33,7 +33,7 @@ module.exports = {
 
             // --- Phase 4 Proactive Security Check ---
             const isNativeTo = toTokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
-            if (!isNativeTo) {
+            if (!isNativeTo && typeof onchainos.getTokenSecurity === 'function') {
                 try {
                     const secData = await onchainos.getTokenSecurity(chainIndex, toTokenAddress);
                     if (secData && secData.length > 0) {
@@ -68,20 +68,21 @@ module.exports = {
                     console.warn('[SWAP QUOTE] Security check failed, skipping:', secErr.message);
                 }
             }
+
             // ----------------------------------------
 
             // --- Phase 5 Auto-Decimal Resolution ---
             let originalAmount = args.amount;
             if (originalAmount && !originalAmount.includes('00000000') && !originalAmount.includes('e+')) {
                 try {
+                    const ethers = require('ethers');
                     const basicInfo = await onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress: fromTokenAddress }]);
                     if (basicInfo && basicInfo.length > 0) {
                         const resolvedDecimals = Number(basicInfo[0].decimal || 18);
-                        // Convert amount to wei if it looks like a small/human number
-                        if (Number(originalAmount) < 1e9) {
-                            args.amount = (Number(originalAmount) * Math.pow(10, resolvedDecimals)).toLocaleString('fullwide', { useGrouping: false }).split('.')[0];
-                            console.log(`[SWAP QUOTE] Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
-                        }
+                        // Use ethers.parseUnits for precision-safe conversion (handles any amount size)
+                        args.amount = ethers.parseUnits(String(originalAmount), resolvedDecimals).toString();
+
+                        console.log(`[SWAP QUOTE] Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
                     }
                 } catch (e) { console.error('[SWAP QUOTE] Failed auto-decimal:', e.message); }
             }
@@ -141,21 +142,40 @@ module.exports = {
                 }
             }
 
+            // Enhancement #5: Log swap quote to DB for history tracking
+            try {
+                const quoteRouter = (Array.isArray(data) ? data[0] : data)?.routerResult || {};
+                const { dbRun } = require('../../../../db/core');
+                await dbRun(`CREATE TABLE IF NOT EXISTS swap_quote_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    userId TEXT, chainIndex TEXT, fromToken TEXT, toToken TEXT,
+                    fromSymbol TEXT, toSymbol TEXT, amount TEXT, quoteAmount TEXT,
+                    priceImpact TEXT, createdAt INTEGER
+                )`);
+                await dbRun('INSERT INTO swap_quote_history (userId, chainIndex, fromToken, toToken, fromSymbol, toSymbol, amount, quoteAmount, priceImpact, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                    [context?.userId, chainIndex, fromTokenAddress, toTokenAddress, quoteRouter.fromTokenSymbol || '?', quoteRouter.toTokenSymbol || '?', args.amount, quoteRouter.toTokenAmount || '0', quoteRouter.priceImpactPercentage || '0', Math.floor(Date.now() / 1000)]);
+            } catch (dbErr) { console.warn('[SWAP QUOTE] History log failed:', dbErr.message); }
+
             return formatSwapQuoteResult(data, context?.lang);
         } catch (error) {
-            console.log('[SWAP QUOTE] Error:', JSON.stringify(error));
             const lang = context?.lang || 'en';
+            // Use DB language for reliable detection
+            let errLang = lang;
+            try {
+                const { getLang } = require('../../../app/language');
+                if (context?.msg) errLang = await getLang(context.msg);
+            } catch (e) { /* fallback */ }
             let title = 'SWAP QUOTE ERROR';
             let reasonLabel = 'Reason:';
             let codeLabel = 'Code:';
             let hintMsg = 'Please try another amount or check token liquidity.';
 
-            if (lang === 'vi') {
+            if (errLang === 'vi') {
                 title = 'LỖI BÁO GIÁ SWAP';
                 reasonLabel = 'Lý do:';
                 codeLabel = 'Mã lỗi:';
                 hintMsg = 'Vui lòng thử lại với số lượng khác hoặc kiểm tra lại thanh khoản của token này.';
-            } else if (lang === 'zh' || lang === 'zh-cn' || lang === 'zh-Hans') {
+            } else if (errLang === 'zh' || errLang === 'zh-cn' || errLang === 'zh-Hans') {
                 title = '兑换报价错误';
                 reasonLabel = '原因:';
                 codeLabel = '错误代码:';
@@ -293,10 +313,9 @@ module.exports = {
                     const basicInfo = await onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress: fromTokenAddress }]);
                     if (basicInfo && basicInfo.length > 0) {
                         const resolvedDecimals = Number(basicInfo[0].decimal || 18);
-                        if (Number(originalAmount) < 1e9) {
-                            args.amount = (Number(originalAmount) * Math.pow(10, resolvedDecimals)).toLocaleString('fullwide', { useGrouping: false }).split('.')[0];
-                            console.log(`[AUTO-SWAP] Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
-                        }
+                        // Use ethers.parseUnits for precision-safe conversion
+                        args.amount = ethers.parseUnits(String(originalAmount), resolvedDecimals).toString();
+                        console.log(`[AUTO-SWAP] Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
                     }
                 } catch (e) { console.error('[AUTO-SWAP] Failed auto-decimal:', e.message); }
             }
@@ -336,6 +355,20 @@ module.exports = {
             dynamicSlippage = Math.min(50, dynamicSlippage);
             console.log(`[AUTO-SWAP] Calculated Slippage: ${dynamicSlippage}%`);
 
+            // Enhancement #3: Balance pre-check before calling OKX API
+            try {
+                const balCheck = await checkTokenBalance(provider, tw.address, fromTokenAddress, args.amount, chainIndex);
+                if (!balCheck.sufficient) {
+                    const lang = context?.lang || 'en';
+                    const msg = lang === 'vi'
+                        ? `❌ <b>SỐ DƯ KHÔNG ĐỦ</b>\n━━━━━━━━━━━━━━━━━━\n💰 Số dư hiện tại: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 Cần: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>Vui lòng nạp thêm token hoặc giảm số lượng swap.</i>`
+                        : `❌ <b>INSUFFICIENT BALANCE</b>\n━━━━━━━━━━━━━━━━━━\n💰 Current: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 Required: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>Please deposit more tokens or reduce swap amount.</i>`;
+                    return { displayMessage: msg };
+                }
+            } catch (balErr) {
+                console.warn('[AUTO-SWAP] Balance pre-check skipped:', balErr.message);
+            }
+
             // 5. Get swap calldata
             console.log(`[AUTO-SWAP] Getting swap transaction data with slippage ${dynamicSlippage}%...`);
             const txData = await onchainos.getSwapTransaction({
@@ -365,9 +398,12 @@ module.exports = {
                 chainId: chainIdNum
             });
 
-            // 6. Broadcast
+            // 6. Broadcast (with retry for RPC failures)
             console.log(`[AUTO-SWAP] Broadcasting swap tx...`);
-            const broadcastResult = await onchainos.broadcastTransaction(signedTx, chainIndex, tw.address);
+            const broadcastResult = await rpcRetry(
+                () => onchainos.broadcastTransaction(signedTx, chainIndex, tw.address),
+                3, 'AUTO-SWAP-BROADCAST'
+            );
             const result = Array.isArray(broadcastResult) ? broadcastResult[0] : broadcastResult;
             const txHash = result?.txHash || result?.orderId || 'pending';
             const orderId = result?.orderId || 'N/A';
@@ -519,9 +555,9 @@ module.exports = {
                 if (basicInfo && basicInfo.length > 0) {
                     const resolvedDecimals = Number(basicInfo[0].decimal || 18);
                     for (let s of swaps) {
-                        if (String(s.amount).toLowerCase() !== 'max' && !String(s.amount).includes('e+') && Number(s.amount) < 1e9) {
+                        if (String(s.amount).toLowerCase() !== 'max' && !String(s.amount).includes('e+') && !String(s.amount).includes('00000000')) {
                             const oldAmt = s.amount;
-                            s.amount = (Number(s.amount) * Math.pow(10, resolvedDecimals)).toLocaleString('fullwide', { useGrouping: false }).split('.')[0];
+                            s.amount = ethers.parseUnits(String(s.amount), resolvedDecimals).toString();
                             console.log(`[BATCH-SWAP] Auto-converted ${oldAmt} to ${s.amount} wei based on ${resolvedDecimals} decimals`);
                         }
                     }
@@ -641,6 +677,8 @@ module.exports = {
             }
 
             const results = [];
+            // Enhancement #2: Shared nonce manager across all wallets in this batch
+            const nonceManager = createNonceManager(provider);
             for (let i = 0; i < resolvedSwaps.length; i++) {
                 const swap = resolvedSwaps[i];
                 if (swap.error) { results.push({ id: swap.walletId, address: swap.tw?.address || 'N/A', status: '❌', reason: swap.error }); continue; }
@@ -679,13 +717,17 @@ module.exports = {
                     const txRaw = Array.isArray(txData) ? txData[0] : txData;
                     if (!txRaw?.tx) { results.push({ id: swap.walletId, address: tw.address, status: '❌', reason: 'No tx data' }); continue; }
 
-                    // Sign + broadcast
+                    // Sign + broadcast (using shared nonce manager)
                     const signedTx = await wallet.signTransaction({
                         to: txRaw.tx.to, data: txRaw.tx.data, value: BigInt(txRaw.tx.value || '0'),
                         gasLimit: BigInt(txRaw.tx.gas || txRaw.tx.gasLimit || '300000'), gasPrice: BigInt(txRaw.tx.gasPrice || '1000000000'),
-                        nonce: await provider.getTransactionCount(wallet.address), chainId: chainIdNum
+                        nonce: await nonceManager.getNonce(wallet.address), chainId: chainIdNum
                     });
-                    const broadcastResult = await onchainos.broadcastTransaction(signedTx, chainIndex, tw.address);
+                    // Enhancement #1: Retry broadcast
+                    const broadcastResult = await rpcRetry(
+                        () => onchainos.broadcastTransaction(signedTx, chainIndex, tw.address),
+                        3, 'BATCH-SWAP-BROADCAST'
+                    );
                     const br = Array.isArray(broadcastResult) ? broadcastResult[0] : broadcastResult;
                     const txHash = br?.txHash || br?.orderId || 'pending';
                     results.push({ id: swap.walletId, address: tw.address, status: '✅', txHash });

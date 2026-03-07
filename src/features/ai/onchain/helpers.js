@@ -64,9 +64,25 @@ async function autoResolveToken(symbolOrAddress, chainIndex) {
             return bScore - aScore;
         });
         const best = data[0];
+        const resolvedAddress = best.tokenContractAddress;
+        const resolvedChain = best.chainIndex || chains;
+
+        // Advisory: verify the contract actually exists on-chain (log warning if not, but don't block)
+        try {
+            const ethers = require('ethers');
+            const rpcUrl = _getChainRpc(resolvedChain);
+            const provider = new ethers.JsonRpcProvider(rpcUrl);
+            const code = await provider.getCode(resolvedAddress);
+            if (!code || code === '0x' || code === '0x0') {
+                console.warn(`[autoResolveToken] ⚠️ Address ${resolvedAddress} has no bytecode on chain ${resolvedChain} — may be EOA or not yet deployed. Continuing anyway.`);
+            }
+        } catch (verifyErr) {
+            console.warn(`[autoResolveToken] Contract verification skipped:`, verifyErr.message);
+        }
+
         return {
-            chainIndex: best.chainIndex || chains,
-            tokenAddress: best.tokenContractAddress
+            chainIndex: resolvedChain,
+            tokenAddress: resolvedAddress
         };
     } catch (error) {
         return { error: `❌ Could not resolve token "${symbolOrAddress}": ${error.message}` };
@@ -81,4 +97,77 @@ function detectPromptLanguage(userText, defaultLang = 'en') {
     if (/\b(saya|kamu|di|ke|dari|untuk|bisa|tidak|ya|halo|tolong|ada|berapa|saldo|dompet|transfer|kirim)\b/.test(userText)) return 'id';
     return defaultLang;
 }
-module.exports = { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken, detectPromptLanguage };
+
+// ═══════════════════════════════════════════════════════
+// Enhancement #1: RPC Retry with exponential backoff
+// ═══════════════════════════════════════════════════════
+async function rpcRetry(fn, maxAttempts = 3, label = 'RPC') {
+    let lastError;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            return await fn();
+        } catch (err) {
+            lastError = err;
+            const isRetryable = /timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|502|503|504|rate limit|overloaded/i.test(err.message || '');
+            if (!isRetryable || attempt === maxAttempts) throw err;
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // 1s, 2s, 4s (max 5s)
+            console.warn(`[${label}] Attempt ${attempt}/${maxAttempts} failed: ${err.message}. Retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+    throw lastError;
+}
+
+// ═══════════════════════════════════════════════════════
+// Enhancement #2: Nonce Manager for batch operations
+// ═══════════════════════════════════════════════════════
+function createNonceManager(provider) {
+    const nonceCache = new Map(); // address → next nonce
+    return {
+        async getNonce(address) {
+            if (!nonceCache.has(address)) {
+                const currentNonce = await provider.getTransactionCount(address, 'pending');
+                nonceCache.set(address, currentNonce);
+                return currentNonce;
+            }
+            const next = nonceCache.get(address);
+            nonceCache.set(address, next + 1);
+            return next;
+        },
+        reset(address) {
+            nonceCache.delete(address);
+        }
+    };
+}
+
+// ═══════════════════════════════════════════════════════
+// Enhancement #3: Balance pre-check
+// ═══════════════════════════════════════════════════════
+async function checkTokenBalance(provider, walletAddress, tokenAddress, requiredAmount, chainIndex) {
+    const ethers = require('ethers');
+    const isNative = !tokenAddress || tokenAddress === 'native' || tokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+
+    if (isNative) {
+        const balance = await provider.getBalance(walletAddress);
+        if (balance < BigInt(requiredAmount)) {
+            const balHuman = ethers.formatEther(balance);
+            const reqHuman = ethers.formatEther(BigInt(requiredAmount));
+            return { sufficient: false, balance: balHuman, required: reqHuman, symbol: 'native' };
+        }
+        return { sufficient: true };
+    } else {
+        const erc20 = new ethers.Contract(tokenAddress, ['function balanceOf(address) view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)'], provider);
+        const balance = await erc20.balanceOf(walletAddress);
+        if (balance < BigInt(requiredAmount)) {
+            let decimals = 18, symbol = 'Token';
+            try { decimals = await erc20.decimals(); } catch (e) { }
+            try { symbol = await erc20.symbol(); } catch (e) { }
+            const balHuman = ethers.formatUnits(balance, decimals);
+            const reqHuman = ethers.formatUnits(BigInt(requiredAmount), decimals);
+            return { sufficient: false, balance: balHuman, required: reqHuman, symbol };
+        }
+        return { sufficient: true };
+    }
+}
+
+module.exports = { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken, detectPromptLanguage, rpcRetry, createNonceManager, checkTokenBalance };

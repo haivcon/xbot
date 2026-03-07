@@ -29,7 +29,8 @@ const PERSONA_I18N = {
     xwawa: { name: '🐸 XWAWA', desc: 'Carefree, cheerful frog' },
     banmao: { name: '🐱🍌 Banmao', desc: 'Banana-suit cat, mischievous' },
     mia: { name: '🍚 Mia', desc: 'Tiny rice grain, full of confidence' },
-    scarlett: { name: '💎 Scarlett', desc: 'Cute petite girl, sharp professional mind' }
+    jiajia: { name: '💎 Jiajia OKX', desc: 'Cute petite girl, sharp professional mind' },
+    xwizard: { name: '🧙 Xwizard', desc: 'Wizard with a magic wand, cheerful & mysterious' }
   },
   vi: {
     default: { name: '🤖 Mặc định', desc: 'Trợ lý AI thân thiện và hữu ích' },
@@ -60,7 +61,8 @@ const PERSONA_I18N = {
     xwawa: { name: '🐸 XWAWA', desc: 'Ếch vô tư lự, yêu đời' },
     banmao: { name: '🐱🍌 Banmao', desc: 'Mèo mặc đồ chuối, tinh nghịch' },
     mia: { name: '🍚 Mia 米粒儿', desc: 'Hạt gạo bé mà tự tin' },
-    scarlett: { name: '💎 珈珈 Scarlett', desc: 'Cô gái nhỏ nhắn cute, đầu óc sắc lẹm chuyên nghiệp' }
+    jiajia: { name: '💎 佳佳 OKX', desc: 'Cô gái nhỏ nhắn cute, đầu óc sắc lẹm chuyên nghiệp' },
+    xwizard: { name: '🧙 Xwizard', desc: 'Phù thủy với cây gậy phép thuật, vui vẻ và bí ẩn' }
   },
   id: {
     default: { name: '🤖 Default', desc: 'Asisten AI ramah dan membantu' },
@@ -91,7 +93,8 @@ const PERSONA_I18N = {
     xwawa: { name: '🐸 XWAWA', desc: 'Katak riang, vô tư' },
     banmao: { name: '🐱🍌 Banmao', desc: 'Kucing pakai baju pisang, usil' },
     mia: { name: '🍚 Mia', desc: 'Butir beras kecil nhưng penuh tự tin' },
-    scarlett: { name: '💎 Scarlett', desc: 'Gadis mungil imut, otak tajam profesional' }
+    jiajia: { name: '💎 Jiajia OKX', desc: 'Gadis mungil imut, otak tajam profesional' },
+    xwizard: { name: '🧙 Xwizard', desc: 'Penyihir dengan tongkat ajaib, ceria & misterius' }
   },
   ru: {
     default: { name: '🤖 По умолчанию', desc: 'Дружелюбный и полезный ассистент' },
@@ -122,7 +125,8 @@ const PERSONA_I18N = {
     xwawa: { name: '🐸 XWAWA', desc: 'Беспечная радостная лягушка' },
     banmao: { name: '🐱🍌 Banmao', desc: 'Кот в банановом костюме, озорной' },
     mia: { name: '🍚 Mia', desc: 'Зёрнышко риса, но очень уверенная' },
-    scarlett: { name: '💎 Scarlett', desc: 'Милая малышка, острый профессиональный ум' }
+    jiajia: { name: '💎 Jiajia OKX', desc: 'Милая малышка, острый профессиональный ум' },
+    xwizard: { name: '🧙 Xwizard', desc: 'Волшебник с магическим посохом, весёлый и загадочный' }
   },
   zh: {
     default: { name: '🤖 默认', desc: '友好且有帮助的 AI 助手' },
@@ -153,7 +157,8 @@ const PERSONA_I18N = {
     xwawa: { name: '🐸 XWAWA', desc: '(XWAWA)无忧无虑的开心小蛙' },
     banmao: { name: '🐱🍌 banmao', desc: '(banmao)穿香蕉装的调皮猫' },
     mia: { name: '🍚 Mia 米粒儿', desc: '自称小米粒，却充满自信' },
-    scarlett: { name: '💎 珈珈 Scarlett', desc: '小巫可爱，思维敏捷专业' }
+    jiajia: { name: '💎 佳佳 OKX', desc: '可爱娇小，思维敏捷专业' },
+    xwizard: { name: '🧙 Xwizard', desc: '手持魔杖的巫师，欢乐又神秘' }
   },
   ko: {
     default: { name: '🤖 기본', desc: '친절하고 도움이 되는 AI' },
@@ -184,7 +189,8 @@ const PERSONA_I18N = {
     xwawa: { name: '🐸 XWAWA', desc: '걱정 없는 명랑한 개구리' },
     banmao: { name: '🐱🍌 Banmao', desc: '바나나 옷을 입은 장난꾸러기 고양이' },
     mia: { name: '🍚 Mia', desc: '작은 쌀알이라 불리지만 자신감 넘침' },
-    scarlett: { name: '💎 Scarlett', desc: '귀여운 소녀, 날카로운 전문가 마인드' }
+    jiajia: { name: '💎 佳佳 OKX', desc: '귀여운 소녀, 날카로운 전문가 마인드' },
+    xwizard: { name: '🧙 Xwizard', desc: '마법 지팡이를 든 마법사, 유쾌하고 신비로운' }
   }
 };
 

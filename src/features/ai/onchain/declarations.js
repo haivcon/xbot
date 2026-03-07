@@ -118,7 +118,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'manage_trading_wallet',
-                description: 'Manage user trading wallets. Actions: create, delete, set_default, import, export, rename, tag. Vietnamese triggers: "tạo ví", "xóa ví", "đặt ví mặc định", "import ví", "thêm ví", "đổi tên ví", "gắn tag ví".',
+                description: 'Manage user trading wallets. Actions: create, delete, set_default, import, export, rename, tag. Vietnamese: "tạo ví", "xóa ví", "đặt ví mặc định", "import ví", "thêm ví", "đổi tên ví", "gắn tag ví". Chinese: "创建钱包", "删除钱包", "导入钱包", "设为默认", "重命名钱包". English: "create wallet", "delete wallet", "set default wallet", "import wallet", "rename wallet". Users can create MULTIPLE wallets — there is no single-wallet limit.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -240,7 +240,7 @@ module.exports.ONCHAIN_TOOLS = [
                                 type: 'object',
                                 properties: {
                                     walletId: { type: 'number', description: 'Wallet ID' },
-                                    amount: { type: 'string', description: 'Amount to SELL in minimal units (wei). Must be amount of fromToken. Use "max" to swap entire balance minus gas reserve.' }
+                                    amount: { type: 'string', description: 'Amount to SELL in normal human units (e.g. "1000" for 1000 tokens). System auto-converts to wei. Use "max" to swap entire balance minus gas reserve.' }
                                 },
                                 required: ['walletId', 'amount']
                             }
@@ -330,19 +330,7 @@ module.exports.ONCHAIN_TOOLS = [
                     required: ['address', 'chainIndex']
                 }
             },
-            {
-                name: 'get_trade_history',
-                description: 'Get recent buy/sell trade history for a token on DEX. Use when user asks about recent trades, trade log, buy/sell activity. Vietnamese: "lịch sử giao dịch", "xem giao dịch gần đây", "ai mua ai bán"',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        chainIndex: { type: 'string', description: 'Chain ID (e.g. "196" for X Layer)' },
-                        tokenContractAddress: { type: 'string', description: 'Token contract address' },
-                        limit: { type: 'string', description: 'Number of trades to return (max 500, default 20)' }
-                    },
-                    required: ['chainIndex', 'tokenContractAddress']
-                }
-            },
+            // get_trade_history removed — use get_recent_trades instead (duplicate functionality)
             {
                 name: 'get_weather',
                 description: 'Get current weather and forecast for any location. Use when user asks about weather, temperature, forecast, rain. Vietnamese: "thời tiết", "nhiệt độ", "trời có mưa không?"',
@@ -455,143 +443,158 @@ module.exports.ONCHAIN_TOOLS = [
                     },
                     required: ['tag']
                 }
+            },
+            {
+                name: 'check_approval_safety',
+                description: 'Check if a token approval/allowance is safe or risky. Detects unlimited approvals to suspicious spenders. Vietnamese: "kiểm tra approval", "kiểm tra quyền truy cập token", "approval có an toàn không". English: "check approval safety", "is this approval safe".',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        chainIndex: { type: 'string', description: 'Chain ID (e.g. "1" for Ethereum, "56" for BSC, "196" for X Layer)' },
+                        tokenAddress: { type: 'string', description: 'Token contract address to check approvals for (optional, checks all if omitted)' },
+                        walletAddress: { type: 'string', description: 'Wallet address to check approvals for. If omitted, uses user default trading wallet.' }
+                    },
+                    required: ['chainIndex']
+                }
             }
         ]
     },
     {
-        name: 'get_index_price',
-        description: 'Get aggregated index price from multiple sources for tokens',
-        parameters: {
-            type: 'object',
-            properties: {
-                tokens: {
-                    type: 'array',
-                    description: 'Array of {chainIndex, tokenContractAddress} objects',
-                    items: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' } } }
+        functionDeclarations: [
+            {
+                name: 'get_index_price',
+                description: 'Get aggregated index price from multiple sources for tokens',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        tokens: {
+                            type: 'array',
+                            description: 'Array of {chainIndex, tokenContractAddress} objects',
+                            items: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' } } }
+                        }
+                    },
+                    required: ['tokens']
                 }
             },
-            required: ['tokens']
-        }
-    },
-    {
-        name: 'get_historical_index_price',
-        description: 'Get historical index price data for a token',
-        parameters: {
-            type: 'object',
-            properties: {
-                chainIndex: { type: 'string', description: 'Chain ID (e.g. 196, 1, 56)' },
-                tokenContractAddress: { type: 'string', description: 'Token contract address' },
-                period: { type: 'string', description: 'Time period: 1m, 5m, 1H, 1D' },
-                limit: { type: 'string', description: 'Number of data points (max 299)' }
-            },
-            required: ['chainIndex', 'tokenContractAddress']
-        }
-    },
-    {
-        name: 'estimate_gas_limit',
-        description: 'Estimate gas limit for a transaction before executing it',
-        parameters: {
-            type: 'object',
-            properties: {
-                chainIndex: { type: 'string', description: 'Chain ID' },
-                fromAddress: { type: 'string', description: 'Sender address' },
-                toAddress: { type: 'string', description: 'Receiver/contract address' },
-                txAmount: { type: 'string', description: 'Transaction amount in wei' }
-            },
-            required: ['chainIndex', 'fromAddress', 'toAddress']
-        }
-    },
-    {
-        name: 'get_liquidity',
-        description: 'Get available DEX liquidity pools on a chain',
-        parameters: {
-            type: 'object',
-            properties: {
-                chainIndex: { type: 'string', description: 'Chain ID (e.g. 196, 1, 56)' }
-            },
-            required: ['chainIndex']
-        }
-    },
-    {
-        name: 'get_specific_token_balances',
-        description: 'Get balance of specific tokens in a wallet (more precise than general balance)',
-        parameters: {
-            type: 'object',
-            properties: {
-                address: { type: 'string', description: 'Wallet address' },
-                tokens: {
-                    type: 'array',
-                    description: 'Array of {chainIndex, tokenContractAddress} objects',
-                    items: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' } } }
+            {
+                name: 'get_historical_index_price',
+                description: 'Get historical index price data for a token',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        chainIndex: { type: 'string', description: 'Chain ID (e.g. 196, 1, 56)' },
+                        tokenContractAddress: { type: 'string', description: 'Token contract address' },
+                        period: { type: 'string', description: 'Time period: 1m, 5m, 1H, 1D' },
+                        limit: { type: 'string', description: 'Number of data points (max 299)' }
+                    },
+                    required: ['chainIndex', 'tokenContractAddress']
                 }
             },
-            required: ['address', 'tokens']
-        }
-    },
-    {
-        name: 'get_historical_candles',
-        description: 'Get historical K-line/candlestick data for longer time ranges (use for weekly/monthly charts)',
-        parameters: {
-            type: 'object',
-            properties: {
-                chainIndex: { type: 'string', description: 'Chain ID' },
-                tokenContractAddress: { type: 'string', description: 'Token contract address' },
-                bar: { type: 'string', description: 'Period: 1m, 5m, 1H, 1D, 1W' },
-                limit: { type: 'string', description: 'Number of candles (max 299)' }
+            {
+                name: 'estimate_gas_limit',
+                description: 'Estimate gas limit for a transaction before executing it',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        chainIndex: { type: 'string', description: 'Chain ID' },
+                        fromAddress: { type: 'string', description: 'Sender address' },
+                        toAddress: { type: 'string', description: 'Receiver/contract address' },
+                        txAmount: { type: 'string', description: 'Transaction amount in wei' }
+                    },
+                    required: ['chainIndex', 'fromAddress', 'toAddress']
+                }
             },
-            required: ['chainIndex', 'tokenContractAddress']
-        }
-    },
-    {
-        name: 'get_recent_trades',
-        description: 'Get recent buy/sell trades (log) for a specific token on a DEX. Use when the user asks for "giao dịch gần đây", "lịch sử giao dịch", "có ai đang mua/bán không".',
-        parameters: {
-            type: 'object',
-            properties: {
-                chainIndex: { type: 'string', description: 'Chain ID' },
-                tokenContractAddress: { type: 'string', description: 'Token contract address' },
-                limit: { type: 'string', description: 'Number of trades to fetch (max 500), default 50' }
+            {
+                name: 'get_liquidity',
+                description: 'Get available DEX liquidity pools on a chain',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        chainIndex: { type: 'string', description: 'Chain ID (e.g. 196, 1, 56)' }
+                    },
+                    required: ['chainIndex']
+                }
             },
-            required: ['chainIndex', 'tokenContractAddress']
-        }
-    },
-    {
-        name: 'get_signal_chains',
-        description: 'Get a list of blockchain networks that support Smart Money / Whale / KOL buy signals. Use to check if a chain is supported before querying signals.',
-        parameters: {
-            type: 'object',
-            properties: {}
-        }
-    },
-    {
-        name: 'get_signal_list',
-        description: 'Get the latest buy-direction signals from Smart Money, Whales, or KOLs/Influencers. Use when user asks "smart money đang mua gì", "cá mập mua token nào", "xem tín hiệu mạng Solana".',
-        parameters: {
-            type: 'object',
-            properties: {
-                chainIndex: { type: 'string', description: 'Chain ID (e.g. 196 for X Layer, 1 for Ethereum, 501 for Solana)' },
-                walletType: { type: 'string', description: 'Wallet classification. 1=Smart Money, 2=KOL/Influencer, 3=Whale. Can be comma-separated or omitted for all.' },
-                minAmountUsd: { type: 'string', description: 'Minimum transaction amount in USD' },
-                tokenContractAddress: { type: 'string', description: 'Filter signals for a specific token (optional)' }
+            {
+                name: 'get_specific_token_balances',
+                description: 'Get balance of specific tokens in a wallet (more precise than general balance)',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        address: { type: 'string', description: 'Wallet address' },
+                        tokens: {
+                            type: 'array',
+                            description: 'Array of {chainIndex, tokenContractAddress} objects',
+                            items: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' } } }
+                        }
+                    },
+                    required: ['address', 'tokens']
+                }
             },
-            required: ['chainIndex']
-        }
-    },
-    {
-        name: 'calculate_profit_roi',
-        description: 'Calculate ROI, historic profit, or distance from ATH/ATL for a token based on its candlestick history. Use when user asks "tính lợi nhuận nếu ôm OKB 1 năm", "ví dụ mua BTC tháng trước lãi bao nhiêu", "còn cách bao xa để về bờ (hòa vốn)".',
-        parameters: {
-            type: 'object',
-            properties: {
-                chainIndex: { type: 'string', description: 'Chain ID' },
-                tokenContractAddress: { type: 'string', description: 'Token contract address' },
-                buyPrice: { type: 'number', description: 'Optional explicit buy price to calculate ROI. If omitted, uses oldest candle in history.' },
-                bar: { type: 'string', description: 'Period to fetch history for: 1D, 1W. Default 1D' },
-                limit: { type: 'string', description: 'Number of periods for historical analysis (e.g. 365 for 1 year). Default 30' }
+            {
+                name: 'get_historical_candles',
+                description: 'Get historical K-line/candlestick data for longer time ranges (use for weekly/monthly charts)',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        chainIndex: { type: 'string', description: 'Chain ID' },
+                        tokenContractAddress: { type: 'string', description: 'Token contract address' },
+                        bar: { type: 'string', description: 'Period: 1m, 5m, 1H, 1D, 1W' },
+                        limit: { type: 'string', description: 'Number of candles (max 299)' }
+                    },
+                    required: ['chainIndex', 'tokenContractAddress']
+                }
             },
-            required: ['chainIndex', 'tokenContractAddress']
-        }
-    },
-
+            {
+                name: 'get_recent_trades',
+                description: 'Get recent buy/sell trades (log) for a specific token on a DEX. Use when the user asks for "giao dịch gần đây", "lịch sử giao dịch", "có ai đang mua/bán không".',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        chainIndex: { type: 'string', description: 'Chain ID' },
+                        tokenContractAddress: { type: 'string', description: 'Token contract address' },
+                        limit: { type: 'string', description: 'Number of trades to fetch (max 500), default 50' }
+                    },
+                    required: ['chainIndex', 'tokenContractAddress']
+                }
+            },
+            {
+                name: 'get_signal_chains',
+                description: 'Get a list of blockchain networks that support Smart Money / Whale / KOL buy signals. Use to check if a chain is supported before querying signals.',
+                parameters: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'get_signal_list',
+                description: 'Get the latest buy-direction signals from Smart Money, Whales, or KOLs/Influencers. Use when user asks "smart money đang mua gì", "cá mập mua token nào", "xem tín hiệu mạng Solana".',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        chainIndex: { type: 'string', description: 'Chain ID (e.g. 196 for X Layer, 1 for Ethereum, 501 for Solana)' },
+                        walletType: { type: 'string', description: 'Wallet classification. 1=Smart Money, 2=KOL/Influencer, 3=Whale. Can be comma-separated or omitted for all.' },
+                        minAmountUsd: { type: 'string', description: 'Minimum transaction amount in USD' },
+                        tokenContractAddress: { type: 'string', description: 'Filter signals for a specific token (optional)' }
+                    },
+                    required: ['chainIndex']
+                }
+            },
+            {
+                name: 'calculate_profit_roi',
+                description: 'Calculate ROI, historic profit, or distance from ATH/ATL for a token based on its candlestick history. Use when user asks "tính lợi nhuận nếu ôm OKB 1 năm", "ví dụ mua BTC tháng trước lãi bao nhiêu", "còn cách bao xa để về bờ (hòa vốn)".',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        chainIndex: { type: 'string', description: 'Chain ID' },
+                        tokenContractAddress: { type: 'string', description: 'Token contract address' },
+                        buyPrice: { type: 'number', description: 'Optional explicit buy price to calculate ROI. If omitted, uses oldest candle in history.' },
+                        bar: { type: 'string', description: 'Period to fetch history for: 1D, 1W. Default 1D' },
+                        limit: { type: 'string', description: 'Number of periods for historical analysis (e.g. 365 for 1 year). Default 30' }
+                    },
+                    required: ['chainIndex', 'tokenContractAddress']
+                }
+            }
+        ]
+    }
 ];
-;

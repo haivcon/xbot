@@ -13,22 +13,43 @@ function formatPriceResult(data, lang = 'en') {
 
 function formatSearchResult(data, lang = 'en') {
     if (!data || !Array.isArray(data) || data.length === 0) {
-        return t(lang, 'ai_search_no_data');
+        const noData = { vi: '❌ Không tìm thấy token nào.', en: '❌ No tokens found.', zh: '❌ 未找到任何代币。', ko: '❌ 토큰을 찾을 수 없습니다.', ru: '❌ Токены не найдены.', id: '❌ Token tidak ditemukan.' };
+        return noData[lang] || noData.en;
     }
+
+    const _i = {
+        header: { vi: '🔍 Kết quả tìm kiếm', en: '🔍 Search Results', zh: '🔍 搜索结果', ko: '🔍 검색 결과', ru: '🔍 Результаты поиска', id: '🔍 Hasil Pencarian' },
+        chain: { vi: 'Mạng', en: 'Chain', zh: '链', ko: '체인', ru: 'Сеть', id: 'Jaringan' },
+        price: { vi: 'Giá', en: 'Price', zh: '价格', ko: '가격', ru: 'Цена', id: 'Harga' },
+        contract: { vi: 'Hợp đồng', en: 'Contract', zh: '合约', ko: '컨트랙트', ru: 'Контракт', id: 'Kontrak' },
+    };
+    const _t = (key) => (_i[key] || {})[lang] || (_i[key] || {}).en || key;
+
+    const chainNameMap = { '1': 'Ethereum', '56': 'BSC', '137': 'Polygon', '196': 'X Layer', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana', '43114': 'Avalanche' };
+    const okxChainMap = { '196': 'xlayer', '1': 'eth', '56': 'bsc', '42161': 'arbitrum', '8453': 'base', '137': 'polygon', '501': 'sol' };
+
     const top5 = data.slice(0, 5);
-    const lines = top5.map((token, i) => {
-        const price = token.price ? `**$${Number(token.price) < 0.01 ? Number(token.price).toFixed(8) : Number(token.price).toFixed(4)}**` : 'N/A';
+    const cards = top5.map((token, i) => {
+        const price = token.price ? Number(token.price) : null;
+        const priceStr = price !== null ? `$${price < 0.01 ? price.toFixed(8) : price.toFixed(4)}` : 'N/A';
         const addr = token.tokenContractAddress || '';
         const chainIdx = token.chainIndex || '196';
-        const okxChainMap = { '196': 'xlayer', '1': 'eth', '56': 'bsc', '42161': 'arbitrum', '8453': 'base', '137': 'polygon', '501': 'sol' };
+        const chainName = chainNameMap[String(chainIdx)] || `Chain #${chainIdx}`;
         const chainPath = okxChainMap[String(chainIdx)] || 'bsc';
         const explorerUrl = addr ? `https://www.okx.com/web3/explorer/${chainPath}/token/${addr}` : '';
-        const addrDisplay = explorerUrl ? `[${addr}](${explorerUrl})` : 'N/A';
+        const addrDisplay = explorerUrl ? `[${addr}](${explorerUrl})` : addr || 'N/A';
+        const symbol = token.tokenSymbol || '?';
+        const fullName = token.tokenFullName || '';
 
-        return `${i + 1}. 🪙 **${token.tokenSymbol || '?'}** (${token.tokenFullName || ''})\n   • ${t(lang, 'ai_search_chain')}: **${chainIdx}**\n   • ${t(lang, 'ai_search_price')}: ${price}\n   • ${t(lang, 'ai_search_ca')}: 📋 ${addrDisplay}`;
+        return `${i + 1}. 🪙 **${symbol}** ${fullName ? `(${fullName})` : ''}\n` +
+            `   ⛓ ${_t('chain')}: **${chainName}** (#${chainIdx})\n` +
+            `   💰 ${_t('price')}: **${priceStr}**\n` +
+            `   📋 ${_t('contract')}:\n   ${addrDisplay}`;
     });
-    return `> IMPORTANT INSTRUCTION: Display this exact token list using the exact markdown layout. DO NOT summarize it or change the format.\n\n${t(lang, 'ai_search_header')}\n\n${lines.join('\n\n')}`;
+
+    return `> IMPORTANT INSTRUCTION: Display this exact token list using the exact markdown layout. DO NOT summarize it or change the format.\n\n${_t('header')}\n━━━━━━━━━━━━━━━━━━\n\n${cards.join('\n\n')}`;
 }
+
 
 function formatWalletResult(totalValue, balances, address, lang = 'en') {
     if (!totalValue || !totalValue.length) {
@@ -287,49 +308,74 @@ function formatTopTokensResult(data, requestedChains = '196', lang = 'en') {
     return `> IMPORTANT INSTRUCTION: Display this exact token list using the exact markdown layout. DO NOT summarize it or change the format. Display the full list with line breaks.\n\n${t(lang, 'ai_top_header', { count: top10.length })}\n\n${cards.join('\n\n')}${warningText}`;
 }
 
-function formatRecentTradesResult(data) {
-    if (!data || !Array.isArray(data) || data.length === 0) return 'No recent trades available.';
+function formatRecentTradesResult(data, lang = 'en') {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+        const noData = { vi: 'Không có giao dịch gần đây.', en: 'No recent trades available.', zh: '没有最近的交易记录。', ko: '최근 거래가 없습니다.' };
+        return noData[lang] || noData.en;
+    }
+    const buyL = { vi: '🟢 MUA', en: '🟢 BUY', zh: '🟢 买入', ko: '🟢 매수' };
+    const sellL = { vi: '🔴 BÁN', en: '🔴 SELL', zh: '🔴 卖出', ko: '🔴 매도' };
+    const onL = { vi: 'trên', en: 'on', zh: '在', ko: '에서' };
+    const atPriceL = { vi: 'ở giá', en: 'at', zh: '价格', ko: '가격' };
+    const headerL = { vi: '📊 Giao dịch gần đây (15 lệnh mới nhất)', en: '📊 Recent Trades (Latest 15)', zh: '📊 最近交易（最新15笔）', ko: '📊 최근 거래 (최근 15건)' };
     const trades = data.slice(0, 15);
     const lines = trades.map(t => {
-        const type = t.type === 'buy' ? '🟢 MUA' : '🔴 BÁN';
+        const type = t.type === 'buy' ? (buyL[lang] || buyL.en) : (sellL[lang] || sellL.en);
         const price = Number(t.price || 0);
         const vol = Number(t.volume || 0);
-        const time = new Date(Number(t.time || Date.now())).toLocaleTimeString('vi-VN');
+        const time = new Date(Number(t.time || Date.now())).toLocaleTimeString('en-US', { hour12: false });
         const dex = t.dexName || '?';
         const pStr = price < 0.01 ? price.toFixed(6) : price.toFixed(4);
-        return `[${time}] ${type} trên ${dex}: $${vol.toLocaleString('en-US', { maximumFractionDigits: 0 })} ở giá $${pStr}`;
+        return `[${time}] ${type} ${onL[lang] || onL.en} ${dex}: $${vol.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${atPriceL[lang] || atPriceL.en} $${pStr}`;
     });
-    return `📊 Giao dịch gần đây (15 lệnh mới nhất):\n\n${lines.join('\n')}`;
+    return `${headerL[lang] || headerL.en}:\n\n${lines.join('\n')}`;
 }
 
-function formatSignalChainsResult(data) {
-    if (!data || !Array.isArray(data) || data.length === 0) return 'No signal chains available.';
+function formatSignalChainsResult(data, lang = 'en') {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+        const noData = { vi: 'Không có mạng hỗ trợ.', en: 'No signal chains available.', zh: '没有可用的信号链。', ko: '사용 가능한 신호 체인이 없습니다.' };
+        return noData[lang] || noData.en;
+    }
+    const headerL = { vi: '🔗 Các mạng hỗ trợ Smart Money Signals', en: '🔗 Chains Supporting Smart Money Signals', zh: '🔗 支持智能资金信号的链', ko: '🔗 스마트 머니 시그널 지원 체인' };
     const lines = data.map(c => `- ${c.chainName} (ID: ${c.chainIndex})`);
-    return `🔗 Các mạng hỗ trợ Smart Money Signals:\n\n${lines.join('\n')}`;
+    return `${headerL[lang] || headerL.en}:\n\n${lines.join('\n')}`;
 }
 
-function formatSignalListResult(data) {
-    if (!data || !Array.isArray(data) || data.length === 0) return 'Hiện không có tín hiệu Smart Money nào phù hợp.';
+function formatSignalListResult(data, lang = 'en') {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+        const noData = { vi: 'Hiện không có tín hiệu Smart Money nào phù hợp.', en: 'No Smart Money signals found.', zh: '目前没有匹配的智能资金信号。', ko: '일치하는 스마트 머니 시그널이 없습니다.' };
+        return noData[lang] || noData.en;
+    }
+    const walletLabels = {
+        SMART_MONEY: { vi: '🧠 Smart Money', en: '🧠 Smart Money', zh: '🧠 聪明钱', ko: '🧠 스마트 머니' },
+        WHALE: { vi: '🐋 Cá mập', en: '🐋 Whale', zh: '🐋 鲸鱼', ko: '🐋 고래' },
+        KOL: { vi: '🗣️ KOL/Influencer', en: '🗣️ KOL/Influencer', zh: '🗣️ KOL/意见领袖', ko: '🗣️ KOL/인플루언서' }
+    };
+    const boughtL = { vi: 'vừa mua', en: 'just bought', zh: '刚买入', ko: '방금 매수' };
+    const atL = { vi: 'ở giá', en: 'at price', zh: '价格', ko: '가격' };
+    const headerL = { vi: '🚨 Tín hiệu On-chain mới nhất', en: '🚨 Latest On-chain Signals', zh: '🚨 最新链上信号', ko: '🚨 최신 온체인 시그널' };
     const signals = data.slice(0, 10);
     const lines = signals.map((s, i) => {
-        const type = s.walletType === 'SMART_MONEY' ? '🧠 Smart Money' : s.walletType === 'WHALE' ? '🐋 Cá mập' : '🗣️ KOL/Influencer';
+        const wType = s.walletType === 'SMART_MONEY' ? 'SMART_MONEY' : s.walletType === 'WHALE' ? 'WHALE' : 'KOL';
+        const type = (walletLabels[wType] || walletLabels.KOL)[lang] || (walletLabels[wType] || walletLabels.KOL).en;
         const sym = s.token?.symbol || '?';
         const amount = Number(s.amountUsd || 0);
         const price = Number(s.price || 0);
         const pStr = price < 0.01 ? price.toFixed(6) : price.toFixed(4);
         const addr = s.token?.tokenAddress || '';
-        return `${i + 1}. **${sym}**: ${type} vừa mua $${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })} ở giá $${pStr}\n   > Token: ${addr}`;
+        return `${i + 1}. **${sym}**: ${type} ${boughtL[lang] || boughtL.en} $${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${atL[lang] || atL.en} $${pStr}\n   > Token: ${addr}`;
     });
-    return `> IMPORTANT INSTRUCTION: Display this exactly.\n\n${t(lang, 'ai_signal_latest_header', { default: '🚨 Latest On-chain Signals:' })}\n\n${lines.join('\n\n')}`;
+    return `> IMPORTANT INSTRUCTION: Display this exactly.\n\n${headerL[lang] || headerL.en}:\n\n${lines.join('\n\n')}`;
 }
 
-function formatProfitRoiResult(data, explicitBuyPrice, realTimePrice) {
-    if (!data || !Array.isArray(data) || data.length === 0) return 'Không có dữ liệu lịch sử để tính toán.';
+function formatProfitRoiResult(data, explicitBuyPrice, realTimePrice, lang = 'en') {
+    const noDataL = { vi: 'Không có dữ liệu lịch sử để tính toán.', en: 'No historical data for calculation.', zh: '没有可用的历史数据进行计算。', ko: '계산할 과거 데이터가 없습니다.' };
+    const noPriceL = { vi: 'Không có giá lịch sử hợp lệ.', en: 'No valid historical prices.', zh: '没有有效的历史价格。', ko: '유효한 과거 가격이 없습니다.' };
+    if (!data || !Array.isArray(data) || data.length === 0) return noDataL[lang] || noDataL.en;
     const candles = data.reverse();
     const closes = candles.map(c => Number(c.close || c[4] || 0)).filter(v => v > 0);
-    if (closes.length === 0) return 'Không có giá lịch sử hợp lệ.';
+    if (closes.length === 0) return noPriceL[lang] || noPriceL.en;
 
-    // Newest is at the end
     const latestClose = closes[closes.length - 1];
     const currentPrice = realTimePrice || latestClose;
     const oldestClose = closes[0];
@@ -338,20 +384,31 @@ function formatProfitRoiResult(data, explicitBuyPrice, realTimePrice) {
     const roi = ((currentPrice - buyPrice) / buyPrice * 100).toFixed(2);
 
     const high = Math.max(...closes);
-    const low = Math.min(...closes);
     const distAth = ((currentPrice - high) / high * 100).toFixed(2);
 
     const cStr = currentPrice < 0.01 ? currentPrice.toFixed(8) : currentPrice.toFixed(4);
     const bStr = buyPrice < 0.01 ? buyPrice.toFixed(8) : buyPrice.toFixed(4);
     const athStr = high < 0.01 ? high.toFixed(8) : high.toFixed(4);
 
+    const _l = {
+        header: { vi: '📈 Phân tích Lợi nhuận & ROI', en: '📈 Profit & ROI Analysis', zh: '📈 利润与ROI分析', ko: '📈 수익 & ROI 분석' },
+        buyRef: { vi: 'Giá mua tham chiếu', en: 'Reference Buy Price', zh: '参考买入价', ko: '기준 매수가' },
+        current: { vi: 'Giá hiện tại', en: 'Current Price', zh: '当前价格', ko: '현재 가격' },
+        roiL: { vi: 'Lợi nhuận (ROI)', en: 'Profit (ROI)', zh: '利润 (ROI)', ko: '수익 (ROI)' },
+        ath: { vi: 'Đỉnh cao nhất (ATH)', en: 'All-Time High (ATH)', zh: '历史最高价 (ATH)', ko: '사상 최고가 (ATH)' },
+        distAth: { vi: 'cách đỉnh', en: 'from ATH', zh: '距最高', ko: 'ATH 대비' },
+        breakeven: { vi: 'Cần tăng', en: 'Needs', zh: '需上涨', ko: '필요 상승' },
+        toBreak: { vi: 'từ giá này để hòa vốn', en: 'from current to break even', zh: '才能回本', ko: '손익분기점까지' }
+    };
+    const L = (key) => (_l[key] || {})[lang] || (_l[key] || {}).en || key;
+
     return `> IMPORTANT INSTRUCTION: Use these figures to explain the calculation to the user in their language.\n\n` +
-        `📈 Phân tích Lợi nhuận & ROI:\n` +
-        `- Giá mua tham chiếu: $${bStr}\n` +
-        `- Giá hiện tại: $${cStr}\n` +
-        `- Lợi nhuận (ROI): ${roi >= 0 ? '+' : ''}${roi}%\n` +
-        `- Đỉnh cao nhất (ATH): $${athStr} (cách đỉnh ${distAth}%)\n` +
-        (roi < 0 ? `- Cần tăng ${((buyPrice - currentPrice) / currentPrice * 100).toFixed(2)}% từ giá này để hòa vốn.` : '');
+        `${L('header')}:\n` +
+        `- ${L('buyRef')}: $${bStr}\n` +
+        `- ${L('current')}: $${cStr}\n` +
+        `- ${L('roiL')}: ${roi >= 0 ? '+' : ''}${roi}%\n` +
+        `- ${L('ath')}: $${athStr} (${L('distAth')} ${distAth}%)\n` +
+        (roi < 0 ? `- ${L('breakeven')} ${((buyPrice - currentPrice) / currentPrice * 100).toFixed(2)}% ${L('toBreak')}.` : '');
 }
 
 function formatHolderResult(data, chainIndex, totalSupply, tokenAddress, lang = 'en') {

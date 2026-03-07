@@ -28,9 +28,30 @@
 | 🛡️ **Honeypot Protection** | Scans tokens dynamically before swaps to block rug-pulls, 100% tax scams, and extreme slippage conditions. |
 | 🏦 **DeFi & OnchainOS** | Instant cross-chain DEX Swaps, real-time market data, and complete multi-wallet asset management. |
 
-### 🖼️ Natural Language Trading Showcase
-![XBot Natural Language Swap Preview](docs/assets/demo1.png)
-*Example: The AI autonomously interpreting a Chinese natural language request to quote and swap OKB for BANMAO, displaying all fees, slippage, and TX success hashes seamlessly.*
+### 🖼️ Showcase & Capabilities
+1. **Instant Token Swap**
+![Swap Tokens](docs/assets/demo1.png)
+*Command XBot to swap tokens from one or multiple wallets simultaneously, generating a detailed report with an OKX Web3 transaction hash link.*
+
+2. **Lightning-Fast Transfers**
+![Auto Transfer](docs/assets/demo2.png)
+*Command XBot to automatically transfer funds in a flash. Supports seamless transfers from one wallet to many, or from multiple wallets to one.*
+
+3. **Multi-Wallet Asset Tracking**
+![Asset Tracking](docs/assets/demo3.png)
+*Check the assets of individual wallets or multiple wallets at once just by giving a simple natural language command.*
+
+4. **Interactive Mini-Games**
+![Mini Games](docs/assets/demo4.png)
+*Need a break? Enjoy interactive entertainment games for relaxation. You can play directly with XBot or challenge your friends in the group.*
+
+5. **Visual Control Panel (`/help`)**
+![Control Panel](docs/assets/demo5.png)
+*Use the `/help` command to display a comprehensive menu with interactive buttons. Easily optimize XBot by adding API keys, exporting private keys of AI-generated wallets, and accessing other manual functions.*
+
+6. **Instant Wallet Creation**
+![Wallet Creation](docs/assets/demo6.png)
+*Create a new Web3 wallet in a split second using a simple command.*
 
 ### 🎮 Command Reference
 #### 🤖 AI Chat (Natural Language)
@@ -45,11 +66,11 @@ Just chat naturally with the bot! It understands context and uses **40+ tools au
 * `/contract <address>` - Lookup token info by contract address
 * `/toptoken` - View trending tokens with rich UI
 
-#### 🛡️ Moderation & Community (Group Admins)
-* `/price`, `/pricev`, `/pricex` - **Scheduled token price alerts tailored to each group's language to maximize community engagement.**
-* `/checkin` - Daily check-in system with quizzes to earn points
-* `/ban`, `/mute`, `/warn` - Community moderation tools
-* `/welcome` - Configurable welcome messages
+#### 👑 Group Owner & Admin Commands
+* `/admin` - Open the comprehensive community configuration and management panel.
+* `/checkinadmin` - Configure daily attendance for members using random questions, and generate automated daily summary reports based on your settings.
+* `/welcomeadmin` - Set up verification for new members using random questions to prevent Telegram bots from spamming the group.
+* `/price` - Send token price alerts on any chain according to the configured schedule directly into the group or specific topics, localized to their respective languages.
 
 #### 🎲 Games
 * `/sudoku`, `/mines`, `/memory`, `/rps`, `/dice` - Play engaging mini-games within Telegram.
@@ -223,9 +244,30 @@ If this bot has helped you launch your project or trade faster on X Layer, pleas
 | 🛡️ **貔貅盘深度防御** | 在交易前动态扫描代币合约，智能拦截貔貅盘、100% 杀手税及极端滑点异常。 |
 | 🏦 **DeFi 与数字资产** | 瞬时跨链 DEX 闪兑、实时全网行情数据、以及全方位的多钱包聚合管理。 |
 
-### 🖼️ AI 自然语言交易引擎演示
-![XBot 自然语言交易演示](docs/assets/demo1.png)
-*示例：AI 引擎自主理解纯中文指令，计算 OKB 兑换 BANMAO 的汇率，并无缝展示滑点、Gas 费与链上确认结果。*
+### 🖼️ 核心功能展示
+1. **瞬间代币闪兑**
+![Swap Tokens](docs/assets/demo1.png)
+*指令 XBot 同时从一个或多个钱包进行代币兑换，并生成包含 OKX Web3 交易哈希链接的详细报告。*
+
+2. **极速自动转账**
+![Auto Transfer](docs/assets/demo2.png)
+*指令 XBot 瞬间完成自动资金转账，完美支持一对多或多对一的批量钱包划转。*
+
+3. **多钱包资产查询**
+![Asset Tracking](docs/assets/demo3.png)
+*只需一句简单的指令，即可查询单个钱包或同时查询多个钱包的最新资产余额。*
+
+4. **互动解压小游戏**
+![Mini Games](docs/assets/demo4.png)
+*休闲放松的娱乐小游戏，您可以直接与 XBot 对战，或者在群组中向好友发起挑战。*
+
+5. **可视化控制面板 (`/help`)**
+![Control Panel](docs/assets/demo5.png)
+*使用 `/help` 指令呼出带有全功能按钮的交互菜单，轻松快捷地优化 XBot（如添加 API、导出 AI 创建的钱包私钥以及其他手动功能）。*
+
+6. **秒级钱包创建**
+![Wallet Creation](docs/assets/demo6.png)
+*只需一句简单的指令，眨眼间即可极速创建安全的 Web3 钱包。*
 
 ### 🎮 指令参考
 #### 🤖 AI 对话 (自然语言交互)
@@ -240,11 +282,11 @@ If this bot has helped you launch your project or trade faster on X Layer, pleas
 * `/contract <合约地址>` - 根据合约地址查询代币详情
 * `/toptoken` - 查看具有精美 UI 的热门代币榜单
 
-#### 🛡️ 社群管理与互动 (群管功能)
-* `/price`, `/pricev`, `/pricex` - **定时通报代币价格指令，支持针对不同社群语言进行播报，极大增强社区互动与留存。**
-* `/checkin` - 每日签到与答题赚积分系统
-* `/ban`, `/mute`, `/warn` - 专业的群聊审核工具
-* `/welcome` - 可自定义的进群欢迎语
+#### 👑 群主与管理员专属指令
+* `/admin` - 打开全面的社区配置与管理中心。
+* `/checkinadmin` - 配置成员每日随机问答签到，并根据设置自动生成详细的每日总结报告。
+* `/welcomeadmin` - 设置新成员随机问答验证，有效防止电报机器人恶意群发垃圾信息。
+* `/price` - 根据设定的时间表，将任意链上的代币价格警报直接发送到群组或特定话题，并支持多语言本地化。
 
 #### 🎲 小游戏
 * `/sudoku`, `/mines`, `/memory`, `/rps`, `/dice` - 在 Telegram 内爽玩各种互动小游戏。
@@ -417,9 +459,30 @@ XBot 的核心代码基于高内聚低耦合的架构打造。无论您是想添
 | 🛡️ **Lá Chắn Chống Honeypot** | Quét sống (Live) Contract Token để chặn trước các vụ kéo thảm, phí thuế giết người 100%, hoặc lỗi giá trượt. |
 | 🏦 **DeFi & OnchainOS Xuyên Chuỗi** | Swap DEX liên chain chớp nhoáng, soi giá thị trường Real-time, quản trị tập trung hàng loạt ví phụ. |
 
-### 🖼️ Minh Họa AI Xử Lý Lệnh Tự Nhiên
-![XBot Tiếng Việt Swap Preview](docs/assets/demo1.png)
-*Ví dụ: Mô hình AI tự động hiểu ý định người dùng, báo giá Swap OKB sang BANMAO, tính toán Gas phí và Slippage trơn tru trước khi chốt đơn.*
+### 🖼️ Chức Năng Nổi Bật Qua Ảnh Minh Họa
+1. **Swap Token Tức Thì**
+![Swap Tokens](docs/assets/demo1.png)
+*Ra lệnh cho XBot swap token từ một ví hoặc nhiều ví cùng một lúc, tạo ra báo cáo chi tiết kèm link txhash OKX Web3.*
+
+2. **Chuyển Tiền Tự Động Siêu Tốc**
+![Auto Transfer](docs/assets/demo2.png)
+*Ra lệnh cho XBot tự động chuyển tiền trong một nốt nhạc, hỗ trợ chuyển linh hoạt giữa 1 ví tới nhiều ví hoặc từ nhiều ví tới 1 ví.*
+
+3. **Kiểm Tra Tài Sản Đa Ví**
+![Asset Tracking](docs/assets/demo3.png)
+*Kiểm tra tài sản của từng ví một, hoặc kiểm tra nhiều ví cùng lúc chỉ bằng việc ra lệnh chat tự nhiên.*
+
+4. **Trò Chơi Giải Trí Tương Tác**
+![Mini Games](docs/assets/demo4.png)
+*Trò chơi giải trí nếu cần thư giãn, bạn có thể chơi trực tiếp với XBot hoặc thách đấu với bạn bè trong nhóm.*
+
+5. **Bảng Điều Khiển Trực Quan (`/help`)**
+![Control Panel](docs/assets/demo5.png)
+*Sử dụng lệnh `/help` để hiển thị ra toàn bộ menu sử dụng bằng các nút bấm cho dễ thao tác. Tối ưu XBot một cách tiện lợi như thêm API, xuất Private Key của ví đã ra lệnh cho AI tạo, và các chức năng thủ công khác.*
+
+6. **Tạo Ví Trong Chớp Mắt**
+![Wallet Creation](docs/assets/demo6.png)
+*Tạo ví Web3 an toàn trong một giọt nước rơi chỉ bằng một câu lệnh đơn giản.*
 
 ### 🎮 Danh Sách Lệnh
 #### 🤖 Trò Chuyện AI (Tự Nhiên)
@@ -434,11 +497,11 @@ Bạn chỉ cần nhắn tin bình thường! Bot có khả năng tư duy ngữ 
 * `/contract <địa chỉ>` - Kiểm tra mọi thông tin của Token qua địa chỉ Contract
 * `/toptoken` - Xem bảng xếp hạng Token đang hot với giao diện cực đẹp
 
-#### 🛡️ Quản Lý Nhóm & Tương Tác Cộng Đồng
-* `/price`, `/pricev`, `/pricex` - **Lệnh báo giá token theo thời gian đặt sẵn, tùy chỉnh theo từng ngôn ngữ của nhóm để gia tăng tối đa sự gắn kết và tương tác cộng đồng.**
-* `/checkin` - Hệ thống điểm danh hàng ngày kèm câu đố nhận điểm
-* `/ban`, `/mute`, `/warn` - Bộ công cụ quản trị nhóm chống spam mạnh mẽ
-* `/welcome` - Cài đặt lời chào mừng thành viên mới
+#### 👑 Lệnh Dành Cho Chủ Nhóm & Quản Trị Viên
+* `/admin` - Mở bảng tổng quản lý và cấu hình cộng đồng toàn diện.
+* `/checkinadmin` - Cài đặt điểm danh hằng ngày cho thành viên bằng câu hỏi ngẫu nhiên và tự động tạo báo cáo tổng kết theo ngày.
+* `/welcomeadmin` - Thiết lập xác minh thành viên mới bằng câu hỏi ngẫu nhiên để chặn đứng việc bot Telegram spam vào nhóm.
+* `/price` - Bật chức năng gửi báo giá token trên mọi chain theo thời gian cài đặt vào nhóm, hoặc phân bổ vào từng topic theo ngôn ngữ riêng biệt.
 
 #### 🎲 Trò Chơi Giải Trí
 * `/sudoku`, `/mines`, `/memory`, `/rps`, `/dice` - Chơi game giải trí tương tác cao ngay trong Telegram.
@@ -611,9 +674,30 @@ Nếu cỗ máy AI này đã giúp bạn bắt gọn các siêu phầm X100, hay
 | 🛡️ **허니팟 완벽 차단** | 스왑 전 토큰 컨트랙트를 동적으로 스캔하여 허니팟, 100% 세금 스캠, 극단적 슬리피지를 사전 차단합니다. |
 | 🏦 **DeFi & OnchainOS** | 즉각적인 크로스 체인 DEX 스왑, 실시간 시장 데이터 제공 및 다중 지갑 자산 관리를 완벽 지원합니다. |
 
-### 🖼️ 자연어 트레이딩 시연
-![XBot 자연어 거래 시연](docs/assets/demo1.png)
-*예시: AI가 자연어 명령을 스스로 이해하고, OKB를 BANMAO로 스왑하기 위한 견적, 수수료, 슬리피지 및 온체인 성공 해시를 완벽하게 보여줍니다.*
+### 🖼️ 핵심 기능 쇼케이스
+1. **즉각적인 토큰 스왑**
+![Swap Tokens](docs/assets/demo1.png)
+*XBot에게 명령하여 하나 또는 여러 지갑에서 동시에 토큰을 스왑하고, OKX Web3 트랜잭션 해시 링크가 포함된 보고서를 생성하세요.*
+
+2. **초고속 자동 이체**
+![Auto Transfer](docs/assets/demo2.png)
+*순식간에 자금을 자동 이체하도록 XBot에게 명령하세요. 1대다 또는 다대1 지갑 이체를 완벽하게 지원합니다.*
+
+3. **다중 지갑 자산 조회**
+![Asset Tracking](docs/assets/demo3.png)
+*명령어 한 번으로 개별 지갑 또는 여러 지갑의 자산을 동시에 확인하세요.*
+
+4. **인터랙티브 미니 게임**
+![Mini Games](docs/assets/demo4.png)
+*휴식이 필요할 때 즐기는 엔터테인먼트 게임입니다. XBot과 게임을 하거나 그룹 내 친구들에게 도전할 수 있습니다.*
+
+5. **직관적인 제어판 (`/help`)**
+![Control Panel](docs/assets/demo5.png)
+*`/help` 명령을 사용하여 버튼식 전체 메뉴를 표시하세요. API 추가, AI가 생성한 지갑의 프라이빗 키 내보내기, 기타 수동 기능 등 XBot을 쉽게 최적화할 수 있습니다.*
+
+6. **초고속 지갑 생성**
+![Wallet Creation](docs/assets/demo6.png)
+*간단한 명령어로 눈 깜짝할 사이에 새로운 Web3 지갑을 생성하세요.*
 
 ### 🎮 명령어 안내
 #### 🤖 AI 채팅 (자연어 처리)
@@ -628,11 +712,11 @@ Nếu cỗ máy AI này đã giúp bạn bắt gọn các siêu phầm X100, hay
 * `/contract <주소>` - 스마트 컨트랙트 주소로 토큰 정보 검색
 * `/toptoken` - 화려한 UI로 인기 토큰 목록 확인
 
-#### 🛡️ 관리 및 커뮤니티 (그룹 관리자용)
-* `/price`, `/pricev`, `/pricex` - **커뮤니티 참여 및 결속을 극대화하기 위해 각 그룹의 언어에 맞춰 예약된 토큰 가격 자동 알림을 전송합니다.**
-* `/checkin` - 포인트 보상이 있는 일일 출석 및 퀴즈 시스템
-* `/ban`, `/mute`, `/warn` - 강력한 커뮤니티 관리 도구
-* `/welcome` - 맞춤형 환영 메시지 설정
+#### 👑 그룹 소유자 및 관리자 명령어
+* `/admin` - 종합적인 커뮤니티 구성 및 관리 패널을 엽니다.
+* `/checkinadmin` - 랜덤 질문을 활용한 멤버들의 일일 출석을 구성하고, 설정에 따른 일일 요약 보고서를 자동 생성합니다.
+* `/welcomeadmin` - 텔레그램 봇의 그룹 스팸을 방지하기 위해 랜덤 질문으로 신규 멤버 확인 시스템을 설정합니다.
+* `/price` - 설정된 일정에 따라 모든 체인의 토큰 가격 알림을 그룹 또는 특정 주제(다국어 지원)에 직접 전송합니다.
 
 #### 🎲 미니 게임
 * `/sudoku`, `/mines`, `/memory`, `/rps`, `/dice` - 텔레그램 내에서 다양한 게임 즐기기
@@ -805,9 +889,30 @@ XBot은 극도로 모듈화된 아키텍처로 설계되었습니다. 새로운 
 | 🛡️ **Защита от Honeypot** | Динамически сканирует токены перед обменом для блокировки мошеннических схем (rug-pulls) и 100% скрытых налогов. |
 | 🏦 **DeFi и OnchainOS** | Мгновенные кроссчейн DEX-обмены, рыночные данные в реальном времени и комплексное управление несколькими кошельками. |
 
-### 🖼️ Демонстрация ИИ-Трейдинга
-![XBot Русский скриншот](docs/assets/demo1.png)
-*Пример: ИИ самостоятельно понимает естественный запрос пользователя на обмен OKB в BANMAO, рассчитывая комиссии, проскальзывания и безопасность сделки перед подтверждением.*
+### 🖼️ Демонстрация Возможностей
+1. **Мгновенный Обмен Токенов**
+![Swap Tokens](docs/assets/demo1.png)
+*Прикажите XBot обменять токены с одного или нескольких кошельков одновременно, создав подробный отчет со ссылкой на транзакцию OKX Web3.*
+
+2. **Молниеносные Авто-Переводы**
+![Auto Transfer](docs/assets/demo2.png)
+*Прикажите XBot автоматически переводить средства в одно мгновение. Идеально поддерживает массовые переводы "один-ко-многим" или "многие-к-одному".*
+
+3. **Мульти-кошельковый Трекинг Активов**
+![Asset Tracking](docs/assets/demo3.png)
+*Проверяйте активы отдельных кошельков или нескольких кошельков одновременно с помощью простых языковых команд.*
+
+4. **Интерактивные Мини-Игры**
+![Mini Games](docs/assets/demo4.png)
+*Нужен перерыв? Наслаждайтесь интерактивными развлекательными играми для отдыха. Вы можете играть напрямую с XBot или бросить вызов друзьям в группе.*
+
+5. **Визуальная Панель Управления (`/help`)**
+![Control Panel](docs/assets/demo5.png)
+*Используйте команду `/help` для отображения подробного меню с интерактивными кнопками. Легко настраивайте бота: добавляйте API-ключи, экспортируйте приватные ключи созданных ИИ кошельков и используйте другие ручные функции.*
+
+6. **Мгновенное Создание Кошелька**
+![Wallet Creation](docs/assets/demo6.png)
+*Создайте новый и безопасный Web3-кошелек в одно касание с помощью простой команды.*
 
 ### 🎮 Справочник по Командам
 #### 🤖 Чат с ИИ (Естественный Язык)
@@ -822,11 +927,11 @@ XBot은 극도로 모듈화된 아키텍처로 설계되었습니다. 새로운 
 * `/contract <адрес>` - Проверка информации о токене по контракту
 * `/toptoken` - Просмотр трендовых токенов в красивом интерфейсе
 
-#### 🛡️ Модерация и Комьюнити (Для Администраторов)
-* `/price`, `/pricev`, `/pricex` - **Запланированные оповещения о ценах на токены, адаптированные под язык каждой группы, для максимального вовлечения сообщества.**
-* `/checkin` - Ежедневные чекины с викторинами для заработка очков
-* `/ban`, `/mute`, `/warn` - Инструменты модерации
-* `/welcome` - Настройка приветственного сообщения
+#### 👑 Команды Владельца Группы и Администратора
+* `/admin` - Открыть комплексную панель конфигурации и управления сообществом.
+* `/checkinadmin` - Настройте ежедневную посещаемость участников с помощью случайных вопросов и автоматически генерируйте ежедневные отчеты в зависимости от настроек.
+* `/welcomeadmin` - Настройте верификацию новых участников с помощью случайных вопросов, чтобы предотвратить рассылку спама Telegram-ботами.
+* `/price` - Отправляйте алерты о ценах на токены в любой сети по расписанию прямо в группу или определенные топики с локализацией на их язык.
 
 #### 🎲 Игры
 * `/sudoku`, `/mines`, `/memory`, `/rps`, `/dice` - Мини-игры прямо в Telegram.
@@ -999,9 +1104,30 @@ pm2 start index.js --name xbot
 | 🛡️ **Proteksi Honeypot** | Memindai token secara dinamis sebelum proses Swap untuk memblokir penipuan (Rug-pulls) dan pajak tersembunyi 100%. |
 | 🏦 **DeFi & OnchainOS** | Swap DEX instan lintas jaringan, data pasar real-time, dan manajemen aset multi-dompet yang komprehensif. |
 
-### 🖼️ Demonstrasi Trading Bahasa Alami
-![XBot Preview Bahasa](docs/assets/demo1.png)
-*Contoh: AI secara pintar memahami perintah bahasa alami untuk mengecek harga OKB ke BANMAO, lengkap dengan estimasi Biaya Gas, Slippage, serta konfirmasi aman Honeypot.*
+### 🖼️ Demonstrasi & Kemampuan
+1. **Swap Token Instan**
+![Swap Tokens](docs/assets/demo1.png)
+*Perintahkan XBot untuk menukar token dari satu atau beberapa dompet secara bersamaan, lengkap dengan laporan detail dan tautan txhash OKX Web3.*
+
+2. **Transfer Super Cepat**
+![Auto Transfer](docs/assets/demo2.png)
+*Perintahkan XBot untuk mentransfer dana secara otomatis dalam sekejap. Sangat mendukung transfer massal dari satu ke banyak atau banyak ke satu dompet.*
+
+3. **Pelacakan Aset Multi-Dompet**
+![Asset Tracking](docs/assets/demo3.png)
+*Cek aset pada satu akun individu atau periksa beberapa dompet sekaligus hanya dengan mengetik perintah alami yang sederhana.*
+
+4. **Mini-Games Interaktif**
+![Mini Games](docs/assets/demo4.png)
+*Butuh istirahat? Nikmati game hiburan interaktif untuk relaksasi. Anda bisa bermain langsung dengan XBot atau menantang teman di dalam grup.*
+
+5. **Panel Kontrol Visual (`/help`)**
+![Control Panel](docs/assets/demo5.png)
+*Gunakan perintah `/help` untuk menampilkan menu lengkap dengan tombol interaktif. Optimalkan XBot dengan mudah seperti menambah API, mengekspor Private Key dompet buatan AI, dan mengakses fungsi manual lainnya.*
+
+6. **Pembuatan Dompet Instan**
+![Wallet Creation](docs/assets/demo6.png)
+*Buat dompet Web3 baru yang aman dalam hitungan detik hanya menggunakan perintah sederhana.*
 
 ### 🎮 Referensi Perintah
 #### 🤖 Obrolan AI (Bahasa Alami)
@@ -1016,11 +1142,11 @@ Cukup mengobrol secara alami! AI dapat memahami konteks dan **menggunakan 40+ al
 * `/contract <alamat>` - Cek info lengkap token dari alamat smart contract
 * `/toptoken` - Lihat daftar token yang sedang tren dengan UI menarik
 
-#### 🛡️ Moderasi Grup & Komunitas
-* `/price`, `/pricev`, `/pricex` - **Peringatan harga token terjadwal yang disesuaikan dengan bahasa setiap grup untuk memaksimalkan interaksi dan retensi komunitas.**
-* `/checkin` - Sistem absen harian & kuis berhadiah poin
-* `/ban`, `/mute`, `/warn` - Alat moderasi komunitas yang lengkap
-* `/welcome` - Atur pesan selamat datang kustom
+#### 👑 Perintah Pemilik Grup & Admin
+* `/admin` - Buka panel konfigurasi dan manajemen komunitas yang komprehensif.
+* `/checkinadmin` - Konfigurasikan absensi harian anggota menggunakan pertanyaan acak, dan buat laporan ringkasan harian otomatis berdasarkan pengaturan Anda.
+* `/welcomeadmin` - Siapkan verifikasi untuk anggota baru dengan pertanyaan acak guna mencegah bot Telegram melakukan spam ke dalam grup.
+* `/price` - Kirim peringatan harga token pada jaringan apa pun sesuai jadwal langsung ke dalam grup atau topik tertentu, dilokalkan dengan bahasa mereka masing-masing.
 
 #### 🎲 Mini Games Telegram
 * `/sudoku`, `/mines`, `/memory`, `/rps`, `/dice` - Mainkan game-game seru di dalam Telegram.
