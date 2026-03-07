@@ -15,7 +15,7 @@
 <details open>
 <summary><h2>🇬🇧 English</h2></summary>
 
-> 🤖 **Live Public Instance**: A hosted version of XBot, maintained by our core development team, is currently running on a dedicated Virtual Private Server (VPS) and is available for public interaction at [@XlayerAi_bot](https://t.me/XlayerAi_bot). While you are welcome to experience its capabilities firsthand through this public instance, XBot is fundamentally designed as a flexible, open-source framework. We highly encourage developers, project founders, and community leaders to deploy, configure, and customize their own sovereign instances on personal VPS environments tailored to their bespoke use cases. By doing so, you can unlock its full potential and join us in collectively expanding and enriching the broader X Layer ecosystem.
+> 🤖 **Live Public Instance**: A hosted version of XBot, maintained by our core development team, is currently running on a dedicated Virtual Private Server (VPS) and is available for public interaction as a Telegram bot at [@XlayerAi_bot](https://t.me/XlayerAi_bot). **To enable XBot's AI thinking capabilities, you must add a Google API key by using the `/api` command in the bot -> select "Google API" -> "Add API" (get your free key at https://aistudio.google.com/api-keys). Currently, only the Google Gemini model is fully supported; broader support will be developed in the future.** While you are welcome to experience its capabilities firsthand through this public instance, XBot is fundamentally designed as a flexible, open-source framework. We highly encourage developers, project founders, and community leaders to deploy, configure, and customize their own sovereign instances on personal VPS environments tailored to their bespoke use cases. By doing so, you can unlock its full potential and join us in collectively expanding and enriching the broader X Layer ecosystem.
 
 ### 🌟 Features at a Glance
 
@@ -231,7 +231,7 @@ If this bot has helped you launch your project or trade faster on X Layer, pleas
 <details>
 <summary><h2>🇨🇳 简体中文</h2></summary>
 
-> 🤖 **官方公共体验版**: 目前，由核心开发团队维护的机器人公开版本正运行在专用的虚拟专用服务器 (VPS) 上，欢迎前往 [@XlayerAi_bot](https://t.me/XlayerAi_bot) 互动并体验其强大的功能。尽管这个公共实例向所有人开放，但 XBot 在本质上是一个高度模块化的开源框架。我们强烈鼓励广大开发者、项目创始人和社区管理员在个人的 VPS 环境中部署、配置并深度定制属于自己的专属机器人，以满足各种个性化的业务场景。我们期待您的加入，共同释放开源的力量，携手推动并繁荣整个 X Layer 生态系统。
+> 🤖 **官方公共体验版**: 目前，由核心开发团队维护的 Telegram 机器人公开版本正运行在专用的虚拟专用服务器 (VPS) 上，欢迎前往 [@XlayerAi_bot](https://t.me/XlayerAi_bot) 互动并体验其强大的功能。**要使 XBot 具备 AI 思考能力，您必须通过在机器人中使用 `/api` 命令来添加 Google API 密钥 -> 选择 "Google API" -> "Add API" (在 https://aistudio.google.com/api-keys 获取密钥)。目前仅全面支持 Google Gemini 模型，后续将进一步开发。**尽管这个公共实例向所有人开放，但 XBot 在本质上是一个高度模块化的开源框架。我们强烈鼓励广大开发者、项目创始人和社区管理员在个人的 VPS 环境中部署、配置并深度定制属于自己的专属机器人，以满足各种个性化的业务场景。我们期待您的加入，共同释放开源的力量，携手推动并繁荣整个 X Layer 生态系统。
 
 ### 🌟 核心亮点概览
 
@@ -446,7 +446,7 @@ XBot 的核心代码基于高内聚低耦合的架构打造。无论您是想添
 <details>
 <summary><h2>🇻🇳 Tiếng Việt</h2></summary>
 
-> 🤖 **Phiên Bản Trải Nghiệm Thực Tế**: Hiện tại, một phiên bản trực tiếp của bot đang được đội ngũ phát triển nòng cốt duy trì và vận hành liên tục 24/7 trên một máy chủ ảo (VPS) chuyên dụng. Quý vị có thể trực tiếp trải nghiệm sức mạnh của trí tuệ nhân tạo và các tính năng giao dịch tại địa chỉ [@XlayerAi_bot](https://t.me/XlayerAi_bot). Mặc dù phiên bản công khai này luôn sẵn sàng để phục vụ cộng đồng, chúng tôi muốn nhấn mạnh rằng XBot về bản chất là một nền tảng mã nguồn mở mang tính tùy biến cực cao. Chúng tôi đặc biệt khuyến khích các nhà phát triển, các nhà sáng lập dự án và quản trị viên cộng đồng tự tay cài đặt, thiết lập và cá nhân hóa bot trên hệ thống VPS của riêng mình nhằm phục vụ cho những mục đích và định hướng chiến lược riêng biệt. Hãy cùng chung tay xây dựng, phát triển và mở rộng hệ sinh thái X Layer ngày một vững mạnh và phồn vinh hơn.
+> 🤖 **Phiên Bản Trải Nghiệm Thực Tế**: Hiện tại, một phiên bản trực tiếp của Telegram bot đang được đội ngũ phát triển nòng cốt duy trì và vận hành liên tục 24/7 trên một máy chủ ảo (VPS) chuyên dụng. Quý vị có thể trực tiếp trải nghiệm sức mạnh của bot tại địa chỉ [@XlayerAi_bot](https://t.me/XlayerAi_bot). **Lưu ý: Nếu muốn XBot có khả năng tư duy (AI), bạn phải thêm Google API bằng cách dùng lệnh `/api` trong bot -> chọn "Google API" -> "Add API" (lấy key tại https://aistudio.google.com/api-keys). Hiện tại hệ thống chỉ mới hỗ trợ mô hình Google Gemini toàn diện, các mô hình khác sẽ được phát triển về sau.** Mặc dù phiên bản công khai này luôn sẵn sàng để phục vụ cộng đồng, chúng tôi muốn nhấn mạnh rằng XBot về bản chất là một nền tảng mã nguồn mở mang tính tùy biến cực cao. Chúng tôi đặc biệt khuyến khích các nhà phát triển, các nhà sáng lập dự án và quản trị viên cộng đồng tự tay cài đặt, thiết lập và cá nhân hóa bot trên hệ thống VPS của riêng mình nhằm phục vụ cho những mục đích và định hướng chiến lược riêng biệt. Hãy cùng chung tay xây dựng, phát triển và mở rộng hệ sinh thái X Layer ngày một vững mạnh và phồn vinh hơn.
 
 ### 🌟 Tính Năng Nổi Bật
 
@@ -661,7 +661,7 @@ Nếu cỗ máy AI này đã giúp bạn bắt gọn các siêu phầm X100, hay
 <details>
 <summary><h2>🇰🇷 한국어</h2></summary>
 
-> 🤖 **공식 라이브 봇 체험**: 현재 핵심 개발 팀이 직접 운영하고 유지 관리하는 봇의 라이브 버전이 전용 가상 사설 서버(VPS)에서 24시간 가동 중이며, [@XlayerAi_bot](https://t.me/XlayerAi_bot)에서 누구든지 직접 경험해 보실 수 있습니다. 이 공개 인스턴스를 통해 AI 엔진의 강력한 성능을 확인하실 수 있지만, XBot은 본질적으로 누구나 자유롭게 수정할 수 있는 오픈소스 프레임워크로 설계되었습니다. 저희는 개발자, 프로젝트 파운더 및 커뮤니티 리더들이 각자의 고유한 목적에 맞게 봇을 커스터마이징하고 독립적인 VPS 환경에 직접 배포하여 운영하는 것을 적극 권장합니다. 이를 통해 봇의 잠재력을 최대한 끌어내고, 더 나아가 X Layer 생태계의 지속적인 확장과 발전에 함께 기여해 주시기를 바랍니다.
+> 🤖 **공식 라이브 봇 체험**: 현재 핵심 개발 팀이 직접 운영하고 유지 관리하는 텔레그램 봇의 라이브 버전이 전용 가상 사설 서버(VPS)에서 24시간 가동 중이며, [@XlayerAi_bot](https://t.me/XlayerAi_bot)에서 누구든지 직접 경험해 보실 수 있습니다. **XBot의 AI 사고 기능을 활성화하려면 봇에서 `/api` 명령을 사용하여 Google API 키를 추가해야 합니다 -> "Google API" 선택 -> "Add API" 클릭 (https://aistudio.google.com/api-keys 에서 키 발급). 현재는 Google Gemini 모델만 전면 지원되며, 향후 추가 개발될 예정입니다.** 이 공개 인스턴스를 통해 AI 엔진의 강력한 성능을 확인하실 수 있지만, XBot은 본질적으로 누구나 자유롭게 수정할 수 있는 오픈소스 프레임워크로 설계되었습니다. 저희는 개발자, 프로젝트 파운더 및 커뮤니티 리더들이 각자의 고유한 목적에 맞게 봇을 커스터마이징하고 독립적인 VPS 환경에 직접 배포하여 운영하는 것을 적극 권장합니다. 이를 통해 봇의 잠재력을 최대한 끌어내고, 더 나아가 X Layer 생태계의 지속적인 확장과 발전에 함께 기여해 주시기를 바랍니다.
 
 ### 🌟 한눈에 보는 주요 기능
 
@@ -876,7 +876,7 @@ XBot은 극도로 모듈화된 아키텍처로 설계되었습니다. 새로운 
 <details>
 <summary><h2>🇷🇺 Русский</h2></summary>
 
-> 🤖 **Публичный тестовый инстанс**: В настоящее время активная версия бота, поддерживаемая нашей командой разработчиков, бесперебойно работает на выделенном виртуальном частном сервере (VPS) и доступна для публичного взаимодействия по адресу [@XlayerAi_bot](https://t.me/XlayerAi_bot). Хотя вы можете свободно тестировать его возможности через эту публичную версию, мы хотим подчеркнуть, что XBot изначально задумывался как гибкий фреймворк с открытым исходным кодом. Мы настоятельно призываем разработчиков, основателей проектов и администраторов сообществ разворачивать, настраивать и глубоко модифицировать собственных независимых ботов на личных VPS для решения уникальных задач. Присоединяйтесь к нам, чтобы раскрыть весь потенциал этой системы и совместными усилиями способствовать динамичному развитию и расширению экосистемы X Layer.
+> 🤖 **Публичный тестовый инстанс**: В настоящее время активная версия Telegram-бота, поддерживаемая нашей командой разработчиков, бесперебойно работает на выделенном виртуальном частном сервере (VPS) и доступна для публичного взаимодействия по адресу [@XlayerAi_bot](https://t.me/XlayerAi_bot). **Чтобы включить ИИ-мышление XBot, вы должны добавить ключ Google API. Для этого используйте команду `/api` в боте -> выберите "Google API" -> "Add API" (получите ключ на https://aistudio.google.com/api-keys). В настоящее время полностью поддерживается только модель Google Gemini, дальнейшая поддержка будет разработана в будущем.** Хотя вы можете свободно тестировать его возможности через эту публичную версию, мы хотим подчеркнуть, что XBot изначально задумывался как гибкий фреймворк с открытым исходным кодом. Мы настоятельно призываем разработчиков, основателей проектов и администраторов сообществ разворачивать, настраивать и глубоко модифицировать собственных независимых ботов на личных VPS для решения уникальных задач. Присоединяйтесь к нам, чтобы раскрыть весь потенциал этой системы и совместными усилиями способствовать динамичному развитию и расширению экосистемы X Layer.
 
 ### 🌟 Краткий Обзор Функций
 
@@ -1091,7 +1091,7 @@ pm2 start index.js --name xbot
 <details>
 <summary><h2>🇮🇩 Bahasa Indonesia</h2></summary>
 
-> 🤖 **Instans Publik Langsung**: Versi langsung dari bot ini, yang dikelola secara penuh oleh tim pengembang inti kami, saat ini berjalan tanpa henti di Virtual Private Server (VPS) khusus dan dapat diakses oleh publik untuk berinteraksi di [@XlayerAi_bot](https://t.me/XlayerAi_bot). Meskipun Anda dipersilakan untuk menjelajahi dan merasakan langsung kemampuannya melalui instans ini, XBot pada dasarnya dirancang sebagai kerangka kerja sumber terbuka (open-source) yang sangat dapat disesuaikan. Kami sangat mendorong para pengembang, pendiri proyek, dan pemimpin komunitas untuk menginstal, mengonfigurasi, dan menyesuaikan instans otonom mereka sendiri di jaringan VPS pribadi agar sesuai dengan tujuan operasional masing-masing. Dengan melakukan hal tersebut, Anda tidak hanya membuka seluruh potensi teknologi ini, tetapi juga turut serta berkontribusi secara nyata dalam membangun dan memperluas ekosistem X Layer secara kolektif.
+> 🤖 **Instans Publik Langsung**: Versi langsung dari bot Telegram ini, yang dikelola secara penuh oleh tim pengembang inti kami, saat ini berjalan tanpa henti di Virtual Private Server (VPS) khusus dan dapat diakses oleh publik untuk berinteraksi di [@XlayerAi_bot](https://t.me/XlayerAi_bot). **Untuk mengaktifkan kemampuan berpikir AI XBot, Anda harus menambahkan kunci Google API dengan menggunakan perintah `/api` di dalam bot -> pilih "Google API" -> "Add API" (dapatkan kunci Anda di https://aistudio.google.com/api-keys). Saat ini, hanya model Google Gemini yang didukung sepenuhnya; dukungan lebih luas akan dikembangkan di masa depan.** Meskipun Anda dipersilakan untuk menjelajahi dan merasakan langsung kemampuannya melalui instans ini, XBot pada dasarnya dirancang sebagai kerangka kerja sumber terbuka (open-source) yang sangat dapat disesuaikan. Kami sangat mendorong para pengembang, pendiri proyek, dan pemimpin komunitas untuk menginstal, mengonfigurasi, dan menyesuaikan instans otonom mereka sendiri di jaringan VPS pribadi agar sesuai dengan tujuan operasional masing-masing. Dengan melakukan hal tersebut, Anda tidak hanya membuka seluruh potensi teknologi ini, tetapi juga turut serta berkontribusi secara nyata dalam membangun dan memperluas ekosistem X Layer secara kolektif.
 
 ### 🌟 Sekilas Fitur Unggulan
 
@@ -1302,3 +1302,5 @@ Apabila sistem bot open-source gratis ini mempermudah laju cuan trading Anda di 
 ---
 
 *Built with ❤️ for the OKX X Layer community*
+
+[Developed by ＤＯＲＥＭＯＮ](https://x.com/haivcon)

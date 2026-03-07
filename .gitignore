@@ -4,4 +4,7 @@ node_modules/
 banmao.db
 *.db
 xlayer_navigator.db
+code.txt
+bfg.jar
+bot.db
 # Database - KHÔNG upload, giữ nguyên trên VPS
