@@ -7418,7 +7418,7 @@ function createAiHandlers(deps) {
 
           // If the function was a scheduler function, an execution transaction, or explicit format like get_token_holders, treat it as an action so it replies directly
           const bypassedFunctions = [
-            'transfer_tokens', 'batch_transfer', 'get_swap_quote', 'execute_swap', 'get_trading_wallet_balance',
+            'transfer_tokens', 'batch_transfer', 'batch_swap', 'simulate_batch_swap', 'get_swap_quote', 'execute_swap', 'get_trading_wallet_balance',
             'get_token_holders', 'get_top_tokens', 'search_token', 'get_token_market_detail', 'get_market_candles',
             'get_token_security', 'get_trade_history', 'get_signal_list', 'calculate_profit_roi'
           ];

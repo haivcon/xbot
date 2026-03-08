@@ -679,6 +679,44 @@ module.exports = {
             const results = [];
             // Enhancement #2: Shared nonce manager across all wallets in this batch
             const nonceManager = createNonceManager(provider);
+
+            // Progress notification helper for large batches
+            let bot = null;
+            const chatId = context?.chatId || context?.msg?.chat?.id;
+
+            // Resolve language early for progress messages
+            let lang = context?.lang || 'en';
+            try {
+                const { getLang } = require('../../../app/language');
+                if (context?.msg) lang = await getLang(context.msg);
+            } catch (e) { /* fallback */ }
+            const progressTexts = {
+                en: 'Processing batch swap',
+                vi: 'Đang xử lý swap hàng loạt',
+                zh: '正在处理批量兑换',
+                ko: '일괄 스왑 처리 중',
+                ru: 'Обработка пакетного обмена',
+                id: 'Memproses swap massal'
+            };
+            const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+            // Pre-resolve token symbols and decimals for the report
+            let fromSym = '?', toSym = '?', fromDec = 18, toDec = 18;
+            try {
+                const basicInfo = await onchainos.getTokenBasicInfo([
+                    { chainIndex, tokenContractAddress: fromTokenAddress },
+                    { chainIndex, tokenContractAddress: toTokenAddress }
+                ]);
+                if (basicInfo && basicInfo.length > 0) {
+                    const info1 = basicInfo.find(t => t.tokenContractAddress?.toLowerCase() === fromTokenAddress.toLowerCase());
+                    const info2 = basicInfo.find(t => t.tokenContractAddress?.toLowerCase() === toTokenAddress.toLowerCase());
+                    if (info1) { fromSym = info1.tokenSymbol || '?'; fromDec = Number(info1.decimal || 18); }
+                    if (info2) { toSym = info2.tokenSymbol || '?'; toDec = Number(info2.decimal || 18); }
+                }
+            } catch (e) { console.warn('[BATCH-SWAP] Token info pre-resolve failed:', e.message); }
+
+            if (resolvedSwaps.length > 5 && chatId) {
+                try { bot = require('../../../core/bot'); } catch (e) { /* no bot available */ }
+            }
             for (let i = 0; i < resolvedSwaps.length; i++) {
                 const swap = resolvedSwaps[i];
                 if (swap.error) { results.push({ id: swap.walletId, address: swap.tw?.address || 'N/A', status: '❌', reason: swap.error }); continue; }
@@ -730,26 +768,183 @@ module.exports = {
                     );
                     const br = Array.isArray(broadcastResult) ? broadcastResult[0] : broadcastResult;
                     const txHash = br?.txHash || br?.orderId || 'pending';
-                    results.push({ id: swap.walletId, address: tw.address, status: '✅', txHash });
+
+                    // Extract swap amounts from routerResult for detailed report
+                    const router = txRaw.routerResult || {};
+                    const rFromSym = router.fromTokenSymbol || fromSym;
+                    const rToSym = router.toTokenSymbol || toSym;
+                    const rFromDec = Number(router.fromToken?.decimal || fromDec);
+                    const rToDec = Number(router.toToken?.decimal || toDec);
+                    const swapFromAmt = Number(router.fromTokenAmount || swap.amount) / Math.pow(10, rFromDec);
+                    const swapToAmt = Number(router.toTokenAmount || 0) / Math.pow(10, rToDec);
+
+                    results.push({
+                        id: swap.walletId, address: tw.address, status: '✅', txHash,
+                        fromAmt: swapFromAmt, toAmt: swapToAmt,
+                        fromSym: rFromSym, toSym: rToSym,
+                        slippage: dynamicSlippage
+                    });
                 } catch (err) {
-                    results.push({ id: swap.walletId, address: tw.address, status: '❌', reason: err.msg || err.message });
+                    results.push({ id: swap.walletId, address: tw.address, status: '❌', reason: (err.msg || err.message || '').slice(0, 80) });
+                }
+                // Send progress update for large batches
+                if (bot && chatId && resolvedSwaps.length > 5 && (i + 1) % 5 === 0 && (i + 1) < resolvedSwaps.length) {
+                    try {
+                        await bot.sendMessage(chatId, `⏳ ${progressTexts[lk]}... ${i + 1}/${resolvedSwaps.length}`, { disable_notification: true }).catch(() => { });
+                    } catch (e) { /* ignore */ }
                 }
             }
 
             // Build summary
             const successCount = results.filter(r => r.status === '✅').length;
-            const lines = results.map((r, i) => {
+            // Localized labels
+            let headerLabel = 'BATCH SWAP RESULTS';
+            let successStr = 'success';
+            let walletLabel = 'Wallet';
+            let reasonLabel = 'Reason:';
+            let linkLabel = 'View Tx';
+            let failLabel = 'Failed';
+            let swappedLabel = 'Swapped:';
+            let slippageLabel = 'Slippage:';
+            let pairLabel = 'Pair:';
+            let networkLabel = 'Network:';
+            let timeLabel = 'Time:';
+
+            if (lang === 'vi') {
+                headerLabel = 'KẾT QUẢ BATCH SWAP';
+                successStr = 'thành công';
+                walletLabel = 'Ví';
+                reasonLabel = 'Lý do:';
+                linkLabel = 'Xem TX';
+                failLabel = 'Thất bại';
+                swappedLabel = 'Đã đổi:';
+                slippageLabel = 'Trượt giá:';
+                pairLabel = 'Cặp:';
+                networkLabel = 'Mạng:';
+                timeLabel = 'Thời gian:';
+            } else if (lang === 'zh' || lang === 'zh-Hans' || lang === 'zh-cn') {
+                headerLabel = '批量兑换结果';
+                successStr = '成功';
+                walletLabel = '钱包';
+                reasonLabel = '原因:';
+                linkLabel = '查看交易';
+                failLabel = '失败';
+                swappedLabel = '已兑换:';
+                slippageLabel = '滑点:';
+                pairLabel = '交易对:';
+                networkLabel = '网络:';
+                timeLabel = '时间:';
+            } else if (lang === 'ko') {
+                headerLabel = '일괄 스왑 결과';
+                successStr = '성공';
+                walletLabel = '지갑';
+                reasonLabel = '사유:';
+                linkLabel = 'Tx 확인';
+                failLabel = '실패';
+                swappedLabel = '교환:';
+                slippageLabel = '슬리페지:';
+                pairLabel = '페어:';
+                networkLabel = '네트워크:';
+                timeLabel = '시간:';
+            } else if (lang === 'ru') {
+                headerLabel = 'РЕЗУЛЬТАТЫ BATCH SWAP';
+                successStr = 'успешно';
+                walletLabel = 'Кошелёк';
+                reasonLabel = 'Причина:';
+                linkLabel = 'Посмотреть Tx';
+                failLabel = 'Ошибка';
+                swappedLabel = 'Обмен:';
+                slippageLabel = 'Слиппейдж:';
+                pairLabel = 'Пара:';
+                networkLabel = 'Сеть:';
+                timeLabel = 'Время:';
+            } else if (lang === 'id') {
+                headerLabel = 'HASIL BATCH SWAP';
+                successStr = 'berhasil';
+                walletLabel = 'Dompet';
+                reasonLabel = 'Alasan:';
+                linkLabel = 'Lihat Tx';
+                failLabel = 'Gagal';
+                swappedLabel = 'Ditukar:';
+                slippageLabel = 'Slippage:';
+                pairLabel = 'Pasangan:';
+                networkLabel = 'Jaringan:';
+                timeLabel = 'Waktu:';
+            }
+
+            const explorerBase = _getExplorerUrl(chainIndex);
+            const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana' };
+            const chainName = chainNames[chainIndex] || `Chain #${chainIndex}`;
+            const now = new Date();
+            const timeString = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            }).format(now);
+
+            const header = `🔄 <b>${headerLabel}</b>\n` +
+                `━━━━━━━━━━━━━━━━━━\n` +
+                `📊 <b>${successCount}/${resolvedSwaps.length}</b> ${successStr}\n` +
+                `💱 ${pairLabel} <b>${fromSym} ➡ ${toSym}</b>\n` +
+                `🌐 ${networkLabel} ${chainName} (#${chainIndex})\n` +
+                `⏰ ${timeLabel} ${timeString} (GMT+7)\n` +
+                `━━━━━━━━━━━━━━━━━━`;
+
+            // Build per-wallet result blocks
+            const walletBlocks = [];
+            results.forEach((r, i) => {
                 const addrShort = r.address !== 'N/A' ? `${r.address.slice(0, 8)}...${r.address.slice(-4)}` : 'N/A';
                 if (r.status === '✅') {
-                    const explorerBase = _getExplorerUrl(chainIndex);
-                    const link = `${explorerBase}/tx/${r.txHash}`;
-                    return `${i + 1}. ✅ Ví ${r.id} (${addrShort})\n> [Tx](${link})`;
+                    const fromStr = r.fromAmt?.toLocaleString('en-US', { maximumFractionDigits: 6 }) || '?';
+                    const toStr = r.toAmt?.toLocaleString('en-US', { maximumFractionDigits: 6 }) || '?';
+                    walletBlocks.push(
+                        `✅ <b>${walletLabel} ${r.id}</b> (<code>${addrShort}</code>)\n` +
+                        `   💱 ${swappedLabel} <code>${fromStr}</code> ${r.fromSym} ➡ <code>${toStr}</code> ${r.toSym}\n` +
+                        `   ⚙️ ${slippageLabel} ${r.slippage}%\n` +
+                        `   🔗 <a href="${explorerBase}/tx/${r.txHash}">${linkLabel}</a>`
+                    );
+                } else {
+                    walletBlocks.push(
+                        `❌ <b>${walletLabel} ${r.id}</b> (<code>${addrShort}</code>): ${failLabel}\n` +
+                        `   ${reasonLabel} ${r.reason}`
+                    );
                 }
-                return `${i + 1}. ❌ Ví ${r.id} (${addrShort})\n> Lý do: ${r.reason}`;
             });
 
             console.log(`[BATCH-SWAP] ✅ Done: ${successCount}/${resolvedSwaps.length} successful`);
-            return `> IMPORTANT INSTRUCTION: Translate these headers into the user's language but keep the exact layout.\n\n🔄 Batch Swap Results:\n> ${successCount}/${resolvedSwaps.length} wallets succeeded\n\n${lines.join('\n\n')}`;
+
+            // Telegram message limit: split if report is too long
+            const TG_LIMIT = 4000;
+            const fullReport = header + '\n\n' + walletBlocks.join('\n\n');
+            if (fullReport.length <= TG_LIMIT) {
+                return { success: true, action: true, displayMessage: fullReport.trim() };
+            }
+
+            // Split: send header + groups of wallet blocks as separate messages
+            let bot2 = null;
+            const chatId2 = context?.chatId || context?.msg?.chat?.id;
+            try { bot2 = require('../../../core/bot'); } catch (e) { /* no bot */ }
+
+            if (bot2 && chatId2) {
+                try { await bot2.sendMessage(chatId2, header, { parse_mode: 'HTML', disable_notification: true }).catch(() => { }); } catch (e) { /* ignore */ }
+
+                let chunk = '';
+                for (let i = 0; i < walletBlocks.length; i++) {
+                    const block = walletBlocks[i];
+                    if (chunk.length + block.length + 2 > TG_LIMIT) {
+                        try { await bot2.sendMessage(chatId2, chunk.trim(), { parse_mode: 'HTML', disable_notification: true }).catch(() => { }); } catch (e) { /* ignore */ }
+                        chunk = '';
+                    }
+                    chunk += block + '\n\n';
+                }
+                if (chunk.trim()) {
+                    try { await bot2.sendMessage(chatId2, chunk.trim(), { parse_mode: 'HTML', disable_notification: true }).catch(() => { }); } catch (e) { /* ignore */ }
+                }
+                return { success: true, action: true, displayMessage: `🔄 ${headerLabel}: ${successCount}/${resolvedSwaps.length} ${successStr} ✅` };
+            }
+
+            // Fallback: return truncated report
+            return { success: true, action: true, displayMessage: (header + '\n\n' + walletBlocks.slice(0, 10).join('\n\n')).trim() };
         } catch (error) {
             return `❌ Batch swap error: ${error.msg || error.message}`;
         }

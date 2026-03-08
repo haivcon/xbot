@@ -178,9 +178,10 @@ function createCheckinChallenges({
 
     function buildGoalKeyboard(lang, token) {
         const rows = [];
-        for (const preset of CHECKIN_GOAL_PRESETS) {
-            const text = t(lang, preset);
-            rows.push([{ text, callback_data: `checkin_goal_choose|${token}|${encodeURIComponent(text)}` }]);
+        for (let i = 0; i < CHECKIN_GOAL_PRESETS.length; i++) {
+            const text = t(lang, CHECKIN_GOAL_PRESETS[i]);
+            // Use short index instead of encoded text to stay within Telegram's 64-byte callback_data limit
+            rows.push([{ text, callback_data: `checkin_goal_choose|${token}|${i}` }]);
         }
         rows.push([
             { text: t(lang, 'checkin_goal_button_custom'), callback_data: `checkin_goal_custom|${token}` },

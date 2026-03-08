@@ -497,7 +497,11 @@ module.exports = {
             const provider = new ethers.JsonRpcProvider(rpcUrl);
             const privateKey = global._decryptTradingKey(tw.encryptedKey);
             const wallet = new ethers.Wallet(privateKey, provider);
-            const toAddr = args.toAddress.toLowerCase();
+            const rawToAddr = (args.toAddress || '').trim();
+            if (!rawToAddr || !ethers.isAddress(rawToAddr)) {
+                return { displayMessage: `❌ Địa chỉ đích không hợp lệ: <code>${rawToAddr ? rawToAddr.slice(0, 20) + '...' : '(trống)'}</code>`, action: true, success: false };
+            }
+            const toAddr = rawToAddr.toLowerCase();
             let tokenAddr = args.tokenAddress ? args.tokenAddress.toLowerCase() : 'native';
 
             if (tokenAddr && !tokenAddr.startsWith('0x') && tokenAddr.length < 20 && tokenAddr !== 'native') {
@@ -681,13 +685,66 @@ module.exports = {
 
         let totalGasEth = 0;
 
+        // Resolve language early for progress messages
+        let lang = context?.lang || 'en';
+        try {
+            const { getLang } = require('../../../app/language');
+            if (context?.msg) lang = await getLang(context.msg);
+        } catch (e) { /* fallback */ }
+
+        const progressTexts = {
+            en: 'Processing batch transfer',
+            vi: 'Đang xử lý chuyển tiền hàng loạt',
+            zh: '正在处理批量转账',
+            ko: '일괄 전송 처리 중',
+            ru: 'Обработка массовой отправки',
+            id: 'Memproses transfer massal'
+        };
+        const invalidAddrTexts = {
+            en: 'Invalid address',
+            vi: 'Địa chỉ không hợp lệ',
+            zh: '无效地址',
+            ko: '잘못된 주소',
+            ru: 'Неверный адрес',
+            id: 'Alamat tidak valid'
+        };
+        const emptyText = { en: '(empty)', vi: '(trống)', zh: '(空)', ko: '(비어있음)', ru: '(пусто)', id: '(kosong)' };
+        const walletNotFoundTexts = { en: 'Wallet does not exist', vi: 'Ví không tồn tại', zh: '钱包不存在', ko: '지갑이 존재하지 않습니다', ru: 'Кошелёк не найден', id: 'Dompet tidak ada' };
+        const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+
+        // Pre-validate all destination addresses
         for (const t of transfers) {
+            const addr = (t.toAddress || '').trim();
+            if (!addr || !ethers.isAddress(addr)) {
+                results.push({
+                    wallet: `#${t.fromWalletId}`,
+                    to: addr ? (addr.slice(0, 10) + '...') : emptyText[lk],
+                    status: `❌ ${invalidAddrTexts[lk]}: ${addr ? addr.slice(0, 16) + '...' : emptyText[lk]}`,
+                    amount: t.amount
+                });
+            }
+        }
+        // Filter out invalid transfers
+        const validTransfers = transfers.filter(t => {
+            const addr = (t.toAddress || '').trim();
+            return addr && ethers.isAddress(addr);
+        });
+
+        // Progress notification helper for large batches
+        let bot = null;
+        const chatId = context?.chatId || context?.msg?.chat?.id;
+        if (validTransfers.length > 10 && chatId) {
+            try { bot = require('../../../core/bot'); } catch (e) { /* no bot available */ }
+        }
+
+        let processedCount = 0;
+        for (const t of validTransfers) {
             try {
                 const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [parseInt(t.fromWalletId), userId]);
-                if (!tw) { results.push({ wallet: t.fromWalletId, status: '❌ Ví không tồn tại' }); continue; }
+                if (!tw) { results.push({ wallet: t.fromWalletId, status: `❌ ${walletNotFoundTexts[lk]}` }); continue; }
                 const privateKey = global._decryptTradingKey(tw.encryptedKey);
                 const wallet = new ethers.Wallet(privateKey, provider);
-                const destAddr = t.toAddress.toLowerCase();
+                const destAddr = t.toAddress.trim().toLowerCase();
                 let txHash, balBeforeSrc = '0', balAfterSrc = '0', gasFeeEth = '0';
 
                 if (isNative) {
@@ -743,20 +800,27 @@ module.exports = {
                     balAfter: Number(balAfterSrc).toFixed(2)
                 });
             } catch (e) {
-                console.error(`[BATCH_TRANSFER] Error wallet ${t.fromWalletId}:`, e.message);
-                results.push({ wallet: `#${t.fromWalletId}`, status: `❌ ${e.message?.slice(0, 40)}` });
+                console.error(`[BATCH_TRANSFER] Error wallet ${t.fromWalletId} → ${t.toAddress}:`, e.message);
+                const destShort = t.toAddress ? (t.toAddress.slice(0, 10) + '...') : '?';
+                results.push({
+                    wallet: `#${t.fromWalletId}`,
+                    to: destShort,
+                    amount: t.amount,
+                    status: `❌ ${e.message?.slice(0, 60)}`
+                });
+            }
+            // Send progress update for large batches
+            processedCount += 1;
+            if (bot && chatId && validTransfers.length > 10 && processedCount % 10 === 0 && processedCount < validTransfers.length) {
+                try {
+                    await bot.sendMessage(chatId, `⏳ ${progressTexts[lk]}... ${processedCount}/${validTransfers.length}`, { disable_notification: true }).catch(() => { });
+                } catch (e) { /* ignore progress send errors */ }
             }
         }
 
         const successCount = results.filter(r => r.status === '✅').length;
 
-        let lang = context?.lang || 'en';
-        try {
-            const { getLang } = require('../../../app/language');
-            if (context?.msg) lang = await getLang(context.msg);
-        } catch (e) { /* fallback to context.lang */ }
-
-        let headerLabel = 'BATCH TRANSFER RESULTS:';
+        let headerLabel = 'BATCH TRANSFER RESULTS';
         let successStr = 'success';
         let gasLabel = 'Total Gas Fee:';
         let walletLabel = 'Wallet';
@@ -764,42 +828,152 @@ module.exports = {
         let balanceLabel = 'Balance:';
         let linkLabel = 'Details';
         let failLabel = 'Failed';
+        let tokenLabel = 'Token:';
+        let networkLabel = 'Network:';
+        let timeLabel = 'Time:';
+        let toLabel = 'To:';
 
         if (lang === 'vi') {
-            headerLabel = 'KẾT QUẢ BATCH TRANSFER:';
+            headerLabel = 'KẾT QUẢ CHUYỂN TIỀN HÀNG LOẠT';
             successStr = 'thành công';
             gasLabel = 'Tổng phí Gas:';
             walletLabel = 'Ví';
             amountLabel = 'Chuyển:';
             balanceLabel = 'Số dư:';
-            linkLabel = 'Chi tiết TX';
+            linkLabel = 'Xem TX';
             failLabel = 'Thất bại';
+            tokenLabel = 'Token:';
+            networkLabel = 'Mạng:';
+            timeLabel = 'Thời gian:';
+            toLabel = 'Đến:';
         } else if (lang === 'zh' || lang === 'zh-Hans' || lang === 'zh-cn') {
-            headerLabel = '批量转账结果:';
+            headerLabel = '批量转账结果';
             successStr = '成功';
             gasLabel = '总 Gas 费用:';
             walletLabel = '钱包';
             amountLabel = '转账:';
             balanceLabel = '余额:';
-            linkLabel = '交易详情';
+            linkLabel = '查看交易';
             failLabel = '失败';
+            tokenLabel = '代币:';
+            networkLabel = '网络:';
+            timeLabel = '时间:';
+            toLabel = '至:';
+        } else if (lang === 'ko') {
+            headerLabel = '일괄 전송 결과';
+            successStr = '성공';
+            gasLabel = '총 가스 비용:';
+            walletLabel = '지갑';
+            amountLabel = '전송:';
+            balanceLabel = '잔액:';
+            linkLabel = 'Tx 확인';
+            failLabel = '실패';
+            tokenLabel = '토큰:';
+            networkLabel = '네트워크:';
+            timeLabel = '시간:';
+            toLabel = '수신:';
+        } else if (lang === 'ru') {
+            headerLabel = 'РЕЗУЛЬТАТЫ МАССОВОЙ ОТПРАВКИ';
+            successStr = 'успешно';
+            gasLabel = 'Общая комиссия:';
+            walletLabel = 'Кошелёк';
+            amountLabel = 'Отправлено:';
+            balanceLabel = 'Баланс:';
+            linkLabel = 'Посмотреть Tx';
+            failLabel = 'Ошибка';
+            tokenLabel = 'Токен:';
+            networkLabel = 'Сеть:';
+            timeLabel = 'Время:';
+            toLabel = 'Кому:';
+        } else if (lang === 'id') {
+            headerLabel = 'HASIL TRANSFER MASSAL';
+            successStr = 'berhasil';
+            gasLabel = 'Total Biaya Gas:';
+            walletLabel = 'Dompet';
+            amountLabel = 'Terkirim:';
+            balanceLabel = 'Saldo:';
+            linkLabel = 'Lihat Tx';
+            failLabel = 'Gagal';
+            tokenLabel = 'Token:';
+            networkLabel = 'Jaringan:';
+            timeLabel = 'Waktu:';
+            toLabel = 'Ke:';
         }
 
-        let report = `📦 <b>${headerLabel}</b> ${successCount}/${results.length} ${successStr}\n` +
-            `⛽ <b>${gasLabel}</b> ${totalGasEth.toFixed(6)} native\n━━━━━━━━━━━━━━━━━━\n\n`;
+        const explorerBase = _getExplorerUrl(chainIndex);
+        const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana' };
+        const chainName = chainNames[chainIndex] || `Chain #${chainIndex}`;
+        const now = new Date();
+        const timeString = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        }).format(now);
 
+        const header = `📦 <b>${headerLabel}</b>\n` +
+            `━━━━━━━━━━━━━━━━━━\n` +
+            `📊 <b>${successCount}/${results.length}</b> ${successStr}\n` +
+            `🪙 ${tokenLabel} <b>${symbol}</b>\n` +
+            `🌐 ${networkLabel} ${chainName} (#${chainIndex})\n` +
+            `⛽ <b>${gasLabel}</b> ${totalGasEth.toFixed(6)} native\n` +
+            `⏰ ${timeLabel} ${timeString} (GMT+7)\n` +
+            `━━━━━━━━━━━━━━━━━━`;
+
+        // Build per-wallet result blocks
+        const walletBlocks = [];
         results.forEach(r => {
             if (r.status === '✅') {
-                report += `✅ <b>${walletLabel} ${r.wallet} →</b> <code>${r.to}</code>\n` +
+                walletBlocks.push(
+                    `✅ <b>${walletLabel} ${r.wallet}</b>\n` +
+                    `   ${toLabel} <code>${r.to}</code>\n` +
                     `   ${amountLabel} <b>${r.amount} ${symbol}</b>\n` +
                     `   ${balanceLabel} ${r.balBefore} → ${r.balAfter}\n` +
-                    `   🔗 <a href="${_getExplorerUrl(chainIndex)}/tx/${r.txHash}">${linkLabel}</a>\n\n`;
+                    `   🔗 <a href="${explorerBase}/tx/${r.txHash}">${linkLabel}</a>`
+                );
             } else {
-                report += `❌ ${walletLabel} ${r.wallet}: ${failLabel} (${r.status})\n\n`;
+                const failDest = r.to ? ` → <code>${r.to}</code>` : '';
+                const failAmount = r.amount ? ` (${r.amount} ${symbol})` : '';
+                walletBlocks.push(
+                    `❌ <b>${walletLabel} ${r.wallet}</b>${failDest}${failAmount}: ${failLabel}\n` +
+                    `   ${r.status}`
+                );
             }
         });
 
-        return { success: true, action: true, displayMessage: report.trim() };
+        // Telegram message limit: split if report is too long
+        const TG_LIMIT = 4000;
+        const fullReport = header + '\n\n' + walletBlocks.join('\n\n');
+        if (fullReport.length <= TG_LIMIT) {
+            return { success: true, action: true, displayMessage: fullReport.trim() };
+        }
+
+        // Split: send header + groups of wallet blocks as separate messages
+        let bot2 = null;
+        const chatId2 = context?.chatId || context?.msg?.chat?.id;
+        try { bot2 = require('../../../core/bot'); } catch (e) { /* no bot */ }
+
+        if (bot2 && chatId2) {
+            // Send header first
+            try { await bot2.sendMessage(chatId2, header, { parse_mode: 'HTML', disable_notification: true }).catch(() => { }); } catch (e) { /* ignore */ }
+
+            // Send wallet blocks in chunks
+            let chunk = '';
+            for (let i = 0; i < walletBlocks.length; i++) {
+                const block = walletBlocks[i];
+                if (chunk.length + block.length + 2 > TG_LIMIT) {
+                    try { await bot2.sendMessage(chatId2, chunk.trim(), { parse_mode: 'HTML', disable_notification: true }).catch(() => { }); } catch (e) { /* ignore */ }
+                    chunk = '';
+                }
+                chunk += block + '\n\n';
+            }
+            if (chunk.trim()) {
+                try { await bot2.sendMessage(chatId2, chunk.trim(), { parse_mode: 'HTML', disable_notification: true }).catch(() => { }); } catch (e) { /* ignore */ }
+            }
+            return { success: true, action: true, displayMessage: `📦 ${headerLabel}: ${successCount}/${results.length} ${successStr} ✅` };
+        }
+
+        // Fallback: return truncated report
+        return { success: true, action: true, displayMessage: (header + '\n\n' + walletBlocks.slice(0, 10).join('\n\n')).trim() };
     },
 
     async get_wallet_pnl(args, context) {

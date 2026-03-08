@@ -290,6 +290,11 @@ async function runGoogleAudioCompletion({ msg, lang, promptText, audioSource, ke
     if (personalKeys.length) {
         responsePools.push({ type: 'user', keys: personalKeys, disabledSet: userDisabledSet });
     } else if (!serverLimitState.blocked && serverKeys.length) {
+        // Check daily quota for server key usage
+        const dailyUsed = userId ? getServerKeyUsage(userId) : 0;
+        if (AI_SERVER_KEY_DAILY_LIMIT > 0 && dailyUsed >= AI_SERVER_KEY_DAILY_LIMIT) {
+            throw new Error(`⚠️ Bạn đã dùng hết ${AI_SERVER_KEY_DAILY_LIMIT} lượt AI miễn phí hôm nay.\n\n💡 Thêm API key riêng của bạn để dùng không giới hạn:\n/ai apikey <your_gemini_api_key>\n\n🔄 Hạn mức sẽ reset vào 00:00 UTC.`);
+        }
         responsePools.push({ type: 'server', keys: serverKeys, disabledSet: disabledGeminiKeyIndices });
     }
 
@@ -389,6 +394,10 @@ async function runGoogleAudioCompletion({ msg, lang, promptText, audioSource, ke
                     setUserGeminiKeyIndex(userId, clientInfo.index);
                 } else {
                     geminiKeyIndex = clientInfo.index;
+                    // Track server key usage for daily quota
+                    if (userId) {
+                        incrementServerKeyUsage(userId);
+                    }
                 }
                 activeSource = pool.type;
             } catch (error) {
@@ -474,6 +483,11 @@ async function runGoogleImageRequest({ msg, lang, promptText, action, photos, ke
     if (personalKeys.length) {
         responsePools.push({ type: 'user', keys: personalKeys, disabledSet: userDisabledSet });
     } else if (!serverLimitState.blocked && serverKeys.length) {
+        // Check daily quota for server key usage
+        const dailyUsed = userId ? getServerKeyUsage(userId) : 0;
+        if (AI_SERVER_KEY_DAILY_LIMIT > 0 && dailyUsed >= AI_SERVER_KEY_DAILY_LIMIT) {
+            throw new Error(`⚠️ Bạn đã dùng hết ${AI_SERVER_KEY_DAILY_LIMIT} lượt AI miễn phí hôm nay.\n\n💡 Thêm API key riêng của bạn để dùng không giới hạn:\n/ai apikey <your_gemini_api_key>\n\n🔄 Hạn mức sẽ reset vào 00:00 UTC.`);
+        }
         responsePools.push({ type: 'server', keys: serverKeys, disabledSet: disabledGeminiKeyIndices });
     }
 
@@ -553,6 +567,10 @@ async function runGoogleImageRequest({ msg, lang, promptText, action, photos, ke
                     setUserGeminiKeyIndex(userId, clientInfo.index);
                 } else {
                     geminiKeyIndex = clientInfo.index;
+                    // Track server key usage for daily quota
+                    if (userId) {
+                        incrementServerKeyUsage(userId);
+                    }
                 }
                 activeSource = pool.type;
                 break;
@@ -638,6 +656,11 @@ async function runGroqCompletion({ msg, lang, promptText, parts, keySource, limi
     if (personalKeys.length) {
         responsePools.push({ type: 'user', keys: personalKeys, disabledSet: userDisabledSet });
     } else if (!serverLimitState.blocked && serverKeys.length) {
+        // Check daily quota for server key usage
+        const dailyUsed = userId ? getServerKeyUsage(userId) : 0;
+        if (AI_SERVER_KEY_DAILY_LIMIT > 0 && dailyUsed >= AI_SERVER_KEY_DAILY_LIMIT) {
+            throw new Error(`⚠️ Bạn đã dùng hết ${AI_SERVER_KEY_DAILY_LIMIT} lượt AI miễn phí hôm nay.\n\n💡 Thêm API key riêng của bạn để dùng không giới hạn:\n/ai apikey <your_gemini_api_key>\n\n🔄 Hạn mức sẽ reset vào 00:00 UTC.`);
+        }
         responsePools.push({ type: 'server', keys: serverKeys, disabledSet: disabledGroqKeyIndices });
     }
 
@@ -699,6 +722,10 @@ async function runGroqCompletion({ msg, lang, promptText, parts, keySource, limi
                     setUserGroqKeyIndex(userId, clientInfo.index);
                 } else {
                     groqKeyIndex = clientInfo.index;
+                    // Track server key usage for daily quota
+                    if (userId) {
+                        incrementServerKeyUsage(userId);
+                    }
                 }
                 activeSource = pool.type;
                 break;
@@ -766,6 +793,11 @@ async function runOpenAiAudioCompletion({ msg, lang, promptText, audioSource, ke
     if (personalKeys.length) {
         responsePools.push({ type: 'user', keys: personalKeys, disabledSet: userDisabledSet });
     } else if (!serverLimitState.blocked && serverKeys.length) {
+        // Check daily quota for server key usage
+        const dailyUsed = userId ? getServerKeyUsage(userId) : 0;
+        if (AI_SERVER_KEY_DAILY_LIMIT > 0 && dailyUsed >= AI_SERVER_KEY_DAILY_LIMIT) {
+            throw new Error(`⚠️ Bạn đã dùng hết ${AI_SERVER_KEY_DAILY_LIMIT} lượt AI miễn phí hôm nay.\n\n💡 Thêm API key riêng của bạn để dùng không giới hạn:\n/ai apikey <your_gemini_api_key>\n\n🔄 Hạn mức sẽ reset vào 00:00 UTC.`);
+        }
         responsePools.push({ type: 'server', keys: serverKeys, disabledSet: disabledOpenAiKeyIndices });
     }
 
@@ -819,6 +851,10 @@ async function runOpenAiAudioCompletion({ msg, lang, promptText, audioSource, ke
                     setUserOpenAiKeyIndex(userId, clientInfo.index);
                 } else {
                     openAiKeyIndex = clientInfo.index;
+                    // Track server key usage for daily quota
+                    if (userId) {
+                        incrementServerKeyUsage(userId);
+                    }
                 }
                 activeSource = pool.type;
             } catch (error) {
@@ -912,6 +948,11 @@ async function runOpenAiCompletion({ msg, lang, promptText, parts, keySource, li
     if (personalKeys.length) {
         responsePools.push({ type: 'user', keys: personalKeys, disabledSet: userDisabledSet });
     } else if (!serverLimitState.blocked && serverKeys.length) {
+        // Check daily quota for server key usage
+        const dailyUsed = userId ? getServerKeyUsage(userId) : 0;
+        if (AI_SERVER_KEY_DAILY_LIMIT > 0 && dailyUsed >= AI_SERVER_KEY_DAILY_LIMIT) {
+            throw new Error(`⚠️ Bạn đã dùng hết ${AI_SERVER_KEY_DAILY_LIMIT} lượt AI miễn phí hôm nay.\n\n💡 Thêm API key riêng của bạn để dùng không giới hạn:\n/ai apikey <your_gemini_api_key>\n\n🔄 Hạn mức sẽ reset vào 00:00 UTC.`);
+        }
         responsePools.push({ type: 'server', keys: serverKeys, disabledSet: disabledOpenAiKeyIndices });
     }
 
@@ -971,6 +1012,10 @@ async function runOpenAiCompletion({ msg, lang, promptText, parts, keySource, li
                     setUserOpenAiKeyIndex(userId, clientInfo.index);
                 } else {
                     openAiKeyIndex = clientInfo.index;
+                    // Track server key usage for daily quota
+                    if (userId) {
+                        incrementServerKeyUsage(userId);
+                    }
                 }
                 activeSource = pool.type;
                 break;
@@ -1049,6 +1094,11 @@ async function runOpenAiImageRequest({ msg, lang, promptText, action, photos, ke
     if (personalKeys.length) {
         responsePools.push({ type: 'user', keys: personalKeys, disabledSet: userDisabledSet });
     } else if (!serverLimitState.blocked && serverKeys.length) {
+        // Check daily quota for server key usage
+        const dailyUsed = userId ? getServerKeyUsage(userId) : 0;
+        if (AI_SERVER_KEY_DAILY_LIMIT > 0 && dailyUsed >= AI_SERVER_KEY_DAILY_LIMIT) {
+            throw new Error(`⚠️ Bạn đã dùng hết ${AI_SERVER_KEY_DAILY_LIMIT} lượt AI miễn phí hôm nay.\n\n💡 Thêm API key riêng của bạn để dùng không giới hạn:\n/ai apikey <your_gemini_api_key>\n\n🔄 Hạn mức sẽ reset vào 00:00 UTC.`);
+        }
         responsePools.push({ type: 'server', keys: serverKeys, disabledSet: disabledOpenAiKeyIndices });
     }
 
@@ -1149,6 +1199,10 @@ async function runOpenAiImageRequest({ msg, lang, promptText, action, photos, ke
                     setUserOpenAiKeyIndex(userId, clientInfo.index);
                 } else {
                     openAiKeyIndex = clientInfo.index;
+                    // Track server key usage for daily quota
+                    if (userId) {
+                        incrementServerKeyUsage(userId);
+                    }
                 }
                 activeSource = pool.type;
                 break;

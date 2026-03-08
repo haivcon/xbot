@@ -1260,7 +1260,10 @@
         }
 
         if (action === 'choose') {
-            const decoded = decodeURIComponent(value || '');
+            // value is a numeric index into CHECKIN_GOAL_PRESETS
+            const presetIndex = Number(value);
+            const presetKey = CHECKIN_GOAL_PRESETS[presetIndex];
+            const decoded = presetKey ? t(lang, presetKey) : decodeURIComponent(value || '');
             try {
                 await db.updateCheckinFeedback(prompt.chatId, prompt.userId, prompt.date, { goal: decoded });
                 bot.answerCallbackQuery(query.id, { text: t(lang, 'checkin_alert_goal_saved') });
