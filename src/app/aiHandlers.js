@@ -27,6 +27,72 @@ const {
 } = require('./aiHandlers/sharedState');
 // Import customPersonaPrompts from state.js (shared with userInputState for skip detection)
 const { customPersonaPrompts } = require('../core/state');
+
+/**
+ * Sanitize HTML to ensure all tags are properly matched for Telegram's strict parser.
+ * Telegram only allows: b, i, u, s, code, pre, a, tg-spoiler, tg-emoji
+ * This prevents "Unmatched end tag" errors (400 Bad Request).
+ */
+function sanitizeTelegramHtml(html) {
+  if (!html) return html;
+
+  const ALLOWED_TAGS = new Set(['b', 'i', 'u', 's', 'code', 'pre', 'a', 'tg-spoiler', 'tg-emoji']);
+  const tagRegex = /<\/?([a-z][a-z0-9-]*)\b[^>]*\/?>/gi;
+  const stack = [];
+  let result = '';
+  let lastIndex = 0;
+
+  let match;
+  const pieces = [];
+  const tags = [];
+  while ((match = tagRegex.exec(html)) !== null) {
+    pieces.push(html.substring(lastIndex, match.index));
+    tags.push({ full: match[0], name: match[1].toLowerCase(), index: pieces.length });
+    pieces.push(null);
+    lastIndex = tagRegex.lastIndex;
+  }
+  pieces.push(html.substring(lastIndex));
+
+  for (const tag of tags) {
+    const isClose = tag.full.startsWith('</');
+    const isSelfClose = tag.full.endsWith('/>');
+
+    if (!ALLOWED_TAGS.has(tag.name)) {
+      pieces[tag.index] = '';
+      continue;
+    }
+
+    if (isSelfClose) {
+      pieces[tag.index] = '';
+      continue;
+    }
+
+    if (isClose) {
+      const openIdx = stack.lastIndexOf(tag.name);
+      if (openIdx === -1) {
+        pieces[tag.index] = '';
+      } else {
+        const unclosed = stack.splice(openIdx);
+        const overlapping = unclosed.slice(1);
+        let prefix = overlapping.map(t => `</${t}>`).reverse().join('');
+        let suffix = overlapping.map(t => `<${t}>`).join('');
+        pieces[tag.index] = prefix + tag.full + suffix;
+        stack.push(...overlapping);
+      }
+    } else {
+      stack.push(tag.name);
+      pieces[tag.index] = tag.full;
+    }
+  }
+
+  result = pieces.join('');
+  while (stack.length > 0) {
+    const unclosed = stack.pop();
+    result += `</${unclosed}>`;
+  }
+
+  return result;
+}
 const {
   safeJsonParse,
   startsWithEmoji,
@@ -2847,8 +2913,10 @@ function createAiHandlers(deps) {
             .replace(/&lt;s&gt;/g, '<s>').replace(/&lt;\/s&gt;/g, '</s>')
             .replace(/&lt;code&gt;/g, '<code>').replace(/&lt;\/code&gt;/g, '</code>')
             .replace(/&lt;pre&gt;/g, '<pre>').replace(/&lt;\/pre&gt;/g, '</pre>');
+          // Sanitize: fix mismatched/overlapping tags to prevent Telegram 400 errors
+          const sanitizedHtmlChunk = sanitizeTelegramHtml(htmlChunk);
           const htmlOptions = { ...options, parse_mode: 'HTML' };
-          await sendMessageRespectingThread(msg.chat.id, msg, htmlChunk, htmlOptions);
+          await sendMessageRespectingThread(msg.chat.id, msg, sanitizedHtmlChunk, htmlOptions);
         } catch (htmlError) {
           console.warn('[AI] HTML send failed, falling back to plain text:', htmlError.message);
           // Last resort: plain text with minimal processing
@@ -7442,6 +7510,9 @@ function createAiHandlers(deps) {
                 finalMessage = finalMessage.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>'); // Links
                 finalMessage = finalMessage.replace(/`([^`]+)`/g, '<code>$1</code>'); // Inline code
 
+                // Sanitize: fix mismatched/overlapping tags to prevent Telegram 400 errors
+                finalMessage = sanitizeTelegramHtml(finalMessage);
+
                 parseMode = 'HTML';
               } else if (functionCall.name.startsWith('schedule_') || functionCall.name === 'set_reminder' || functionCall.name.includes('cancel_') || functionCall.name === 'list_scheduled_tasks') {
                 parseMode = 'Markdown';
@@ -7537,9 +7608,7 @@ function createAiHandlers(deps) {
         let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         // 2. Convert Markdown Links: [Text](url)
-        // Ensure the URL is also somewhat clean. 
         html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
-          // If URL looks too mangled, we just un-escape it, or strip < > if Gemini put <https...>
           const cleanUrl = url.replace(/&lt;|&gt;/g, '').trim();
           return `<a href="${cleanUrl}">${text}</a>`;
         });
@@ -7557,8 +7626,10 @@ function createAiHandlers(deps) {
 
         // 6. Convert Markdown Italic: *italic* or _italic_
         html = html.replace(/(?<!\*)\*(?!\*)([^]+?)(?<!\*)\*(?!\*)/g, '<i>$1</i>');
-        // Simple italics detection
         html = html.replace(/(?<!_)_([^_]+)_(?!_)/g, '<i>$1</i>');
+
+        // 7. Sanitize: fix mismatched/overlapping tags to prevent Telegram 400 errors
+        html = sanitizeTelegramHtml(html);
 
         return html;
       };
