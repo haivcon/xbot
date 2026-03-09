@@ -23,16 +23,36 @@ const toolHandlers = {
 // ═══════════════════════════════════════════════════════
 
 async function executeToolCall(functionCall, context) {
-    const handler = toolHandlers[functionCall.name];
+    let handler = toolHandlers[functionCall.name];
+    let resolvedName = functionCall.name;
+
+    // Gemini sometimes strips underscores from function names (e.g. get_signal_list → getsignallist)
+    // Try fuzzy match if exact name not found
+    if (!handler) {
+        const normalizedName = functionCall.name.replace(/_/g, '').toLowerCase();
+        const matchedKey = Object.keys(toolHandlers).find(
+            key => key.replace(/_/g, '').toLowerCase() === normalizedName
+        );
+        if (matchedKey) {
+            handler = toolHandlers[matchedKey];
+            resolvedName = matchedKey;
+        }
+    }
+
     if (!handler) {
         // Return undefined so the master aiHandlers.js can pass this down to the skillRegistry
         return undefined;
     }
     try {
-        return await handler(functionCall.args || {}, context);
+        const result = await handler(functionCall.args || {}, context);
+        // Attach the resolved name so the caller can use it for bypass checks
+        if (result && typeof result === 'object') {
+            result._resolvedName = resolvedName;
+        }
+        return result;
     } catch (error) {
-        log.child('AIOnchain').error(`Tool execution error for ${functionCall.name}:`, error);
-        return `Error executing ${functionCall.name}: ${error.message || 'Unknown error'}`;
+        log.child('AIOnchain').error(`Tool execution error for ${resolvedName}:`, error);
+        return `Error executing ${resolvedName}: ${error.message || 'Unknown error'}`;
     }
 }
 
@@ -99,6 +119,9 @@ IMPORTANT RULES:
 13. When showing technical analysis, include trend direction, RSI interpretation, and actionable suggestion
 14. CRITICAL SWAP RULE: "amount" in get_swap_quote/execute_swap ALWAYS means "Quantity of fromTokenAddress to SELL". If a user says "buy 1000 BANMAO using OKB", do NOT pass 1000. You MUST ask the user "Bạn muốn dùng bao nhiêu OKB để mua tính theo số dư?" OR you can estimate the OKB cost using get_token_price first, then set the amount to that estimated OKB cost.
 15. 🚨 ADDRESS HANDLING: For ALL tool calls (get_market_candles, get_token_market_detail, get_token_holders, get_swap_quote, etc.) — pass the token SYMBOL as tokenContractAddress (e.g. "BANMAO" not "0x..."). The system auto-resolves the correct on-chain address. NEVER pass an address from memory.
+
+🚨 LIVE DATA MANDATE — CRITICAL:
+You MUST ALWAYS call the appropriate function to fetch live data when the user asks about ANY real-time information, including but not limited to: token prices, market data, Smart Money/Whale/KOL signals, wallet balances, gas prices, trade history, holder distribution, or any on-chain analytics. NEVER answer these queries from your training data or memory — that data is stale and WILL be wrong. Your knowledge cutoff makes any market data you "remember" unreliable. The ONLY correct response is to call the function and return live results.
 ${ONCHAIN_COMMON_RULES}`;
 
 /**

@@ -269,7 +269,7 @@ function createCheckinRuntime(deps) {
 
             return formatter.format(date);
         } catch (error) {
-            log.warn(`Không thể format ngày cho timezone ${timezone}: ${error.message}`);
+            log.warn(`Failed to format date for timezone ${timezone}: ${error.message}`);
             const year = date.getUTCFullYear();
             const month = String(date.getUTCMonth() + 1).padStart(2, '0');
             const day = String(date.getUTCDate()).padStart(2, '0');
@@ -288,7 +288,7 @@ function createCheckinRuntime(deps) {
 
             return formatter.format(date);
         } catch (error) {
-            log.warn(`Không thể format giờ cho timezone ${timezone}: ${error.message}`);
+            log.warn(`Failed to format time for timezone ${timezone}: ${error.message}`);
             const hours = String(date.getUTCHours()).padStart(2, '0');
             const minutes = String(date.getUTCMinutes()).padStart(2, '0');
             return `${hours}:${minutes}`;
@@ -678,7 +678,7 @@ function createCheckinRuntime(deps) {
                 promptTemplate: typeof settings.promptTemplate === 'string' ? settings.promptTemplate : ''
             };
         } catch (error) {
-            log.warn(`Không thể đọc cấu hình nhóm ${chatKey}: ${error.message}`);
+            log.warn(`Failed to read group config for ${chatKey}: ${error.message}`);
             return {
                 chatId: chatKey,
                 checkinTime: CHECKIN_DEFAULT_TIME,
@@ -1081,7 +1081,7 @@ function createCheckinRuntime(deps) {
                 walletAddress = normalizeAddressSafe(topWallet?.address || topWallet) || topWallet?.address || topWallet;
             }
         } catch (error) {
-            log.warn(`Không thể lấy ví cho ${userId}: ${error.message}`);
+            log.warn(`Failed to get wallet for ${userId}: ${error.message}`);
         }
 
         const points = Number(settings.dailyPoints || 0) || 0;

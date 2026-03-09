@@ -11,10 +11,10 @@ const ethers = require('ethers');
 // Database connection
 const db = new sqlite3.Database('banmao.db', (err) => {
     if (err) {
-        console.error("LỖI KHỞI TẠO DB:", err.message);
+        console.error("[DB] Init error:", err.message);
         process.exit(1);
     }
-    console.log("Cơ sở dữ liệu SQLite đã kết nối.");
+    console.log("[DB] SQLite connected.");
 });
 
 // --- Promisified Database Helpers ---
@@ -151,7 +151,7 @@ function getTodayDateString(timezone = 'UTC') {
         });
         return formatter.format(new Date());
     } catch (error) {
-        console.warn(`[Checkin] Không thể format ngày với timezone ${timezone}: ${error.message}`);
+        console.warn(`[Checkin] Failed to format date with timezone ${timezone}: ${error.message}`);
     }
     const now = new Date();
     return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;

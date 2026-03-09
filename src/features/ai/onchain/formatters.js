@@ -341,31 +341,112 @@ function formatSignalChainsResult(data, lang = 'en') {
     return `${headerL[lang] || headerL.en}:\n\n${lines.join('\n')}`;
 }
 
-function formatSignalListResult(data, lang = 'en') {
+function formatSignalListResult(data, lang = 'en', timezone = 'Asia/Ho_Chi_Minh') {
     if (!data || !Array.isArray(data) || data.length === 0) {
-        const noData = { vi: 'Hiện không có tín hiệu Smart Money nào phù hợp.', en: 'No Smart Money signals found.', zh: '目前没有匹配的智能资金信号。', ko: '일치하는 스마트 머니 시그널이 없습니다.' };
-        return noData[lang] || noData.en;
+        const noData = { vi: 'Hiện không có tín hiệu Smart Money nào phù hợp.', en: 'No Smart Money signals found.', zh: '目前没有匹配的智能资金信号。', ko: '일치하는 스마트 머니 시그널이 없습니다.', ru: 'Сигналы Smart Money не найдены.', id: 'Tidak ada sinyal Smart Money yang ditemukan.' };
+        return { message: noData[lang] || noData.en, keyboard: null };
     }
-    const walletLabels = {
-        SMART_MONEY: { vi: '🧠 Smart Money', en: '🧠 Smart Money', zh: '🧠 聪明钱', ko: '🧠 스마트 머니' },
-        WHALE: { vi: '🐋 Cá mập', en: '🐋 Whale', zh: '🐋 鲸鱼', ko: '🐋 고래' },
-        KOL: { vi: '🗣️ KOL/Influencer', en: '🗣️ KOL/Influencer', zh: '🗣️ KOL/意见领袖', ko: '🗣️ KOL/인플루언서' }
+
+    const L = {
+        header: { vi: '🚨 Tín hiệu On-chain mới nhất', en: '🚨 Latest On-chain Signals', zh: '🚨 最新链上信号', ko: '🚨 최신 온체인 시그널', ru: '🚨 Последние сигналы On-chain', id: '🚨 Sinyal On-chain Terbaru' },
+        summary: { vi: '📊 Tổng quan', en: '📊 Summary', zh: '📊 概览', ko: '📊 요약', ru: '📊 Обзор', id: '📊 Ringkasan' },
+        txCount: { vi: 'giao dịch', en: 'tx', zh: '笔交易', ko: '거래', ru: 'транзакций', id: 'transaksi' },
+        total: { vi: 'Tổng', en: 'Total', zh: '总计', ko: '총', ru: 'Всего', id: 'Total' },
+        priceRange: { vi: 'Giá', en: 'Price', zh: '价格', ko: '가격', ru: 'Цена', id: 'Harga' },
+        walletTypes: { vi: 'Loại', en: 'Types', zh: '类型', ko: '유형', ru: 'Типы', id: 'Tipe' },
+        updated: { vi: '🕐 Cập nhật', en: '🕐 Updated', zh: '🕐 更新于', ko: '🕐 업데이트', ru: '🕐 Обновлено', id: '🕐 Diperbarui' },
+        disclaimer: { vi: '⚠️ Dữ liệu tham khảo, không phải lời khuyên đầu tư.', en: '⚠️ For reference only, not investment advice.', zh: '⚠️ 仅供参考，不构成投资建议。', ko: '⚠️ 참고용이며 투자 조언이 아닙니다.', ru: '⚠️ Только для справки, не инвестиционная рекомендация.', id: '⚠️ Hanya referensi, bukan saran investasi.' },
+        analyze: { vi: '🔍 Phân tích', en: '🔍 Analyze', zh: '🔍 分析', ko: '🔍 분석', ru: '🔍 Анализ', id: '🔍 Analisis' },
+        swap: { vi: '💱 Swap', en: '💱 Swap', zh: '💱 兑换', ko: '💱 스왑', ru: '💱 Обмен', id: '💱 Swap' },
     };
-    const boughtL = { vi: 'vừa mua', en: 'just bought', zh: '刚买入', ko: '방금 매수' };
-    const atL = { vi: 'ở giá', en: 'at price', zh: '价格', ko: '가격' };
-    const headerL = { vi: '🚨 Tín hiệu On-chain mới nhất', en: '🚨 Latest On-chain Signals', zh: '🚨 最新链上信号', ko: '🚨 최신 온체인 시그널' };
-    const signals = data.slice(0, 10);
-    const lines = signals.map((s, i) => {
-        const wType = s.walletType === 'SMART_MONEY' ? 'SMART_MONEY' : s.walletType === 'WHALE' ? 'WHALE' : 'KOL';
-        const type = (walletLabels[wType] || walletLabels.KOL)[lang] || (walletLabels[wType] || walletLabels.KOL).en;
+    const t = (key) => (L[key] || {})[lang] || (L[key] || {}).en || key;
+
+    const walletLabels = {
+        SMART_MONEY: { vi: '🧠SM', en: '🧠SM', zh: '🧠聪明钱', ko: '🧠SM', ru: '🧠SM', id: '🧠SM' },
+        WHALE: { vi: '🐋Whale', en: '🐋Whale', zh: '🐋鲸鱼', ko: '🐋고래', ru: '🐋Кит', id: '🐋Whale' },
+        KOL: { vi: '🗣️KOL', en: '🗣️KOL', zh: '🗣️KOL', ko: '🗣️KOL', ru: '🗣️KOL', id: '🗣️KOL' }
+    };
+
+    const okxChainMap = { '1': 'eth', '56': 'bsc', '196': 'xlayer', '137': 'polygon', '42161': 'arbitrum', '8453': 'base', '501': 'sol' };
+
+    // ── Group signals by token ──
+    const signals = data.slice(0, 20);
+    const tokenMap = new Map();
+    for (const s of signals) {
         const sym = s.token?.symbol || '?';
-        const amount = Number(s.amountUsd || 0);
+        const key = sym.toUpperCase();
+        if (!tokenMap.has(key)) {
+            tokenMap.set(key, {
+                symbol: sym,
+                tokenAddress: s.token?.tokenAddress || '',
+                chainIndex: s.chainIndex || s.token?.chainIndex || '56',
+                txCount: 0,
+                totalUsd: 0,
+                prices: [],
+                walletTypes: new Set()
+            });
+        }
+        const group = tokenMap.get(key);
+        group.txCount++;
+        group.totalUsd += Number(s.amountUsd || 0);
         const price = Number(s.price || 0);
-        const pStr = price < 0.01 ? price.toFixed(6) : price.toFixed(4);
-        const addr = s.token?.tokenAddress || '';
-        return `${i + 1}. **${sym}**: ${type} ${boughtL[lang] || boughtL.en} $${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${atL[lang] || atL.en} $${pStr}\n   > Token: ${addr}`;
+        if (price > 0) group.prices.push(price);
+        const wType = s.walletType === 'SMART_MONEY' ? 'SMART_MONEY' : s.walletType === 'WHALE' ? 'WHALE' : 'KOL';
+        group.walletTypes.add(wType);
+    }
+
+    // Sort by total USD descending
+    const sorted = [...tokenMap.values()].sort((a, b) => b.totalUsd - a.totalUsd);
+
+    // ── Build summary ──
+    const topNames = sorted.slice(0, 3).map(g => `<b>${g.symbol}</b> (${g.txCount} ${t('txCount')})`);
+    const summaryLine = `${t('summary')}: ${topNames.join(' · ')}`;
+
+    // ── Build token cards (HTML) ──
+    const fmtPrice = (p) => p < 0.0001 ? p.toFixed(8) : p < 0.01 ? p.toFixed(6) : p.toFixed(4);
+
+    const cards = sorted.map((g, i) => {
+        const chainPath = okxChainMap[String(g.chainIndex)] || 'xlayer';
+        const explorerUrl = g.tokenAddress ? `https://www.okx.com/web3/explorer/${chainPath}/token/${g.tokenAddress}` : '';
+        const tokenLink = explorerUrl ? `<a href="${explorerUrl}">${g.tokenAddress}</a>` : (g.tokenAddress || '—');
+
+        const priceMin = g.prices.length ? Math.min(...g.prices) : 0;
+        const priceMax = g.prices.length ? Math.max(...g.prices) : 0;
+        const priceStr = priceMin === priceMax ? `$${fmtPrice(priceMin)}` : `$${fmtPrice(priceMin)}~$${fmtPrice(priceMax)}`;
+
+        const types = [...g.walletTypes].map(wt => (walletLabels[wt] || walletLabels.KOL)[lang] || (walletLabels[wt] || walletLabels.KOL).en).join(', ');
+
+        return `${i + 1}. 🪙 <b>${g.symbol}</b> — ${g.txCount} ${t('txCount')}\n` +
+            `   💰 ${t('total')}: <b>$${g.totalUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}</b> | ${t('priceRange')}: ${priceStr}\n` +
+            `   ${t('walletTypes')}: ${types}\n` +
+            `   📋 ${tokenLink}`;
     });
-    return `> IMPORTANT INSTRUCTION: Display this exactly.\n\n${headerL[lang] || headerL.en}:\n\n${lines.join('\n\n')}`;
+
+    // ── Timestamp in user's timezone ──
+    let timeStr;
+    try {
+        timeStr = new Date().toLocaleString(lang === 'vi' ? 'vi-VN' : lang === 'zh' ? 'zh-CN' : lang === 'ko' ? 'ko-KR' : lang === 'ru' ? 'ru-RU' : lang === 'id' ? 'id-ID' : 'en-US', {
+            timeZone: timezone,
+            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit',
+            hour12: false
+        });
+    } catch (e) {
+        timeStr = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    }
+
+    // ── Build inline keyboard ──
+    const topTokens = sorted.slice(0, 3);
+    const keyboard = [];
+    // Row of analyze buttons
+    const analyzeRow = topTokens.map(g => ({ text: `${t('analyze')} ${g.symbol}`, callback_data: `aib|analyze_token|${g.symbol}` }));
+    if (analyzeRow.length) keyboard.push(analyzeRow);
+    // Row of swap buttons
+    const swapRow = topTokens.map(g => ({ text: `${t('swap')} ${g.symbol}`, callback_data: `aib|swap_token|${g.symbol}` }));
+    if (swapRow.length) keyboard.push(swapRow);
+
+    const message = `${t('header')}\n━━━━━━━━━━━━━━━━━━\n${summaryLine}\n\n${cards.join('\n\n')}\n\n${t('updated')}: ${timeStr}\n${t('disclaimer')}`;
+
+    return { message, keyboard: keyboard.length ? { inline_keyboard: keyboard } : null };
 }
 
 function formatProfitRoiResult(data, explicitBuyPrice, realTimePrice, lang = 'en') {

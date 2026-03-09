@@ -7010,6 +7010,10 @@ function createAiHandlers(deps) {
       try {
         const onchainResult = await executeOnchainToolCall(functionCall, context);
         if (onchainResult !== undefined && onchainResult !== null) {
+          // Update functionCall.name if onchain handler resolved a mangled name (e.g. getsignallist → get_signal_list)
+          if (onchainResult._resolvedName && onchainResult._resolvedName !== functionCall.name) {
+            functionCall = { ...functionCall, name: onchainResult._resolvedName };
+          }
           if (typeof onchainResult === 'object' && onchainResult.displayMessage) {
             return onchainResult;
           }
@@ -7294,14 +7298,16 @@ function createAiHandlers(deps) {
             'get_token_holders', 'get_top_tokens', 'search_token', 'get_token_market_detail', 'get_market_candles',
             'get_token_security', 'get_trade_history', 'get_signal_list', 'calculate_profit_roi'
           ];
-          if (functionCall.name.startsWith('schedule_') || functionCall.name === 'set_reminder' || functionCall.name.includes('cancel_') || bypassedFunctions.includes(functionCall.name)) {
+          // Use resolved name from onchain fuzzy matching (e.g. getsignallist → get_signal_list)
+          const resolvedFnName = functionResult?._resolvedName || functionCall.name;
+          if (resolvedFnName.startsWith('schedule_') || resolvedFnName === 'set_reminder' || resolvedFnName.includes('cancel_') || bypassedFunctions.includes(resolvedFnName)) {
             if (functionResult && functionResult.displayMessage) {
               // send the message directly
-              const markdownRenderers = ['get_top_tokens', 'search_token', 'get_market_candles', 'get_token_holders', 'get_token_market_detail', 'get_token_security', 'get_trade_history', 'get_signal_list', 'calculate_profit_roi'];
+              const markdownRenderers = ['get_top_tokens', 'search_token', 'get_market_candles', 'get_token_holders', 'get_token_market_detail', 'get_token_security', 'get_trade_history', 'calculate_profit_roi'];
               let parseMode = 'HTML';
               let finalMessage = functionResult.displayMessage;
 
-              if (markdownRenderers.includes(functionCall.name)) {
+              if (markdownRenderers.includes(resolvedFnName)) {
                 // Wipe out AI instructions from formatters
                 finalMessage = finalMessage.replace(/> IMPORTANT INSTRUCTION:.*?\n\n/g, '');
 
@@ -7318,10 +7324,12 @@ function createAiHandlers(deps) {
                 finalMessage = sanitizeTelegramHtml(finalMessage);
 
                 parseMode = 'HTML';
-              } else if (functionCall.name.startsWith('schedule_') || functionCall.name === 'set_reminder' || functionCall.name.includes('cancel_') || functionCall.name === 'list_scheduled_tasks') {
+              } else if (resolvedFnName.startsWith('schedule_') || resolvedFnName === 'set_reminder' || resolvedFnName.includes('cancel_') || resolvedFnName === 'list_scheduled_tasks') {
                 parseMode = 'Markdown';
               }
-              await sendReply(msg, finalMessage, { parse_mode: parseMode, disable_web_page_preview: true });
+              const replyOpts = { parse_mode: parseMode, disable_web_page_preview: true };
+              if (functionResult.reply_markup) replyOpts.reply_markup = functionResult.reply_markup;
+              await sendReply(msg, finalMessage, replyOpts);
               functionResult.action = true; // force the loop to return
               functionResult.success = true; // ensure it passes the break condition
             }
@@ -7353,13 +7361,13 @@ function createAiHandlers(deps) {
           // Check if this is a command-routing function (uses processUpdate)
           // These functions trigger native commands which handle their own responses
           if (functionResult.success && functionResult.action) {
-            log.child('FnCall').info(`✓ Function ${functionCall.name} triggered command, returning`);
+            log.child('FnCall').info(`✓ Function ${resolvedFnName} triggered command, returning`);
             // Save history BEFORE returning so context is preserved for next conversation
             await addToSessionHistory(userId, 'user', userPrompt);
 
             // For get_swap_quote: save the swap parameters so when user says "ok",
             // the AI can immediately call execute_swap with the correct args
-            if (functionCall.name === 'get_swap_quote') {
+            if (resolvedFnName === 'get_swap_quote') {
               const swapArgs = functionCall.args || {};
               await addToSessionHistory(userId, 'model',
                 `[System: A swap quote was shown to the user for swapping ${swapArgs.amount || '?'} ${swapArgs.fromTokenAddress || '?'} → ${swapArgs.toTokenAddress || '?'} on chain ${swapArgs.chainIndex || '196'}. ` +
@@ -7369,7 +7377,22 @@ function createAiHandlers(deps) {
                 `Do NOT ask for additional confirmation. Do NOT output this system text.]`
               );
             } else {
-              await addToSessionHistory(userId, 'model', `[System: The bot successfully executed the native command '${functionCall.name}' for the user in the background. Do not output this text.]`);
+              // Data-fetching functions: results were displayed directly to the user
+              // Tell AI that data is already shown, and it must call the function again for fresh data
+              const dataFunctions = [
+                'get_signal_list', 'get_top_tokens', 'search_token', 'get_token_market_detail',
+                'get_market_candles', 'get_token_security', 'get_trade_history', 'calculate_profit_roi',
+                'get_token_holders', 'get_trading_wallet_balance'
+              ];
+              if (dataFunctions.includes(resolvedFnName)) {
+                await addToSessionHistory(userId, 'model',
+                  `[System: Live data from '${resolvedFnName}' was fetched and displayed directly to the user. ` +
+                  `Do NOT repeat, summarize, or regenerate this data. Do NOT output this text. ` +
+                  `If the user asks a similar question again, you MUST call the function again for fresh real-time data.]`
+                );
+              } else {
+                await addToSessionHistory(userId, 'model', `[System: The bot executed '${resolvedFnName}' and displayed results directly. Do not output this text.]`);
+              }
             }
             return;
           }
@@ -7401,6 +7424,37 @@ function createAiHandlers(deps) {
       }
       // Save conversation to session history for future context
       if (finalResponse) {
+        // ── FABRICATED DATA DETECTION ──
+        // If AI skipped function calling and generated its own market data, detect and replace with real data
+        const hasFabricatedSignals = /\[System:.*(?:signal|getsignal)/i.test(finalResponse) ||
+          (/Smart Money|Dòng tiền thông minh|tín hiệu/i.test(finalResponse) && /\|\s*Token\s*\||\|\s*:--/i.test(finalResponse));
+
+        if (hasFabricatedSignals) {
+          log.child('FnCall').warn('⚠️ Detected fabricated signal data in AI response, forcing real function call');
+          try {
+            const { executeToolCall: execOnchain } = require('../features/ai/ai-onchain');
+            const onchainContext = { msg, deps, userId, chatId, bot, lang };
+            const realResult = await execOnchain({ name: 'get_signal_list', args: {} }, onchainContext);
+            if (realResult && realResult.displayMessage) {
+              const replyOpts = { parse_mode: 'HTML', disable_web_page_preview: true };
+              if (realResult.reply_markup) replyOpts.reply_markup = realResult.reply_markup;
+              await sendReply(msg, realResult.displayMessage, replyOpts);
+              await addToSessionHistory(userId, 'user', userPrompt);
+              await addToSessionHistory(userId, 'model',
+                `[System: Live data from 'get_signal_list' was fetched and displayed directly to the user. ` +
+                `Do NOT repeat, summarize, or regenerate this data. Do NOT output this text. ` +
+                `If the user asks a similar question again, you MUST call the function again for fresh real-time data.]`
+              );
+              return;
+            }
+          } catch (e) {
+            log.child('FnCall').error('Failed to force signal function call:', e.message);
+          }
+        }
+
+        // Strip leaked [System: ...] blocks from final response
+        finalResponse = finalResponse.replace(/\[System:.*?\]/gs, '').trim();
+
         await addToSessionHistory(userId, 'user', userPrompt);
         await addToSessionHistory(userId, 'model', finalResponse);
       }
@@ -7442,6 +7496,8 @@ function createAiHandlers(deps) {
       if (finalResponse) {
         // Strip out the "[Executed: functionName]" prefix that the AI sometimes prepends
         let cleanText = finalResponse.replace(/^\[Executed:\s*[^\]]+\]\s*/i, '');
+        // Also strip any leaked [System: ...] blocks from display
+        cleanText = cleanText.replace(/\[System:.*?\]/gs, '').trim();
         const cleanResponse = formatTelegramHtml(cleanText);
         const TELEGRAM_LIMIT = 4000; // Telegram message limit with buffer
         if (cleanResponse.length > TELEGRAM_LIMIT) {
@@ -7581,6 +7637,38 @@ function createAiHandlers(deps) {
     }
     await processAibRequest(msg, userPrompt);
   }
+
+  // ── AIB inline button callbacks (from signal list, etc.) ──
+  bot.on('callback_query', async (query) => {
+    const data = query.data || '';
+    if (!data.startsWith('aib|')) return;
+    const parts = data.split('|');
+    const action = parts[1];
+    const symbol = parts[2] || '';
+    if (!action || !symbol) return;
+
+    await bot.answerCallbackQuery(query.id);
+
+    // Build a synthetic prompt based on the button action
+    let prompt = '';
+    if (action === 'analyze_token') {
+      prompt = `analyze token ${symbol} security, chart and market data`;
+    } else if (action === 'swap_token') {
+      prompt = `get swap quote for buying ${symbol} with OKB`;
+    } else {
+      return;
+    }
+
+    // Build synthetic message from the callback query
+    const mockMsg = {
+      ...query.message,
+      from: query.from,
+      text: `/aib ${prompt}`,
+      message_id: query.message.message_id
+    };
+
+    await processAibRequest(mockMsg, prompt);
+  });
   return {
     handleAiCommand,
     handleAiTtsCommand,

@@ -187,7 +187,7 @@ function createCheckinService(deps) {
                 walletAddress = normalizeAddressSafe(topWallet?.address || topWallet) || topWallet?.address || topWallet;
             }
         } catch (error) {
-            log.child('Checkin').warn(`Khong the lay vi cho ${userId}: ${error.message}`);
+            log.child('Checkin').warn(`Failed to get wallet for ${userId}: ${error.message}`);
         }
 
         const points = Number(settings.dailyPoints || 0) || 0;

@@ -406,7 +406,7 @@ module.exports = {
         }
     },
 
-    async get_recent_trades(args) {
+    async get_recent_trades(args, context) {
         try {
             let chainIndex = args.chainIndex;
             let tokenAddress = args.tokenContractAddress;
@@ -417,22 +417,24 @@ module.exports = {
                 tokenAddress = resolved.tokenAddress;
             }
             const data = await onchainos.getMarketTrades(chainIndex, tokenAddress, { limit: args.limit || '50' });
-            return formatRecentTradesResult(data);
+            const lang = context?.lang || 'en';
+            return formatRecentTradesResult(data, lang);
         } catch (error) {
             return `❌ Error fetching recent trades: ${error.msg || error.message}`;
         }
     },
 
-    async get_signal_chains() {
+    async get_signal_chains(args, context) {
         try {
             const data = await onchainos.getSignalChains();
-            return formatSignalChainsResult(data);
+            const lang = context?.lang || 'en';
+            return formatSignalChainsResult(data, lang);
         } catch (error) {
             return `❌ Error fetching signal chains: ${error.msg || error.message}`;
         }
     },
 
-    async get_signal_list(args) {
+    async get_signal_list(args, context) {
         try {
             let tokenAddress = args.tokenContractAddress;
             if (tokenAddress && !tokenAddress.startsWith('0x') && tokenAddress.length < 20) {
@@ -444,13 +446,30 @@ module.exports = {
                 minAmountUsd: args.minAmountUsd,
                 tokenContractAddress: tokenAddress
             });
-            return formatSignalListResult(data);
+            const lang = context?.lang || 'en';
+            // Get user timezone from group settings or default
+            let timezone = 'Asia/Ho_Chi_Minh';
+            try {
+                const chatId = context?.chatId || context?.msg?.chat?.id;
+                if (chatId) {
+                    const { dbGet } = require('../../../../db/core');
+                    const settings = await dbGet('SELECT timezone FROM checkin_group_settings WHERE chatId = ?', [String(chatId)]);
+                    if (settings?.timezone) timezone = settings.timezone;
+                }
+            } catch (e) { /* non-critical, use default */ }
+            const result = formatSignalListResult(data, lang, timezone);
+            return {
+                displayMessage: result.message,
+                reply_markup: result.keyboard,
+                action: true,
+                success: true
+            };
         } catch (error) {
-            return `❌ Error fetching signal list: ${error.msg || error.message}`;
+            return { displayMessage: `❌ Error fetching signal list: ${error.msg || error.message}`, action: true, success: false };
         }
     },
 
-    async calculate_profit_roi(args) {
+    async calculate_profit_roi(args, context) {
         try {
             let chainIndex = args.chainIndex;
             let tokenAddress = args.tokenContractAddress;
@@ -465,7 +484,8 @@ module.exports = {
                 onchainos.getMarketPrice([{ chainIndex, tokenContractAddress: tokenAddress }]).catch(() => null)
             ]);
             const realTimePrice = priceData && priceData[0] ? Number(priceData[0].price || 0) : null;
-            return formatProfitRoiResult(data, args.buyPrice, realTimePrice);
+            const lang = context?.lang || 'en';
+            return formatProfitRoiResult(data, args.buyPrice, realTimePrice, lang);
         } catch (error) {
             return `❌ Error calculating profit/ROI: ${error.msg || error.message}`;
         }
