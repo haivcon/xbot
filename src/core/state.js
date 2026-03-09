@@ -1,3 +1,6 @@
+const logger = require('./logger');
+const log = logger.child('State');
+
 // Shared mutable state holders extracted from index.js
 // These Maps/Sets are imported wherever global bot state is needed.
 
@@ -115,7 +118,8 @@ const sessionMapsWithTTL = [
     { map: pendingWelcomeChallenges, ttl: PROMPT_TTL_MS },
     { map: welcomeAdminStates, ttl: SESSION_TTL_MS },
     { map: welcomeAdminMenus, ttl: SESSION_TTL_MS },
-    { map: pendingVoiceCommands, ttl: PROMPT_TTL_MS }
+    { map: pendingVoiceCommands, ttl: PROMPT_TTL_MS },
+    { map: customPersonaPrompts, ttl: SESSION_TTL_MS }
 ];
 
 /**
@@ -137,7 +141,7 @@ function cleanupExpiredSessions() {
     }
 
     if (totalCleaned > 0) {
-        console.log(`[State] Cleaned up ${totalCleaned} expired session entries`);
+        log.info(`Cleaned up ${totalCleaned} expired session entries`);
     }
 }
 

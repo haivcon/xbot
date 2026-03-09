@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const logger = require('../core/logger');
+const log = logger.child('OKX');
 const { ethers } = require('ethers');
 const {
     delay,
@@ -758,7 +760,7 @@ function createOkxService(config) {
         try {
             directory = await ensureOkxChainDirectory();
         } catch (error) {
-            console.warn(`[OKX] Failed to load chain directory: ${error.message}`);
+            log.warn(`Failed to load chain directory: ${error.message}`);
         }
 
         const aggregator = directory?.aggregator || [];
@@ -1128,7 +1130,7 @@ function createOkxService(config) {
                 params.set('chainId', String(query.chainId));
                 params.set('chainIndex', String(query.chainIndex));
                 params.set('chainShortName', query.chainShortName);
-                console.log(`[DexHoldings] ${endpoint} -> ${params.toString()}`);
+                log.child('DexHoldings').info(`${endpoint} -> ${params.toString()}`);
             } catch (error) {
                 // ignore log errors
             }
@@ -1153,7 +1155,7 @@ function createOkxService(config) {
             const responseTotal = extractDexTotalValue(response);
             totalUsd = Number.isFinite(responseTotal) ? responseTotal : null;
         } catch (error) {
-            console.warn(`[DexHoldings] Balance API failed via GET all-token-balances-by-address: ${error.message}`);
+            log.child('DexHoldings').warn(`Balance API failed via GET all-token-balances-by-address: ${error.message}`);
         }
 
         if (!Number.isFinite(totalUsd)) {
@@ -1169,7 +1171,7 @@ function createOkxService(config) {
                     totalUsd = derivedTotal;
                 }
             } catch (error) {
-                console.warn(`[DexHoldings] Total value API failed via GET total-value-by-address: ${error.message}`);
+                log.child('DexHoldings').warn(`Total value API failed via GET total-value-by-address: ${error.message}`);
             }
         }
 
@@ -1459,7 +1461,7 @@ function createOkxService(config) {
             const marketChains = directory?.market || [];
             return findChainEntryByIndex(marketChains, chainIndex);
         } catch (error) {
-            console.warn(`[TopToken] Failed to resolve chain entry: ${error.message}`);
+            log.child('TopToken').warn(`Failed to resolve chain entry: ${error.message}`);
             return null;
         }
     }
@@ -1589,7 +1591,7 @@ function createOkxService(config) {
                 return normalized;
             }
         } catch (error) {
-            console.warn(`[BanmaoDecimals] Failed to load token profile: ${error.message}`);
+            log.child('BanmaoDecimals').warn(`Failed to load token profile: ${error.message}`);
         }
 
         if (banmaoDecimalsCache !== null) {
@@ -1635,7 +1637,7 @@ function createOkxService(config) {
                 return Math.max(0, Math.trunc(decimals));
             }
         } catch (error) {
-            console.warn(`[TokenDecimals] Failed to resolve decimals for ${tokenAddress}: ${error.message}`);
+            log.child('TokenDecimals').warn(`Failed to resolve decimals for ${tokenAddress}: ${error.message}`);
         }
 
         tokenDecimalsCache.set(lower, { value: fallback, expiresAt: now + (BANMAO_DECIMALS_CACHE_TTL / 2) });
@@ -1651,7 +1653,7 @@ function createOkxService(config) {
                 return quoteSnapshot;
             }
         } catch (error) {
-            console.warn(`[BanmaoPrice] Quote snapshot failed: ${error.message}`);
+            log.child('BanmaoPrice').warn(`Quote snapshot failed: ${error.message}`);
             errors.push(error);
         }
 
@@ -1661,7 +1663,7 @@ function createOkxService(config) {
                 return snapshot;
             }
         } catch (error) {
-            console.warn(`[BanmaoPrice] Market snapshot failed: ${error.message}`);
+            log.child('BanmaoPrice').warn(`Market snapshot failed: ${error.message}`);
             errors.push(error);
         }
 
@@ -1671,7 +1673,7 @@ function createOkxService(config) {
                 return fallbackTicker;
             }
         } catch (error) {
-            console.warn(`[BanmaoPrice] Market ticker fallback failed: ${error.message}`);
+            log.child('BanmaoPrice').warn(`Market ticker fallback failed: ${error.message}`);
             errors.push(error);
         }
 
@@ -2171,7 +2173,7 @@ function createOkxService(config) {
             const price = extractOkxPriceValue(entry);
             return Number.isFinite(price) ? price : null;
         } catch (error) {
-            console.warn(`[OKX] Failed to fetch ${label} price: ${error.message}`);
+            log.warn(`Failed to fetch ${label} price: ${error.message}`);
             return null;
         }
     }

@@ -93,27 +93,9 @@ function normalizeAddress(value) {
     return null;
 }
 
-function normalizeOkxConfigAddress(value) {
-    if (!value || typeof value !== 'string') {
-        return null;
-    }
+// Alias — normalizeOkxConfigAddress is identical to normalizeAddress
+const normalizeOkxConfigAddress = normalizeAddress;
 
-    const trimmed = value.trim();
-    if (!trimmed) {
-        return null;
-    }
-
-    try {
-        return ethers.getAddress(trimmed);
-    } catch (error) {
-        const basicHexPattern = /^0x[0-9a-fA-F]{40}$/;
-        if (basicHexPattern.test(trimmed)) {
-            return trimmed;
-        }
-    }
-
-    return null;
-}
 
 function normalizeAddressSafe(address) {
     if (!address) {

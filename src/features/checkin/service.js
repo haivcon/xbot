@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('CheckinSvc');
+
 function createCheckinService(deps) {
     const {
         db,
@@ -62,10 +65,10 @@ function createCheckinService(deps) {
             } else {
                 await bot.sendMessage(chatId, summaryText, options);
             }
-            console.log(`[Checkin] Sent summary announcement to ${chatId} (${triggeredBy}).`);
+            log.child('Checkin').info(`Sent summary announcement to ${chatId} (${triggeredBy}).`);
             return true;
         } catch (error) {
-            console.error(`[Checkin] Failed to send summary announcement to ${chatId}: ${error.message}`);
+            log.child('Checkin').error(`Failed to send summary announcement to ${chatId}: ${error.message}`);
             return false;
         }
     }
@@ -144,7 +147,7 @@ function createCheckinService(deps) {
             return { status: 'sent', userLang };
         } catch (error) {
             pendingCheckinChallenges.delete(token);
-            console.warn(`[Checkin] Unable to send DM to ${userId}: ${error.message}`);
+            log.child('Checkin').warn(`Unable to send DM to ${userId}: ${error.message}`);
 
             return {
                 status: 'failed',
@@ -184,7 +187,7 @@ function createCheckinService(deps) {
                 walletAddress = normalizeAddressSafe(topWallet?.address || topWallet) || topWallet?.address || topWallet;
             }
         } catch (error) {
-            console.warn(`[Checkin] Khong the lay vi cho ${userId}: ${error.message}`);
+            log.child('Checkin').warn(`Khong the lay vi cho ${userId}: ${error.message}`);
         }
 
         const points = Number(settings.dailyPoints || 0) || 0;
@@ -242,7 +245,7 @@ function createCheckinService(deps) {
             });
             pendingEmotionPrompts.get(emotionToken).messageId = sent?.message_id || null;
         } catch (error) {
-            console.error(`[Checkin] Unable to notify group ${chatId}: ${error.message}`);
+            log.child('Checkin').error(`Unable to notify group ${chatId}: ${error.message}`);
         }
 
         const userMessage = [
@@ -268,7 +271,7 @@ function createCheckinService(deps) {
 
             await bot.sendMessage(userId, userMessage);
         } catch (error) {
-            console.warn(`[Checkin] Unable to DM result to ${userId}: ${error.message}`);
+            log.child('Checkin').warn(`Unable to DM result to ${userId}: ${error.message}`);
         }
 
         pendingCheckinChallenges.delete(token);
@@ -359,7 +362,7 @@ function createCheckinService(deps) {
                 try {
                     await sendWelcomeVerificationChallenge(task);
                 } catch (error) {
-                    console.error(`[WelcomeVerify] Failed to send challenge: ${error.message}`);
+                    log.child('WelcomeVerify').error(`Failed to send challenge: ${error.message}`);
                 }
             }
 

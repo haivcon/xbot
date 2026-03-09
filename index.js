@@ -1,16 +1,18 @@
 // Đảm bảo dotenv được gọi ĐẦU TIÊN
 require('dotenv').config();
+const logger = require('./src/core/logger');
+const log = logger.child('Bot');
 
 // Enable automatic filename/content-type detection to silence upcoming file send deprecations
 process.env.NTBA_FIX_350 = process.env.NTBA_FIX_350 || '1';
 
 // Global error handlers - prevent crashes and log errors
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('[Unhandled Rejection]', reason);
+    logger.child('Process').error('Unhandled Rejection', reason);
 });
 
 process.on('uncaughtException', (err) => {
-    console.error('[Uncaught Exception]', err);
+    logger.child('Process').error('Uncaught Exception', err);
     // Don't exit - let PM2 handle restart if needed
 });
 
@@ -369,6 +371,7 @@ const { createWalletCommandHandlers } = require('./src/app/walletCommandHandlers
 const { createDonateHandlers } = require('./src/app/donateHandlers');
 const { createAdminHandlers } = require('./src/app/adminHandlers');
 const { createWalletFeatures } = require('./src/app/walletFeatures');
+const { createLanguageHandlers } = require('./src/app/languageHandlers');
 const { createRandomFeature } = require('./src/app/random');
 const registerRandomCommands = require('./src/app/randomCommands');
 const registerAdminCommands = require('./src/app/adminCommands');
@@ -395,7 +398,7 @@ const {
 
 // --- Ki?m tra C?u h�nh ---
 if (!TELEGRAM_TOKEN) {
-    console.error("L?I NGHIEM TR?NG: Thi?u TELEGRAM_TOKEN trong file .env!");
+    log.error('FATAL: Missing TELEGRAM_TOKEN in .env!');
     process.exit(1);
 }
 const {
@@ -753,344 +756,6 @@ const {
     scheduleMessageDeletion
 });
 
-const LANGUAGE_MENU_AUTO_CLOSE_MS = 10000;
-const LANGUAGE_MENU_FEEDBACK_MS = 4500;
-
-function buildLanguagePickerView(lang, currentLang, isGroupChat = false, { prefix = 'lang' } = {}) {
-    const normalizedLang = resolveLangCode(currentLang || lang || defaultLang);
-    return {
-        text: buildLanguageMenuText({
-            t,
-            lang,
-            currentLang: normalizedLang,
-            isGroupChat,
-            autoCloseSeconds: Math.round(LANGUAGE_MENU_AUTO_CLOSE_MS / 1000)
-        }),
-        reply_markup: buildLanguageKeyboardWithPrefix({
-            t,
-            lang,
-            currentLang: normalizedLang,
-            includeClose: true,
-            prefix
-        })
-    };
-}
-
-function buildLanguageChangeFeedback(newLang, isGroupChat = false) {
-    const targetLang = resolveLangCode(newLang || defaultLang);
-    const option = findLanguageOption(targetLang);
-    const effect = option.vibe || '✨';
-    const messageKey = isGroupChat ? 'group_language_changed_success' : 'language_changed_success';
-
-    return {
-        toast: `${option.flag} ${option.nativeName} ${effect}`,
-        text: `${option.flag} ${option.nativeName} ${effect}\n${t(targetLang, messageKey)}`,
-        langOption: option
-    };
-}
-
-async function handleLangCommand(msg) {
-    const chatId = msg?.chat?.id;
-    const topicId = Object.prototype.hasOwnProperty.call(msg || {}, 'message_thread_id') ? msg.message_thread_id : null;
-    const userId = msg.from?.id;
-    if (!chatId) {
-        return;
-    }
-
-    const lang = await getLang(msg);
-    const normalizedLang = resolveLangCode(lang);
-    const isGroupChat = ['group', 'supergroup'].includes(msg?.chat?.type);
-    const isTopicMessage = isGroupChat && topicId !== null && topicId !== undefined;
-
-    if (isTopicMessage) {
-        const isAdmin = await isGroupAdmin(chatId, userId);
-        if (!isAdmin) {
-            const feedbackLang = resolveLangCode(msg.from?.language_code || lang);
-            await sendReply(msg, t(feedbackLang, 'group_language_admin_only'));
-            return;
-        }
-
-        const currentLang = await resolveTopicLanguage(chatId, topicId, lang);
-        const picker = buildLanguagePickerView(lang, currentLang, true, { prefix: 'langtopic' });
-        const sent = await sendReply(msg, picker.text, {
-            reply_markup: picker.reply_markup,
-            parse_mode: 'HTML',
-            disable_web_page_preview: true
-        });
-        if (sent?.chat?.id && sent?.message_id) {
-            scheduleMessageDeletion(sent.chat.id, sent.message_id, LANGUAGE_MENU_AUTO_CLOSE_MS);
-        }
-        return;
-    }
-
-    if (isGroupChat) {
-        const isAdmin = await isGroupAdmin(chatId, userId);
-        if (!isAdmin) {
-            const feedbackLang = resolveLangCode(msg.from?.language_code || lang);
-            await sendReply(msg, t(feedbackLang, 'group_language_admin_only'));
-            return;
-        }
-    }
-
-    const currentLang = isGroupChat
-        ? await resolveGroupLanguage(chatId, normalizedLang)
-        : normalizedLang;
-    const picker = buildLanguagePickerView(lang, currentLang, isGroupChat);
-    const sent = await sendReply(msg, picker.text, {
-        reply_markup: picker.reply_markup,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true
-    });
-
-    if (sent?.chat?.id && sent?.message_id) {
-        scheduleMessageDeletion(sent.chat.id, sent.message_id, LANGUAGE_MENU_AUTO_CLOSE_MS);
-    }
-
-    if (!isGroupChat && userId) {
-        try {
-            await openAdminHub(userId, { fallbackLang: lang, mode: 'language' });
-        } catch (error) {
-            const feedbackLang = resolveLangCode(msg.from?.language_code || lang);
-            await sendReply(msg, t(feedbackLang, 'help_action_dm_blocked'), { reply_markup: buildCloseKeyboard(feedbackLang) });
-        }
-    } else if (isGroupChat) {
-        try {
-            await openAdminHub(userId, { fallbackLang: lang, mode: 'language' });
-            const feedbackLang = resolveLangCode(msg.from?.language_code || lang);
-            await sendReply(msg, t(feedbackLang, 'language_hub_dm_notice'), { reply_markup: buildCloseKeyboard(feedbackLang) });
-        } catch (error) {
-            const feedbackLang = resolveLangCode(msg.from?.language_code || lang);
-            await sendReply(msg, t(feedbackLang, 'help_action_dm_blocked'), { reply_markup: buildCloseKeyboard(feedbackLang) });
-        }
-    }
-}
-
-async function handleLanguageCommand(msg) {
-    await handleLangCommand(msg);
-}
-
-async function handleTopicLanguageCommand(msg) {
-    await handleLangCommand(msg);
-}
-
-async function handleLanguageSelection(query, newLang, callbackLang) {
-    const chatId = query.message?.chat?.id;
-    if (!chatId) {
-        await bot.answerCallbackQuery(query.id);
-        return;
-    }
-
-    const chatKey = chatId.toString();
-    const targetLang = resolveLangCode(newLang || defaultLang);
-    const isGroupChat = ['group', 'supergroup'].includes(query.message?.chat?.type);
-
-    if (isGroupChat) {
-        const isAdmin = await isGroupAdmin(chatKey, query.from?.id);
-        if (!isAdmin) {
-            const feedbackLang = resolveLangCode(callbackLang || query.from?.language_code || targetLang);
-            await bot.answerCallbackQuery(query.id, { text: t(feedbackLang, 'group_language_admin_only'), show_alert: true });
-            return;
-        }
-    }
-
-    await db.setLanguage(chatKey, targetLang);
-
-    if (isGroupChat) {
-        try {
-            const subscription = await db.getGroupSubscription(chatKey);
-            if (subscription) {
-                await db.updateGroupSubscriptionLanguage(chatKey, targetLang);
-            }
-        } catch (error) {
-            console.warn(`[GroupLanguage] Unable to update broadcast language for ${chatKey}: ${error.message}`);
-        }
-    }
-
-    const feedback = buildLanguageChangeFeedback(targetLang, isGroupChat);
-
-    if (query.message?.message_id) {
-        bot.deleteMessage(chatKey, query.message.message_id).catch(() => { /* ignore cleanup errors */ });
-    }
-
-    const confirmation = await sendReply(query.message, feedback.text, { disable_web_page_preview: true });
-    if (confirmation?.chat?.id && confirmation?.message_id) {
-        scheduleMessageDeletion(confirmation.chat.id, confirmation.message_id, LANGUAGE_MENU_FEEDBACK_MS);
-    }
-
-    console.log(`[BOT] ChatID ${chatKey} changed language to: ${targetLang}`);
-    await bot.answerCallbackQuery(query.id, { text: feedback.toast });
-}
-
-async function handleTopicLanguageSelection(query, newLang, callbackLang) {
-    const chatId = query.message?.chat?.id;
-    const topicId = query.message?.message_thread_id;
-    if (!chatId || topicId === undefined || topicId === null) {
-        await bot.answerCallbackQuery(query.id, { text: t(callbackLang, 'topic_language_topic_only'), show_alert: true });
-        return;
-    }
-
-    const chatKey = chatId.toString();
-    const targetLang = resolveLangCode(newLang || defaultLang);
-    const isGroupChat = ['group', 'supergroup'].includes(query.message?.chat?.type);
-
-    if (isGroupChat) {
-        const isAdmin = await isGroupAdmin(chatKey, query.from?.id);
-        if (!isAdmin) {
-            const feedbackLang = resolveLangCode(callbackLang || query.from?.language_code || targetLang);
-            await bot.answerCallbackQuery(query.id, { text: t(feedbackLang, 'group_language_admin_only'), show_alert: true });
-            return;
-        }
-    }
-
-    await db.setTopicLanguage(chatKey, topicId.toString(), targetLang);
-
-    const feedback = {
-        toast: t(targetLang, 'topic_language_changed_success'),
-        text: t(targetLang, 'topic_language_changed_success')
-    };
-
-    if (query.message?.message_id) {
-        bot.deleteMessage(chatKey, query.message.message_id).catch(() => { /* ignore cleanup errors */ });
-    }
-
-    const confirmation = await sendReply(query.message, feedback.text, {
-        disable_web_page_preview: true
-    });
-    if (confirmation?.chat?.id && confirmation?.message_id) {
-        scheduleMessageDeletion(confirmation.chat.id, confirmation.message_id, LANGUAGE_MENU_FEEDBACK_MS);
-    }
-
-    console.log(`[BOT] Topic ${chatKey}/${topicId} changed language to: ${targetLang}`);
-    await bot.answerCallbackQuery(query.id, { text: feedback.toast });
-}
-
-function formatLanguageLabel(code) {
-    const option = findLanguageOption(resolveLangCode(code || defaultLang));
-    const flag = option?.flag || '🌐';
-    const name = option?.nativeName || option?.code || resolveLangCode(code || defaultLang);
-    return `${flag} ${name}`.trim();
-}
-
-function buildLanguageTopicLink(chatId, topicId) {
-    if (!chatId || !topicId || topicId === 'main') {
-        return null;
-    }
-    const chatStr = chatId.toString();
-    const numeric = chatStr.startsWith('-100') ? chatStr.slice(4) : chatStr.replace(/^-/, '');
-    if (!numeric) {
-        return null;
-    }
-    return `https://t.me/c/${numeric}/${topicId}`;
-}
-
-async function buildLanguageAdminView(chatId, lang) {
-    const chatKey = chatId?.toString();
-    const lines = [`🌐 <b>${escapeHtml(t(lang, 'language_hub_title'))}</b>`, `<i>${escapeHtml(t(lang, 'language_hub_hint'))}</i>`];
-
-    let chatLabel = chatKey;
-    try {
-        const chat = await bot.getChat(chatKey);
-        if (chat?.title) {
-            chatLabel = chat.title;
-        } else if (chat?.username) {
-            chatLabel = `@${chat.username}`;
-        }
-    } catch (error) {
-        // ignore lookup errors
-    }
-
-    const groupLang = await resolveGroupLanguage(chatKey, lang);
-    lines.push('', `🏷️ ${t(lang, 'language_hub_group_label', { title: escapeHtml(chatLabel), id: escapeHtml(chatKey) })}`);
-    lines.push(`🗣️ ${t(lang, 'language_hub_primary_lang', { lang: escapeHtml(formatLanguageLabel(groupLang)) })}`);
-
-    const topics = await db.listTopicLanguages(chatKey);
-    const inline_keyboard = [];
-
-    if (!topics || topics.length === 0) {
-        lines.push('', t(lang, 'language_hub_topics_empty'));
-    } else {
-        lines.push('', t(lang, 'language_hub_topics_header'));
-        for (const entry of topics) {
-            const topicId = entry.topicId === undefined || entry.topicId === null ? 'main' : entry.topicId.toString();
-            let topicLabel = topicId === 'main' ? t(lang, 'language_topic_main') : t(lang, 'language_topic_label', { id: topicId });
-            try {
-                if (topicId !== 'main') {
-                    const topic = await bot.getForumTopic(chatKey, Number(topicId));
-                    if (topic?.name) {
-                        topicLabel = topic.name;
-                    }
-                }
-            } catch (error) {
-                // ignore topic lookup errors
-            }
-            const langLabel = formatLanguageLabel(entry.lang);
-            const link = buildLanguageTopicLink(chatKey, topicId);
-            const parts = [topicLabel, `– ${langLabel}`];
-            if (link) {
-                parts.push(`(<a href=\"${escapeHtml(link)}\">${escapeHtml(t(lang, 'language_hub_topic_link'))}</a>)`);
-            }
-            lines.push(`• ${parts.join(' ')}`);
-            inline_keyboard.push([{
-                text: `🗑️ ${topicLabel}`,
-                callback_data: `lang_topic_clear|${chatKey}|${topicId}`
-            }]);
-        }
-    }
-
-    inline_keyboard.push([
-        { text: `${t(lang, 'admin_hub_button_home')}`, callback_data: 'admin_hub_from_menu' },
-        { text: `🔄 ${t(lang, 'language_hub_refresh')}`, callback_data: `lang_admin_refresh|${chatKey}` }
-    ]);
-    inline_keyboard.push([{ text: `✖️ ${t(lang, 'language_hub_close')}`, callback_data: `lang_admin_close|${chatKey}` }]);
-
-    return { text: lines.filter(Boolean).join('\n'), reply_markup: { inline_keyboard } };
-}
-
-async function sendLanguageAdminMenu(userId, chatId, { fallbackLang, forceRefresh = false } = {}) {
-    const lang = await resolveNotificationLanguage(userId, fallbackLang);
-    const chatKey = chatId?.toString();
-    if (!chatKey || !userId) {
-        return null;
-    }
-    const isAdmin = await isGroupAdmin(chatKey, userId);
-    if (!isAdmin) {
-        await bot.sendMessage(userId, t(lang, 'language_hub_no_permission'), { reply_markup: buildCloseKeyboard(lang) });
-        return null;
-    }
-
-    const payload = await buildLanguageAdminView(chatKey, lang);
-    const sessionKey = `${userId}:${chatKey}`;
-    const existing = languageHubSessions.get(sessionKey);
-
-    if (existing && !forceRefresh) {
-        try {
-            const edited = await bot.editMessageText(payload.text, {
-                chat_id: userId,
-                message_id: existing.messageId,
-                parse_mode: 'HTML',
-                disable_web_page_preview: true,
-                reply_markup: payload.reply_markup
-            });
-            return { messageId: existing.messageId, replaced: false };
-        } catch (error) {
-            try {
-                await bot.deleteMessage(userId, existing.messageId);
-            } catch (cleanupError) {
-                // ignore cleanup errors
-            }
-        }
-    }
-
-    const sent = await bot.sendMessage(userId, payload.text, {
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        reply_markup: payload.reply_markup
-    });
-    if (sent?.message_id) {
-        languageHubSessions.set(sessionKey, { messageId: sent.message_id, chatId: chatKey });
-    }
-    return { messageId: sent?.message_id || null, replaced: true };
-}
 
 const { createRmchatHandlers } = require('./src/app/rmchat');
 const { executeRmchatAction } = createRmchatHandlers({
@@ -1877,6 +1542,29 @@ const {
 
 const languageHubSessions = new Map();
 
+// Language handlers — extracted to src/app/languageHandlers.js
+const {
+    buildLanguagePickerView,
+    buildLanguageChangeFeedback,
+    handleLangCommand,
+    handleLanguageCommand,
+    handleTopicLanguageCommand,
+    handleLanguageSelection,
+    handleTopicLanguageSelection,
+    formatLanguageLabel,
+    buildLanguageTopicLink,
+    buildLanguageAdminView,
+    sendLanguageAdminMenu,
+    LANGUAGE_MENU_AUTO_CLOSE_MS,
+    LANGUAGE_MENU_FEEDBACK_MS
+} = createLanguageHandlers({
+    bot, db, t, defaultLang, escapeHtml,
+    getLang, sendReply, scheduleMessageDeletion,
+    isGroupAdmin, resolveGroupLanguage, resolveTopicLanguage,
+    resolveNotificationLanguage,
+    buildCloseKeyboard, buildLanguageMenuText, buildLanguageKeyboardWithPrefix,
+    findLanguageOption, openAdminHub, languageHubSessions
+});
 
 function startTelegramBot() {
 
@@ -1937,7 +1625,7 @@ function startTelegramBot() {
                     await bot.setMyCommands(commands, { scope, language_code: langCode });
                 } catch (error) {
                     const body = error?.response?.body ? ` | body=${JSON.stringify(error.response.body)}` : ''; // eslint-disable-line no-await-in-loop
-                    console.error(`[Bot] Failed to register commands for scope ${scope?.type} lang=${langCode}: ${error.message}${body}`);
+                    log.error(`Failed to register commands for scope ${scope?.type} lang=${langCode}: ${error.message}${body}`);
                 }
             }
         }
@@ -1983,7 +1671,7 @@ function startTelegramBot() {
                 await cmd.handler(msg, { args, argsText, lang, command: cmd });
             } catch (error) {
                 hasError = true;
-                console.error(`[ModularCmd] Error in /${cmd.name}:`, error.message);
+                log.child('ModularCmd').error(`Error in /${cmd.name}:`, error.message);
                 await sendReply(msg, t(lang, 'command_execution_error'));
             }
 
@@ -2022,14 +1710,14 @@ function startTelegramBot() {
                     await cmd.handler(msg, { args, argsText, lang, command: cmd });
                 } catch (error) {
                     hasError = true;
-                    console.error(`[ModularCmd] Error in /${alias} (→/${cmd.name}):`, error.message);
+                    log.child('ModularCmd').error(`Error in /${alias} (→/${cmd.name}):`, error.message);
                     await sendReply(msg, t(lang, 'command_execution_error'));
                 }
                 commandRegistry.recordStats(cmd.name, Date.now() - startTime, hasError);
             });
         }
     }
-    console.log(`[Bot] Registered ${modularCommands.length} modular commands with ${modularCommands.reduce((sum, c) => sum + (c.aliases?.length || 0), 0)} aliases`);
+    log.info(`Registered ${modularCommands.length} modular commands with ${modularCommands.reduce((sum, c) => sum + (c.aliases?.length || 0), 0)} aliases`);
 
 
     const {
@@ -2069,7 +1757,7 @@ function startTelegramBot() {
 
         startVideoFileIds.splice(index, 1);
         const reason = error?.message ? ` (${error.message})` : '';
-        console.warn(`[Start] Disabled intro video ID after failure: ${videoId}${reason}`);
+        log.child('Start').warn(`Disabled intro video ID after failure: ${videoId}${reason}`);
     }
 
     async function sendAiIntroMedia(msg, lang, caption, replyMarkup = null) {
@@ -2094,7 +1782,7 @@ function startTelegramBot() {
             await p;
             return true;
         } catch (error) {
-            console.error(`[AI] Failed to send intro media: ${error.message}`);
+            log.child('AI').error(`Failed to send intro media: ${error.message}`);
             disableStartVideo(startVideo, error);
         }
 
@@ -2470,7 +2158,7 @@ function startTelegramBot() {
                 if (pendingData?.originalMsg) {
                     originalMsg = pendingData.originalMsg;
                     originalText = pendingData.originalMsg.text || pendingData.originalMsg.caption || '';
-                    console.log('[AutoConfirm] ✓ Retrieved original text from pending confirmations');
+                    log.child('AutoConfirm').info('✓ Retrieved original text from pending confirmations');
                 }
             }
 
@@ -2488,7 +2176,7 @@ function startTelegramBot() {
 
                 if (originalText) {
                     // Route through /aib for AI response
-                    console.log('[AutoConfirm] ✓ Cancel pressed, routing to /aib:', originalText.slice(0, 50) + '...');
+                    log.child('AutoConfirm').info('✓ Cancel pressed, routing to /aib:', originalText.slice(0, 50) + '...');
 
                     // Create synthetic message for /aib
                     const syntheticMsg = {
@@ -2509,7 +2197,7 @@ function startTelegramBot() {
 
                     await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'confirm_cancelled') || '❌ Đã hủy, bot sẽ trả lời bình thường' });
                 } else {
-                    console.log('[AutoConfirm] ✓ Cancel pressed, no original text found');
+                    log.child('AutoConfirm').info('✓ Cancel pressed, no original text found');
                     await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'confirm_cancelled') || '❌ Đã hủy' });
                 }
                 return;
@@ -2566,7 +2254,7 @@ function startTelegramBot() {
             }
 
             if (commandText) {
-                console.log('[AutoConfirm] ✓ Executing confirmed command:', commandText);
+                log.child('AutoConfirm').info('✓ Executing confirmed command:', commandText);
 
                 // Create synthetic message from original context
                 const syntheticMsg = {
@@ -2618,7 +2306,7 @@ function startTelegramBot() {
 
             if (action === 'cancel') {
                 // User wants normal response - re-process audio without function calling
-                console.log('[VoiceConfirm] Cancel pressed, re-processing for normal response');
+                log.child('VoiceConfirm').info('Cancel pressed, re-processing for normal response');
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'voice_confirm_cancelled') || '❌ Cancelled, processing normal reply...' });
 
                 try {
@@ -2668,7 +2356,7 @@ function startTelegramBot() {
                         await bot.sendMessage(msg.chat.id, t(originalLang, 'ai_live_audio_error') || '⚠️ Voice processing failed.', buildThreadedOptions(msg, {}));
                     }
                 } catch (error) {
-                    console.error('[VoiceConfirm] Re-processing failed:', error.message);
+                    log.child('VoiceConfirm').error('Re-processing failed:', error.message);
                     await bot.sendMessage(msg.chat.id, t(originalLang, 'ai_live_audio_error') || '⚠️ Voice processing failed.', buildThreadedOptions(msg, {}));
                 }
 
@@ -2677,7 +2365,7 @@ function startTelegramBot() {
 
             if (action === 'execute') {
                 // Execute the function
-                console.log('[VoiceConfirm] Execute pressed, running function');
+                log.child('VoiceConfirm').info('Execute pressed, running function');
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'voice_confirm_executing') || '▶️ Executing...' });
 
                 try {
@@ -2713,7 +2401,7 @@ function startTelegramBot() {
 
                     await bot.sendMessage(msg.chat.id, resultText, buildThreadedOptions(msg, { parse_mode: 'HTML' }));
                 } catch (error) {
-                    console.error('[VoiceConfirm] Function execution failed:', error.message);
+                    log.child('VoiceConfirm').error('Function execution failed:', error.message);
                     await bot.sendMessage(msg.chat.id, `⚠️ ${t(originalLang, 'voice_confirm_error') || 'Function execution failed'}`, buildThreadedOptions(msg, {}));
                 }
 
@@ -2775,7 +2463,7 @@ function startTelegramBot() {
                     });
                 }
             } catch (error) {
-                console.warn(`[AI] Failed to render TTS settings: ${error.message}`);
+                log.child('AI').warn(`Failed to render TTS settings: ${error.message}`);
             }
 
             await bot.answerCallbackQuery(queryId);
@@ -2865,7 +2553,7 @@ function startTelegramBot() {
                     await startAiApiAddPrompt(query.from.id, callbackLang, provider);
                     await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'ai_api_add_dm'), show_alert: true });
                 } catch (error) {
-                    console.warn(`[AI API] Cannot DM ${query.from.id}: ${error.message}`);
+                    log.child('AIAPI').warn(`Cannot DM ${query.from.id}: ${error.message}`);
                     await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'help_action_dm_blocked'), show_alert: true });
                 }
                 return;
@@ -3002,7 +2690,7 @@ function startTelegramBot() {
                         });
                     }
                 } catch (error) {
-                    console.warn(`[AI] Failed to render model selection: ${error.message}`);
+                    log.child('AI').warn(`Failed to render model selection: ${error.message}`);
                 }
                 await bot.answerCallbackQuery(queryId);
                 return;
@@ -3083,7 +2771,7 @@ function startTelegramBot() {
                         });
                     }
                 } catch (error) {
-                    console.warn(`[AI] Failed to go back to API menu: ${error.message}`);
+                    log.child('AI').warn(`Failed to go back to API menu: ${error.message}`);
                 }
                 await bot.answerCallbackQuery(queryId);
                 return;
@@ -3645,7 +3333,7 @@ function startTelegramBot() {
                             await bot.leaveChat(targetChatId);
                         }
                     } catch (error) {
-                        console.warn(`[Owner] Failed to leave group ${targetChatId}: ${error.message}`);
+                        log.child('Owner').warn(`Failed to leave group ${targetChatId}: ${error.message}`);
                     }
 
                     await cleanupGroupProfile(targetChatId);
@@ -3808,7 +3496,7 @@ function startTelegramBot() {
                             });
                         } catch (e) { /* ignore */ }
                     } catch (error) {
-                        console.error('[Persona] Delete custom error:', error.message);
+                        log.child('Persona').error('Delete custom error:', error.message);
                         await bot.answerCallbackQuery(queryId, { text: 'Error deleting persona', show_alert: true });
                     }
                     return;
@@ -3930,7 +3618,7 @@ function startTelegramBot() {
                         await bot.sendMessage(chatId, menu.text, { parse_mode: 'HTML', reply_markup: menu.replyMarkup });
                     }
                 } catch (error) {
-                    console.warn(`[WalletChains] Failed to paginate chain menu: ${error.message}`);
+                    log.child('WalletChains').warn(`Failed to paginate chain menu: ${error.message}`);
                 }
                 await bot.answerCallbackQuery(queryId);
                 return;
@@ -3968,7 +3656,7 @@ function startTelegramBot() {
                 }
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'wallet_action_done') });
             } catch (error) {
-                console.error(`[WalletChains] Failed to render wallet menu: ${error.message}`);
+                log.child('WalletChains').error(`Failed to render wallet menu: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'wallet_overview_error'), show_alert: true });
             }
             return;
@@ -3997,7 +3685,7 @@ function startTelegramBot() {
 
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'wallet_action_done') });
             } catch (error) {
-                console.error(`[WalletPick] Failed to render chains for ${wallet}: ${error.message}`);
+                log.child('WalletPick').error(`Failed to render chains for ${wallet}: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'wallet_overview_error'), show_alert: true });
             }
             return;
@@ -4138,7 +3826,7 @@ function startTelegramBot() {
 
                 await bot.answerCallbackQuery(queryId);
             } catch (error) {
-                console.error(`[WalletDexPage] Failed to paginate DEX assets: ${error.message}`);
+                log.child('WalletDexPage').error(`Failed to paginate DEX assets: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'wallet_overview_error'), show_alert: true });
             }
             return;
@@ -4192,7 +3880,7 @@ function startTelegramBot() {
                     || Number(entry.chainIndex) === chainId
                     || (chainShort && entry.chainShortName === chainShort));
             } catch (error) {
-                console.warn(`[WalletChains] Failed to load chains for selection: ${error.message}`);
+                log.child('WalletChains').warn(`Failed to load chains for selection: ${error.message}`);
             }
 
             const chainContext = chainEntry || {
@@ -4278,7 +3966,7 @@ function startTelegramBot() {
                         });
                         rendered = true;
                     } catch (editError) {
-                        console.warn(`[WalletChains] editMessageText failed, retrying with sendMessage: ${editError.message}`);
+                        log.child('WalletChains').warn(`editMessageText failed, retrying with sendMessage: ${editError.message}`);
                     }
                 }
 
@@ -4289,22 +3977,22 @@ function startTelegramBot() {
                 try {
                     await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'wallet_action_done') });
                 } catch (ackError) {
-                    console.warn(`[WalletChains] Callback ack failed: ${ackError.message}`);
+                    log.child('WalletChains').warn(`Callback ack failed: ${ackError.message}`);
                 }
             } catch (error) {
-                console.error(`[WalletChains] Failed to render holdings for chain ${chainId}: ${error.message}`);
+                log.child('WalletChains').error(`Failed to render holdings for chain ${chainId}: ${error.message}`);
                 const fallback = t(callbackLang, 'wallet_overview_wallet_no_token');
                 const backTarget = targetWallet || null;
                 const backCallback = backTarget ? `wallet_chain_menu|${encodeURIComponent(backTarget)}` : 'wallet_overview';
                 try {
                     await bot.sendMessage(chatId, fallback, { parse_mode: 'HTML', reply_markup: appendCloseButton(null, callbackLang, { backCallbackData: backCallback }) });
                 } catch (sendError) {
-                    console.warn(`[WalletChains] Fallback send failed: ${sendError.message}`);
+                    log.child('WalletChains').warn(`Fallback send failed: ${sendError.message}`);
                 }
                 try {
                     await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'wallet_chain_error'), show_alert: true });
                 } catch (ackError) {
-                    console.warn(`[WalletChains] Callback ack error after failure: ${ackError.message}`);
+                    log.child('WalletChains').warn(`Callback ack error after failure: ${ackError.message}`);
                 }
             }
             return;
@@ -4363,7 +4051,7 @@ function startTelegramBot() {
                 });
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'wallet_action_done') });
             } catch (error) {
-                console.error(`[WalletToken] Failed to run ${actionKey}: ${error.message}`);
+                log.child('WalletToken').error(`Failed to run ${actionKey}: ${error.message}`);
                 const alertText = error.message === 'wallet_token_missing_contract'
                     ? t(callbackLang, 'wallet_token_action_no_contract')
                     : t(callbackLang, 'wallet_token_action_error');
@@ -4452,7 +4140,7 @@ function startTelegramBot() {
                     await startRegisterWizard(query.from?.id?.toString(), callbackLang);
                     await bot.answerCallbackQuery(queryId);
                 } catch (error) {
-                    console.warn(`[WalletMgr] Cannot start register wizard: ${error.message}`);
+                    log.child('WalletMgr').warn(`Cannot start register wizard: ${error.message}`);
                     await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'help_action_dm_blocked'), show_alert: true });
                 }
                 return;
@@ -4727,7 +4415,7 @@ function startTelegramBot() {
                     });
                 } catch (error) {
                     if (!/message is not modified/i.test(error?.response?.body?.description || '')) {
-                        console.warn(`[Filters] Failed to refresh list after deletion in ${targetChatId}: ${error.message}`);
+                        log.child('Filters').warn(`Failed to refresh list after deletion in ${targetChatId}: ${error.message}`);
                     }
                 }
             }
@@ -4855,7 +4543,7 @@ function startTelegramBot() {
                             await bot.editMessageReplyMarkup(replyMarkup, { chat_id: chatId, message_id: messageId });
                             saveHelpMessageState(chatId.toString(), messageId, { view: 'user', group: selectedGroup });
                         } catch (innerError) {
-                            console.warn(`[Help] Failed to update help view for ${chatId}: ${sanitizeSecrets(description || innerError?.message || innerError?.toString() || '')}`);
+                            log.child('Help').warn(`Failed to update help view for ${chatId}: ${sanitizeSecrets(description || innerError?.message || innerError?.toString() || '')}`);
                         }
                     }
                 }
@@ -4886,11 +4574,11 @@ function startTelegramBot() {
             } catch (error) {
                 const description = error?.response?.body?.description || error?.message || '';
                 if (error?.code === 'ETELEGRAM' && /query is too old|query ID is invalid/i.test(description)) {
-                    console.warn(`[Help] Ignored stale help callback for ${commandKey}: ${sanitizeSecrets(description)}`);
+                    log.child('Help').warn(`Ignored stale help callback for ${commandKey}: ${sanitizeSecrets(description)}`);
                     return;
                 }
 
-                console.error(`[Help] Failed to execute ${commandKey} from help: ${sanitizeSecrets(description || error?.toString())}`);
+                log.child('Help').error(`Failed to execute ${commandKey} from help: ${sanitizeSecrets(description || error?.toString())}`);
                 await bot.answerCallbackQuery(queryId, {
                     text: t(callbackLang, 'help_action_failed'),
                     show_alert: true
@@ -4905,7 +4593,7 @@ function startTelegramBot() {
                 await openAdminHub(query.from.id, { fallbackLang: callbackLang, mode: session?.mode });
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'admin_hub_refreshed') });
             } catch (error) {
-                console.error(`[AdminHub] Failed to refresh hub for ${query.from.id}: ${error.message}`);
+                log.child('AdminHub').error(`Failed to refresh hub for ${query.from.id}: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_command_error'), show_alert: true });
             }
             return;
@@ -4918,7 +4606,7 @@ function startTelegramBot() {
                 await openAdminHub(query.from.id, { fallbackLang: callbackLang, mode: nextMode });
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'admin_hub_refreshed') });
             } catch (error) {
-                console.error(`[AdminHub] Failed to open hub from menu for ${query.from.id}: ${error.message}`);
+                log.child('AdminHub').error(`Failed to open hub from menu for ${query.from.id}: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_command_error'), show_alert: true });
             }
             return;
@@ -4979,7 +4667,7 @@ function startTelegramBot() {
                     await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_menu_opening') });
                 }
             } catch (error) {
-                console.error(`[AdminHub] Failed to open menu for ${query.from.id} in ${targetChatId}: ${error.message}`);
+                log.child('AdminHub').error(`Failed to open menu for ${query.from.id} in ${targetChatId}: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_command_error'), show_alert: true });
             }
             return;
@@ -5002,7 +4690,7 @@ function startTelegramBot() {
                 }
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'admin_hub_refreshed') });
             } catch (error) {
-                console.error(`[LangHub] Failed to refresh for ${query.from.id}: ${error.message}`);
+                log.child('LangHub').error(`Failed to refresh for ${query.from.id}: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_command_error'), show_alert: true });
             }
             return;
@@ -5054,7 +4742,7 @@ function startTelegramBot() {
                     }
                 }
             } catch (error) {
-                console.warn(`[LangHub] Failed to refresh after removal: ${error.message}`);
+                log.child('LangHub').warn(`Failed to refresh after removal: ${error.message}`);
             }
 
             await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'language_hub_topic_removed') });
@@ -5487,7 +5175,7 @@ function startTelegramBot() {
                     text: t(callbackLang, 'checkin_admin_section_opened', { section: sectionLabel })
                 });
             } catch (error) {
-                console.error(`[AdminMenu] Failed to switch view for ${query.from.id}: ${error.message}`);
+                log.child('AdminMenu').error(`Failed to switch view for ${query.from.id}: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_command_error'), show_alert: true });
             }
             return;
@@ -5646,7 +5334,7 @@ function startTelegramBot() {
 
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_user_prompt_alert') });
             } catch (error) {
-                console.error(`[Checkin] Failed to broadcast member guide for ${targetChatId}: ${error.message}`);
+                log.child('Checkin').error(`Failed to broadcast member guide for ${targetChatId}: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_command_error'), show_alert: true });
             }
             return;
@@ -5673,7 +5361,7 @@ function startTelegramBot() {
 
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_user_leaderboard_alert') });
             } catch (error) {
-                console.error(`[Checkin] Failed to broadcast leaderboard guide for ${targetChatId}: ${error.message}`);
+                log.child('Checkin').error(`Failed to broadcast leaderboard guide for ${targetChatId}: ${error.message}`);
                 await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'checkin_admin_command_error'), show_alert: true });
             }
             return;
@@ -6862,7 +6550,7 @@ function startTelegramBot() {
             try {
                 await sendAdminMenu(query.from.id, targetChatId, { fallbackLang: callbackLang });
             } catch (error) {
-                console.error(`[Checkin] Không th? g?i menu qu?n lý: ${error.message}`);
+                log.child('Checkin').error(`Không th? g?i menu qu?n lý: ${error.message}`);
             }
             return;
         }
@@ -6956,7 +6644,7 @@ function startTelegramBot() {
             try {
                 await sendIdTelegramDetails(msg, msg, idSession.lang || (await getLang(msg)));
             } catch (error) {
-                console.error(`[IdTelegram] Failed to deliver details: ${error.message}`);
+                log.child('IdTelegram').error(`Failed to deliver details: ${error.message}`);
             }
 
             idTelegramSessions.delete(sessionKey);
@@ -6993,7 +6681,7 @@ function startTelegramBot() {
                     await sendReply(msg, t(lang, 'admin_broadcast_sent_group'));
                 }
             } catch (error) {
-                console.error(`[AdminBroadcast] Failed to forward message: ${error.message}`);
+                log.child('AdminBroadcast').error(`Failed to forward message: ${error.message}`);
                 await sendReply(msg, t(lang, 'help_action_failed'));
             }
             return;
@@ -7258,12 +6946,12 @@ function startTelegramBot() {
                     try {
                         await sendWalletManagerMenu(userId, lang);
                     } catch (err) {
-                        console.warn(`[RegisterWizard] Failed to refresh wallet manager for ${userId}: ${err.message}`);
+                        log.child('RegisterWizard').warn(`Failed to refresh wallet manager for ${userId}: ${err.message}`);
                     }
 
                     registerWizardStates.delete(userId);
                 } catch (error) {
-                    console.error(`[RegisterWizard] Failed to save wallet for ${userId}: ${error.message}`);
+                    log.child('RegisterWizard').error(`Failed to save wallet for ${userId}: ${error.message}`);
                     await sendEphemeralMessage(userId, t(lang, 'register_help_error'));
                 }
                 return;
@@ -7307,7 +6995,7 @@ function startTelegramBot() {
                     });
                     txhashWizardStates.delete(userId);
                 } catch (error) {
-                    console.error(`[TxhashWizard] Failed to handle txhash for ${userId}: ${error.message}`);
+                    log.child('TxhashWizard').error(`Failed to handle txhash for ${userId}: ${error.message}`);
                     await sendReply(msg, t(effectiveLang, 'txhash_error'), {
                         reply_markup: buildCloseKeyboard(effectiveLang, { backCallbackData: 'txhash_back' })
                     });
@@ -7353,7 +7041,7 @@ function startTelegramBot() {
                     });
                     tokenWizardStates.delete(userId);
                 } catch (error) {
-                    console.error(`[TokenWizard] Failed to handle token for ${userId}: ${error.message}`);
+                    log.child('TokenWizard').error(`Failed to handle token for ${userId}: ${error.message}`);
                     await sendReply(msg, t(effectiveLang, 'token_error'), {
                         reply_markup: buildCloseKeyboard(effectiveLang, { backCallbackData: 'token_back' })
                     });
@@ -7411,7 +7099,7 @@ function startTelegramBot() {
 
                     contractWizardStates.delete(userId);
                 } catch (error) {
-                    console.error(`[ContractWizard] Failed to respond for ${userId}: ${error.message}`);
+                    log.child('ContractWizard').error(`Failed to respond for ${userId}: ${error.message}`);
                     await sendMessageRespectingThread(contractState.chatId, msg, t(effectiveLang, 'contract_invalid'), {
                         reply_markup: buildCloseKeyboard(effectiveLang)
                     });
@@ -7469,7 +7157,7 @@ function startTelegramBot() {
                         await sendEphemeralMessage(userId, t(lang, 'checkin_dm_secret_confirm'));
                     }
                 } catch (error) {
-                    console.error(`[Checkin] Không th? chuy?n ti?p tin nh?n bí m?t: ${error.message}`);
+                    log.child('Checkin').error(`Không th? chuy?n ti?p tin nh?n bí m?t: ${error.message}`);
                     await sendEphemeralMessage(userId, t(lang, 'checkin_dm_secret_error'), {}, 15000);
                 } finally {
                     pendingSecretMessages.delete(userId);
@@ -7729,10 +7417,10 @@ function startTelegramBot() {
             return;
         }
 
-        console.error(`[LỖI BOT POLLING]: ${formatted}`);
+        log.child('LIBOTPOLLING').error(`: ${formatted}`);
     });
 
-    console.log('🤖 [Telegram Bot] Đang chạy...');
+    log.info('🤖 [Telegram Bot] Đang chạy...');
 }
 
 
@@ -7741,7 +7429,7 @@ function startTelegramBot() {
 // ==========================================================
 async function main() {
     try {
-        console.log("Đang khởi động...");
+        log.info('Đang khởi động...');
 
         // Bước 1: Khởi tạo DB
         await db.init();
@@ -7782,7 +7470,7 @@ async function main() {
         };
         await loadCommands(commandDeps);
         startHotReload(commandDeps);
-        console.log(`[CommandSystem] Loaded ${commandRegistry.size} modular commands`);
+        logger.child('CommandSystem').info(`Loaded ${commandRegistry.size} modular commands`);
 
         // Bước 2: Bật API
         startApiServer();
@@ -7792,12 +7480,37 @@ async function main() {
         startCheckinScheduler();
         startPriceAlertScheduler();
 
-        console.log("✅ Tất cả dịch vụ đã sẵn sàng!");
+        log.info('✅ Tất cả dịch vụ đã sẵn sàng!');
 
     } catch (error) {
-        console.error("Lỗi khởi động nghiêm trọng:", error);
+        log.error('Lỗi khởi động nghiêm trọng', error);
         process.exit(1);
     }
 }
 
 main(); // Chạy hàm khởi động chính
+
+// ═══════════════════════════════════════════════════════
+// Graceful Shutdown — protect pending swap/transfer ops
+// ═══════════════════════════════════════════════════════
+let isShuttingDown = false;
+function gracefulShutdown(signal) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    log.warn(`Received ${signal}. Graceful shutdown...`);
+    try {
+        bot.stopPolling({ cancel: true });
+        log.info('Telegram polling stopped.');
+    } catch (err) {
+        log.error('Error stopping polling', err);
+    }
+    // Wait for pending operations (swaps, transfers, etc.)
+    const GRACE_PERIOD_MS = 5000;
+    log.info(`Waiting ${GRACE_PERIOD_MS / 1000}s for pending operations...`);
+    setTimeout(() => {
+        log.info('Shutdown complete. Goodbye! 👋');
+        process.exit(0);
+    }, GRACE_PERIOD_MS);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

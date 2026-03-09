@@ -1,5 +1,7 @@
 const ethers = require('ethers');
 
+const logger = require('../core/logger');
+const log = logger.child('Watchers');
 const {
     XLAYER_RPC_URL,
     XLAYER_WS_URLS,
@@ -17,7 +19,7 @@ try {
         xlayerProvider = new ethers.JsonRpcProvider(XLAYER_RPC_URL);
     }
 } catch (error) {
-    console.error(`[RPC] Khong the khoi tao RPC Xlayer: ${error.message}`);
+    log.child('RPC').error(`Khong the khoi tao RPC Xlayer: ${error.message}`);
     xlayerProvider = null;
 }
 
@@ -62,7 +64,7 @@ async function isProviderHealthy(provider, timeoutMs = WALLET_RPC_HEALTH_TIMEOUT
         ]);
         return true;
     } catch (error) {
-        console.warn(`[RPC] Provider health check failed: ${error.message}`);
+        log.child('RPC').warn(`Provider health check failed: ${error.message}`);
         return false;
     }
 }
@@ -80,12 +82,12 @@ function createXlayerWebsocketProvider() {
         try {
             const provider = new ethers.WebSocketProvider(url);
             provider.on('error', (error) => {
-                console.warn(`[WSS] Loi ket noi WebSocket ${url}: ${error.message}`);
+                log.child('WSS').warn(`Loi ket noi WebSocket ${url}: ${error.message}`);
             });
-            console.log(`[WSS] Da ket noi toi ${url}`);
+            log.child('WSS').info(`Da ket noi toi ${url}`);
             return provider;
         } catch (error) {
-            console.warn(`[WSS] Khong the ket noi ${url}: ${error.message}`);
+            log.child('WSS').warn(`Khong the ket noi ${url}: ${error.message}`);
         }
     }
 
@@ -170,13 +172,13 @@ function ensureWalletWatcher(walletAddress, seedTokenAddresses = []) {
             provider.on(incomingFilter, handler);
             subscriptions.push({ filter: incomingFilter, handler });
         } catch (error) {
-            console.warn(`[WSS] Khong the dang ky incoming logs cho ${normalizedWallet}: ${error.message}`);
+            log.child('WSS').warn(`Khong the dang ky incoming logs cho ${normalizedWallet}: ${error.message}`);
         }
         try {
             provider.on(outgoingFilter, handler);
             subscriptions.push({ filter: outgoingFilter, handler });
         } catch (error) {
-            console.warn(`[WSS] Khong the dang ky outgoing logs cho ${normalizedWallet}: ${error.message}`);
+            log.child('WSS').warn(`Khong the dang ky outgoing logs cho ${normalizedWallet}: ${error.message}`);
         }
     }
 

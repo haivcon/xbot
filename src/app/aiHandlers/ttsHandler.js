@@ -6,6 +6,8 @@
  */
 
 const path = require('path');
+const logger = require('../../core/logger');
+const log = logger.child('TtsHandler');
 const fs = require('fs');
 
 /**
@@ -63,7 +65,7 @@ async function cleanupTtsFile(filePath) {
         await fs.promises.unlink(filePath);
         return true;
     } catch (error) {
-        console.warn(`[TTS] Failed to cleanup temp file: ${error.message}`);
+        log.child('TTS').warn(`Failed to cleanup temp file: ${error.message}`);
         return false;
     }
 }

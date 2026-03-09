@@ -1,30 +1,22 @@
-function createLanguageHandlers(deps = {}) {
-    const {
-        bot,
-        db,
-        t,
-        defaultLang,
-        resolveLangCode,
-        findLanguageOption,
-        buildLanguageMenuText,
-        buildLanguageKeyboardWithPrefix,
-        getLang,
-        isGroupAdmin,
-        sendReply,
-        scheduleMessageDeletion,
-        resolveTopicLanguage,
-        resolveGroupLanguage,
-        resolveNotificationLanguage,
-        openAdminHub,
-        buildCloseKeyboard,
-        languageHubSessions,
-        escapeHtml,
-        languageMenuAutoCloseMs = 10000,
-        languageMenuFeedbackMs = 4500
-    } = deps;
+/**
+ * Language Handlers — extracted from index.js
+ * Manages language picker UI, language/topic language switching, and admin language hub.
+ */
+const { resolveLangCode } = require('../core/i18n');
 
-    const LANGUAGE_MENU_AUTO_CLOSE_MS = languageMenuAutoCloseMs;
-    const LANGUAGE_MENU_FEEDBACK_MS = languageMenuFeedbackMs;
+const logger = require('../core/logger');
+const log = logger.child('LanguageHandlers');
+function createLanguageHandlers({
+    bot, db, t, defaultLang, escapeHtml,
+    getLang, sendReply, scheduleMessageDeletion,
+    isGroupAdmin, resolveGroupLanguage, resolveTopicLanguage,
+    resolveNotificationLanguage,
+    buildCloseKeyboard, buildLanguageMenuText, buildLanguageKeyboardWithPrefix,
+    findLanguageOption, openAdminHub, languageHubSessions
+}) {
+
+    const LANGUAGE_MENU_AUTO_CLOSE_MS = 10000;
+    const LANGUAGE_MENU_FEEDBACK_MS = 4500;
 
     function buildLanguagePickerView(lang, currentLang, isGroupChat = false, { prefix = 'lang' } = {}) {
         const normalizedLang = resolveLangCode(currentLang || lang || defaultLang);
@@ -172,7 +164,7 @@ function createLanguageHandlers(deps = {}) {
                     await db.updateGroupSubscriptionLanguage(chatKey, targetLang);
                 }
             } catch (error) {
-                console.warn(`[GroupLanguage] Unable to update broadcast language for ${chatKey}: ${error.message}`);
+                log.child('GroupLanguage').warn(`Unable to update broadcast language for ${chatKey}: ${error.message}`);
             }
         }
 
@@ -187,7 +179,7 @@ function createLanguageHandlers(deps = {}) {
             scheduleMessageDeletion(confirmation.chat.id, confirmation.message_id, LANGUAGE_MENU_FEEDBACK_MS);
         }
 
-        console.log(`[BOT] ChatID ${chatKey} changed language to: ${targetLang}`);
+        log.child('BOT').info(`ChatID ${chatKey} changed language to: ${targetLang}`);
         await bot.answerCallbackQuery(query.id, { text: feedback.toast });
     }
 
@@ -230,7 +222,7 @@ function createLanguageHandlers(deps = {}) {
             scheduleMessageDeletion(confirmation.chat.id, confirmation.message_id, LANGUAGE_MENU_FEEDBACK_MS);
         }
 
-        console.log(`[BOT] Topic ${chatKey}/${topicId} changed language to: ${targetLang}`);
+        log.child('BOT').info(`Topic ${chatKey}/${topicId} changed language to: ${targetLang}`);
         await bot.answerCallbackQuery(query.id, { text: feedback.toast });
     }
 
@@ -295,9 +287,9 @@ function createLanguageHandlers(deps = {}) {
                 }
                 const langLabel = formatLanguageLabel(entry.lang);
                 const link = buildLanguageTopicLink(chatKey, topicId);
-                const parts = [topicLabel, `- ${langLabel}`];
+                const parts = [topicLabel, `– ${langLabel}`];
                 if (link) {
-                    parts.push(`(<a href="${escapeHtml(link)}">${escapeHtml(t(lang, 'language_hub_topic_link'))}</a>)`);
+                    parts.push(`(<a href=\"${escapeHtml(link)}\">${escapeHtml(t(lang, 'language_hub_topic_link'))}</a>)`);
                 }
                 lines.push(`• ${parts.join(' ')}`);
                 inline_keyboard.push([{
@@ -311,7 +303,7 @@ function createLanguageHandlers(deps = {}) {
             { text: `${t(lang, 'admin_hub_button_home')}`, callback_data: 'admin_hub_from_menu' },
             { text: `🔄 ${t(lang, 'language_hub_refresh')}`, callback_data: `lang_admin_refresh|${chatKey}` }
         ]);
-        inline_keyboard.push([{ text: `✖ ${t(lang, 'language_hub_close')}`, callback_data: `lang_admin_close|${chatKey}` }]);
+        inline_keyboard.push([{ text: `✖️ ${t(lang, 'language_hub_close')}`, callback_data: `lang_admin_close|${chatKey}` }]);
 
         return { text: lines.filter(Boolean).join('\n'), reply_markup: { inline_keyboard } };
     }
@@ -363,17 +355,19 @@ function createLanguageHandlers(deps = {}) {
     }
 
     return {
+        buildLanguagePickerView,
+        buildLanguageChangeFeedback,
         handleLangCommand,
         handleLanguageCommand,
         handleTopicLanguageCommand,
         handleLanguageSelection,
         handleTopicLanguageSelection,
-        sendLanguageAdminMenu,
-        buildLanguagePickerView,
-        buildLanguageChangeFeedback,
         formatLanguageLabel,
         buildLanguageTopicLink,
-        buildLanguageAdminView
+        buildLanguageAdminView,
+        sendLanguageAdminMenu,
+        LANGUAGE_MENU_AUTO_CLOSE_MS,
+        LANGUAGE_MENU_FEEDBACK_MS
     };
 }
 

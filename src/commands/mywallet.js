@@ -1,4 +1,6 @@
 const { enforceOwnerCommandLimit } = require('../features/auth/utils');
+const logger = require('../core/logger');
+const log = logger.child('Mywallet');
 const { getLang, t } = require('../../i18n');
 const db = require('../../db.js');
 const { sendReply } = require('../utils/chat');
@@ -23,7 +25,7 @@ module.exports = {
             const menu = await buildWalletSelectMenu(lang, chatId, wallets);
             await sendReply(msg, menu.text, { parse_mode: 'HTML', reply_markup: menu.replyMarkup });
         } catch (error) {
-            console.error(`[MyWallet] Failed to render wallet for ${chatId}: ${error.message}`);
+            log.error(`Failed to render wallet for ${chatId}: ${error.message}`);
             const fallback = t(lang, 'wallet_overview_error');
             await sendReply(msg, fallback, { parse_mode: 'Markdown', reply_markup: buildWalletActionKeyboard(lang) });
         }

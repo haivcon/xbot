@@ -1,4 +1,6 @@
 const { OWNER_PASSWORD, BOT_OWNER_ID, defaultLang, ADDITIONAL_OWNER_USERNAME, coOwnerIds } = require('../../config');
+const logger = require('../../core/logger');
+const log = logger.child('Owner');
 const db = require('../../../db.js');
 const bot = require('../../core/bot');
 const { t_ } = require('../../../i18n');
@@ -49,7 +51,7 @@ async function registerCoOwner(userId, fromInfo = {}, addedBy = null) {
     try {
         await db.addCoOwner(userId, payload);
     } catch (error) {
-        console.error(`[Owner] Failed to persist co-owner ${userId}: ${error.message}`);
+        log.error(`Failed to persist co-owner ${userId}: ${error.message}`);
     }
 
     // This was not in the original code, but it seems logical to add the new co-owner to the in-memory set

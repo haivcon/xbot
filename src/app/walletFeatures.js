@@ -1,3 +1,6 @@
+const logger = require('../core/logger');
+const log = logger.child('Wallet');
+
 function createWalletFeatures({ t, escapeHtml, formatCopyableValueHtml, splitTelegramMessageText, buildThreadedOptions, normalizeAddressSafe, normalizeOkxConfigAddress, normalizeNumeric, shortenAddress, buildOkxPortfolioAnalysisUrl, registerWalletTokenContext, appendCloseButton, WALLET_TOKEN_BUTTON_LIMIT, WALLET_TOKEN_ACTIONS, WALLET_TOKEN_ACTION_LOOKUP, WALLET_TOKEN_CANDLE_DAY_SPAN, WALLET_TOKEN_CANDLE_RECENT_LIMIT, WALLET_TOKEN_CANDLE_RECENT_BAR, WALLET_TOKEN_PRICE_INFO_HISTORY_DAYS, WALLET_TOKEN_TX_HISTORY_LIMIT, WALLET_TOKEN_TRADE_LIMIT, WALLET_TOKEN_HOLDER_LIMIT, TOKEN_PRICE_CACHE_TTL, OKX_QUOTE_TOKEN_ADDRESS, OKX_BANMAO_TOKEN_ADDRESS, OKX_OKB_TOKEN_ADDRESSES, OKX_OKB_SYMBOL_KEYS, hasOkxCredentials, callOkxDexEndpoint, fetchOkxDexBalanceSnapshot, pickOkxNumeric, ensureOkxChainDirectory, resolveChainContextShortName, unwrapOkxData, unwrapOkxFirst, walletTokenActionCache, tokenPriceCache, loadWalletOverviewEntries, fetchTokenMarketSnapshot, formatTokenQuantity, resolveTopTokenChainEntry, buildWalletActionKeyboard, subtractDecimalStrings }) {
     const WALLET_TOKEN_ACTION_DEFAULT_CACHE_TTL_MS = (() => {
         const value = Number(process.env.WALLET_TOKEN_ACTION_DEFAULT_CACHE_TTL_MS || 15000);
@@ -140,7 +143,7 @@ function createWalletFeatures({ t, escapeHtml, formatCopyableValueHtml, splitTel
             const snapshot = await fetchOkxDexBalanceSnapshot(normalized, options);
             return { tokens: snapshot.tokens || [], totalUsd: snapshot.totalUsd ?? null };
         } catch (error) {
-            console.warn(`[WalletDex] Failed to fetch snapshot for ${shortenAddress(normalized)}: ${error.message}`);
+            log.child('WalletDex').warn(`Failed to fetch snapshot for ${shortenAddress(normalized)}: ${error.message}`);
             return { tokens: [], totalUsd: null };
         }
     }
@@ -514,7 +517,7 @@ async function sendWalletTokenExtraTexts(botInstance, chatId, extraTexts, option
                 }
                 await botInstance.sendMessage(chatId, text, messageOptions);
             } catch (error) {
-                console.warn(`[WalletToken] Failed to send extra chunk: ${error.message}`);
+                log.child('WalletToken').warn(`Failed to send extra chunk: ${error.message}`);
                 break;
             }
         }
@@ -811,15 +814,15 @@ async function sendWalletTokenExtraTexts(botInstance, chatId, extraTexts, option
                 return { data: resampledEntries };
             } catch (error) {
                 if (!isOkxBarParameterError(error)) {
-                    console.warn(`[WalletToken] Failed to fetch historical price fallback: ${error.message}`);
+                    log.child('WalletToken').warn(`Failed to fetch historical price fallback: ${error.message}`);
                     return null;
                 }
     
-                console.warn(`[WalletToken] Candle fallback rejected bar "${attemptQuery.bar}": ${error.message}`);
+                log.child('WalletToken').warn(`Candle fallback rejected bar "${attemptQuery.bar}": ${error.message}`);
             }
         }
     
-        console.warn('[WalletToken] Candle fallback exhausted all bar variants without data');
+        log.child('WalletToken').warn('Candle fallback exhausted all bar variants without data');
         return null;
     }
     
@@ -2930,7 +2933,7 @@ function formatWalletTokenTradeEntry(row, index = 0) {
             tokenPriceCache.set(cacheKey, { value, expiresAt: now + TOKEN_PRICE_CACHE_TTL });
             return value;
         } catch (error) {
-            console.warn(`[WalletPrice] Failed to load price for ${tokenKey || tokenAddress}: ${error.message}`);
+            log.child('WalletPrice').warn(`Failed to load price for ${tokenKey || tokenAddress}: ${error.message}`);
             tokenPriceCache.set(cacheKey, { value: null, expiresAt: now + 30 * 1000 });
             return null;
         }

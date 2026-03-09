@@ -2,6 +2,8 @@
  * /gas — Check gas prices via OnchainOS Gateway API
  */
 const { enforceBanForMessage, enforceOwnerCommandLimit } = require('../features/auth/utils');
+const logger = require('../core/logger');
+const log = logger.child('Gas');
 const { getLang, t } = require('../../i18n');
 const { sendReply } = require('../utils/chat');
 const { buildCloseKeyboard } = require('../utils/builders');
@@ -112,7 +114,7 @@ module.exports = {
             }
 
         } catch (error) {
-            console.error(`[Gas] Error: ${error.message || error.msg}`);
+            log.error(`Error: ${error.message || error.msg}`);
             try {
                 await bot.editMessageText(t(lang, 'gas_error'), {
                     chat_id: msg.chat.id,

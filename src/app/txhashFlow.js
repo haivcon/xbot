@@ -1,4 +1,6 @@
 const { appendCloseButton } = require('../features/ui');
+const logger = require('../core/logger');
+const log = logger.child('TxhashFlow');
 const { buildPaginatedChainKeyboard, sortChainsWithPriority } = require('../features/chainMenu');
 const { getChainIcon } = require('../features/chainIcons');
 
@@ -63,7 +65,7 @@ function createTxhashFlow({
                 });
             }
         } catch (error) {
-            console.error(`[Txhash] Failed to fetch txhash ${txHash}: ${error.message}`);
+            log.child('Txhash').error(`Failed to fetch txhash ${txHash}: ${error.message}`);
             await sendMessageRespectingThread(chatId, replyContextMessage, t(lang, 'txhash_error'), {
                 reply_markup: buildCloseKeyboard(lang, { backCallbackData: 'txhash_back' })
             });
@@ -89,7 +91,7 @@ function createTxhashFlow({
         try {
             chainEntries = await collectTxhashChainEntries();
         } catch (error) {
-            console.error(`[Txhash] Failed to load chain directory: ${error.message}`);
+            log.child('Txhash').error(`Failed to load chain directory: ${error.message}`);
         }
 
         if (!Array.isArray(chainEntries) || chainEntries.length === 0) {

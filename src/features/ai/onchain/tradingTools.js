@@ -1,4 +1,6 @@
 const onchainos = require('../../../services/onchainos');
+const logger = require('../../../core/logger');
+const log = logger.child('Trading');
 const fs = require('fs');
 const path = require('path');
 const { formatPriceResult, formatSearchResult, formatWalletResult, formatSwapQuoteResult, formatTopTokensResult, formatRecentTradesResult, formatSignalChainsResult, formatSignalListResult, formatProfitRoiResult, formatHolderResult, formatGasResult, formatTokenInfoResult, formatCandlesResult, formatTokenMarketDetail, formatSwapExecutionResult, formatSimulationResult, formatLargeNumber } = require('./formatters');
@@ -8,7 +10,7 @@ const db = require('../../../../db.js');
 module.exports = {
     async get_swap_quote(args, context) {
         try {
-            console.log('[SWAP QUOTE] Calling with args:', JSON.stringify(args));
+            log.child('SWAPQUOTE').info('Calling with args:', JSON.stringify(args));
 
             let chainIndex = args.chainIndex || '196';
             let fromTokenAddress = args.fromTokenAddress;
@@ -65,7 +67,7 @@ module.exports = {
                         }
                     }
                 } catch (secErr) {
-                    console.warn('[SWAP QUOTE] Security check failed, skipping:', secErr.message);
+                    log.child('SWAPQUOTE').warn('Security check failed, skipping:', secErr.message);
                 }
             }
 
@@ -82,9 +84,9 @@ module.exports = {
                         // Use ethers.parseUnits for precision-safe conversion (handles any amount size)
                         args.amount = ethers.parseUnits(String(originalAmount), resolvedDecimals).toString();
 
-                        console.log(`[SWAP QUOTE] Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
+                        log.child('SWAPQUOTE').info(`Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
                     }
-                } catch (e) { console.error('[SWAP QUOTE] Failed auto-decimal:', e.message); }
+                } catch (e) { log.child('SWAPQUOTE').error('Failed auto-decimal:', e.message); }
             }
             // ----------------------------------------
 
@@ -99,14 +101,14 @@ module.exports = {
             } catch (quoteErr) {
                 // Handle OKX 82112 Error: "value difference from this transaction's quote route is higher than 90%"
                 if (quoteErr.code === '82112' || (quoteErr.msg && quoteErr.msg.includes('value difference'))) {
-                    console.error('[SWAP QUOTE] High price impact 82112 error intercepted:', quoteErr.msg);
+                    log.child('SWAPQUOTE').error('High price impact 82112 error intercepted:', quoteErr.msg);
                     return {
                         displayMessage: '❌ <b>Lỗi Báo Giá (Price Impact > 90%):</b>\nSố lượng bạn muốn Swap quá lớn so với thanh khoản hiện tại của Pool, dẫn đến trượt giá (Price Impact) sẽ vượt mốc 90%, có nguy cơ mất phần lớn tài sản.\n\n👉 <i>Vui lòng giảm số lượng Swap xuống rất nhỏ, hoặc chờ dự án bơm thêm thanh khoản.</i>'
                     };
                 }
                 throw quoteErr;
             }
-            console.log('[SWAP QUOTE] Raw OKX response:', JSON.stringify(data).slice(0, 2000));
+            log.child('SWAPQUOTE').info('Raw OKX response:', JSON.stringify(data).slice(0, 2000));
 
             // Fallback to fetch missing token symbols and decimals
             if (data && Array.isArray(data) && data.length > 0) {
@@ -137,7 +139,7 @@ module.exports = {
                             quote.routerResult = router;
                         }
                     } catch (e) {
-                        console.warn('[SWAP QUOTE] Fallback basic info error:', e.message);
+                        log.child('SWAPQUOTE').warn('Fallback basic info error:', e.message);
                     }
                 }
             }
@@ -154,7 +156,7 @@ module.exports = {
                 )`);
                 await dbRun('INSERT INTO swap_quote_history (userId, chainIndex, fromToken, toToken, fromSymbol, toSymbol, amount, quoteAmount, priceImpact, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
                     [context?.userId, chainIndex, fromTokenAddress, toTokenAddress, quoteRouter.fromTokenSymbol || '?', quoteRouter.toTokenSymbol || '?', args.amount, quoteRouter.toTokenAmount || '0', quoteRouter.priceImpactPercentage || '0', Math.floor(Date.now() / 1000)]);
-            } catch (dbErr) { console.warn('[SWAP QUOTE] History log failed:', dbErr.message); }
+            } catch (dbErr) { log.child('SWAPQUOTE').warn('History log failed:', dbErr.message); }
 
             return formatSwapQuoteResult(data, context?.lang);
         } catch (error) {
@@ -234,13 +236,13 @@ module.exports = {
             const provider = new ethers.JsonRpcProvider(rpcUrl);
             const wallet = new ethers.Wallet(privateKey, provider);
 
-            console.log(`[AUTO-SWAP] Starting swap for user ${userId}, wallet ${tw.address}, chain ${chainIndex}`);
+            log.child('AUTOSWAP').info(`Starting swap for user ${userId}, wallet ${tw.address}, chain ${chainIndex}`);
 
             // 3. Check if we need ERC-20 approval (skip for native token)
             const isNativeFrom = fromTokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
             if (!isNativeFrom) {
                 try {
-                    console.log(`[AUTO-SWAP] Getting approval for ${fromTokenAddress}...`);
+                    log.child('AUTOSWAP').info(`Getting approval for ${fromTokenAddress}...`);
                     const approveData = await onchainos.getApproveTransaction(
                         chainIndex,
                         fromTokenAddress.toLowerCase(),
@@ -255,10 +257,10 @@ module.exports = {
                             let currentAllowance = 0n;
                             try {
                                 currentAllowance = await tokenContract.allowance(tw.address, approval.dexContractAddress);
-                            } catch (e) { console.error('[AUTO-SWAP] Error reading allowance, defaulting to 0'); }
+                            } catch (e) { log.child('AUTOSWAP').error('Error reading allowance, defaulting to 0'); }
 
                             if (currentAllowance < BigInt(args.amount)) {
-                                console.log(`[AUTO-SWAP] Allowance ${currentAllowance} < ${args.amount}. Approving INFINITE amount...`);
+                                log.child('AUTOSWAP').info(`Allowance ${currentAllowance} < ${args.amount}. Approving INFINITE amount...`);
                                 // Generate infinite approve data using ethers
                                 const erc20Interface = new ethers.Interface(["function approve(address spender, uint256 amount) public returns (bool)"]);
                                 const infiniteApproveData = erc20Interface.encodeFunctionData("approve", [approval.dexContractAddress, ethers.MaxUint256]);
@@ -274,7 +276,7 @@ module.exports = {
                                     chainId: chainIdNum
                                 });
                                 const approveResult = await onchainos.broadcastTransaction(approveTx, chainIndex, tw.address);
-                                console.log(`[AUTO-SWAP] Approve broadcast:`, JSON.stringify(approveResult));
+                                log.child('AUTOSWAP').info(`Approve broadcast:`, JSON.stringify(approveResult));
                                 // Poll for approval confirmation (max 30s)
                                 const approveOrderId = (Array.isArray(approveResult) ? approveResult[0] : approveResult)?.orderId;
                                 if (approveOrderId) {
@@ -285,8 +287,8 @@ module.exports = {
                                             const order = Array.isArray(status) ? status[0] : status;
                                             const orders = order?.orders || [];
                                             const found = orders.find(o => o.orderId === approveOrderId);
-                                            if (found && found.txStatus === '2') { console.log(`[AUTO-SWAP] Approve confirmed!`); break; }
-                                            if (found && found.txStatus === '3') { console.log(`[AUTO-SWAP] Approve failed, continuing anyway`); break; }
+                                            if (found && found.txStatus === '2') { log.child('AUTOSWAP').info(`Approve confirmed!`); break; }
+                                            if (found && found.txStatus === '3') { log.child('AUTOSWAP').info(`Approve failed, continuing anyway`); break; }
                                         } catch (pollErr) { /* ignore polling errors */ }
                                     }
                                 } else {
@@ -294,17 +296,17 @@ module.exports = {
                                     await new Promise(resolve => setTimeout(resolve, 5000));
                                 }
                             } else {
-                                console.log(`[AUTO-SWAP] Allowance is sufficient (${currentAllowance}). Skipping approve tx.`);
+                                log.child('AUTOSWAP').info(`Allowance is sufficient (${currentAllowance}). Skipping approve tx.`);
                             }
                         }
                     }
                 } catch (approveErr) {
-                    console.error(`[AUTO-SWAP] Approve error (continuing):`, approveErr.msg || approveErr.message);
+                    log.child('AUTOSWAP').error(`Approve error (continuing):`, approveErr.msg || approveErr.message);
                 }
             }
 
             // 4. Get swap quote to determine Auto Slippage
-            console.log(`[AUTO-SWAP] Getting swap quote to determine dynamic auto-slippage...`);
+            log.child('AUTOSWAP').info(`Getting swap quote to determine dynamic auto-slippage...`);
 
             // --- Phase 5 Auto-Decimal Resolution for execution ---
             let originalAmount = args.amount;
@@ -315,9 +317,9 @@ module.exports = {
                         const resolvedDecimals = Number(basicInfo[0].decimal || 18);
                         // Use ethers.parseUnits for precision-safe conversion
                         args.amount = ethers.parseUnits(String(originalAmount), resolvedDecimals).toString();
-                        console.log(`[AUTO-SWAP] Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
+                        log.child('AUTOSWAP').info(`Auto-converted amount ${originalAmount} to ${args.amount} wei based on ${resolvedDecimals} decimals`);
                     }
-                } catch (e) { console.error('[AUTO-SWAP] Failed auto-decimal:', e.message); }
+                } catch (e) { log.child('AUTOSWAP').error('Failed auto-decimal:', e.message); }
             }
             // ----------------------------------------
 
@@ -331,7 +333,7 @@ module.exports = {
                 });
             } catch (quoteErr) {
                 if (quoteErr.code === '82112' || (quoteErr.msg && quoteErr.msg.includes('value difference'))) {
-                    console.error('[AUTO-SWAP] High price impact 82112 error intercepted:', quoteErr.msg);
+                    log.child('AUTOSWAP').error('High price impact 82112 error intercepted:', quoteErr.msg);
                     return { displayMessage: '❌ <b>Lỗi Swap (Price Impact > 90%):</b>\nSố lượng bạn muốn Swap quá lớn so với mức thanh khoản siêu bé của Pool này. Hệ thống OKX đã chặn lệnh để bảo vệ bạn khỏi việc mất hơn 90% tài sản do trượt giá.\n\n👉 <i>Vui lòng Swap từng lượng nhỏ hơn rất nhiều.</i>' };
                 }
                 throw quoteErr;
@@ -353,7 +355,7 @@ module.exports = {
 
             // Cap slippage at 50% max to prevent sandwich attacks
             dynamicSlippage = Math.min(50, dynamicSlippage);
-            console.log(`[AUTO-SWAP] Calculated Slippage: ${dynamicSlippage}%`);
+            log.child('AUTOSWAP').info(`Calculated Slippage: ${dynamicSlippage}%`);
 
             // Enhancement #3: Balance pre-check before calling OKX API
             try {
@@ -366,11 +368,11 @@ module.exports = {
                     return { displayMessage: msg };
                 }
             } catch (balErr) {
-                console.warn('[AUTO-SWAP] Balance pre-check skipped:', balErr.message);
+                log.child('AUTOSWAP').warn('Balance pre-check skipped:', balErr.message);
             }
 
             // 5. Get swap calldata
-            console.log(`[AUTO-SWAP] Getting swap transaction data with slippage ${dynamicSlippage}%...`);
+            log.child('AUTOSWAP').info(`Getting swap transaction data with slippage ${dynamicSlippage}%...`);
             const txData = await onchainos.getSwapTransaction({
                 chainIndex,
                 fromTokenAddress: fromTokenAddress,
@@ -387,7 +389,7 @@ module.exports = {
 
             // 5. Sign the swap transaction
             const tx = txRaw.tx;
-            console.log(`[AUTO-SWAP] Signing swap tx...`);
+            log.child('AUTOSWAP').info(`Signing swap tx...`);
             const signedTx = await wallet.signTransaction({
                 to: tx.to,
                 data: tx.data,
@@ -399,7 +401,7 @@ module.exports = {
             });
 
             // 6. Broadcast (with retry for RPC failures)
-            console.log(`[AUTO-SWAP] Broadcasting swap tx...`);
+            log.child('AUTOSWAP').info(`Broadcasting swap tx...`);
             const broadcastResult = await rpcRetry(
                 () => onchainos.broadcastTransaction(signedTx, chainIndex, tw.address),
                 3, 'AUTO-SWAP-BROADCAST'
@@ -445,7 +447,7 @@ module.exports = {
             const fromAmt = (Number(routerResult.fromTokenAmount || args.amount) / Math.pow(10, fromDec)).toLocaleString('en-US', { maximumFractionDigits: 6 });
             const toAmt = (Number(routerResult.toTokenAmount || 0) / Math.pow(10, toDec)).toLocaleString('en-US', { maximumFractionDigits: 6 });
 
-            console.log(`[AUTO-SWAP] ✅ Success! TxHash: ${txHash}`);
+            log.child('AUTOSWAP').info(`✅ Success! TxHash: ${txHash}`);
 
             // Use the user's actual DB-stored language preference (not prompt-detected lang which fails on "ok")
             let lang = context?.lang || 'en';
@@ -483,7 +485,7 @@ module.exports = {
             };
 
         } catch (error) {
-            console.error(`[AUTO-SWAP] Error:`, error.msg || error.message || error);
+            log.child('AUTOSWAP').error(`Error:`, error.msg || error.message || error);
             const lang2 = context?.lang || 'en';
             let title = 'SWAP EXECUTION ERROR';
             let reasonLabel = 'Reason:';
@@ -558,16 +560,16 @@ module.exports = {
                         if (String(s.amount).toLowerCase() !== 'max' && !String(s.amount).includes('e+') && !String(s.amount).includes('00000000')) {
                             const oldAmt = s.amount;
                             s.amount = ethers.parseUnits(String(s.amount), resolvedDecimals).toString();
-                            console.log(`[BATCH-SWAP] Auto-converted ${oldAmt} to ${s.amount} wei based on ${resolvedDecimals} decimals`);
+                            log.child('BATCHSWAP').info(`Auto-converted ${oldAmt} to ${s.amount} wei based on ${resolvedDecimals} decimals`);
                         }
                     }
                 }
             } catch (e) {
-                console.error('[BATCH-SWAP] Failed auto-decimal:', e.message);
+                log.child('BATCHSWAP').error('Failed auto-decimal:', e.message);
             }
 
             // ── Phase 1: Resolve wallets and handle "max" amounts ──
-            console.log(`[BATCH-SWAP] Starting batch swap for ${swaps.length} wallets, user ${userId}`);
+            log.child('BATCHSWAP').info(`Starting batch swap for ${swaps.length} wallets, user ${userId}`);
             const resolvedSwaps = [];
             for (const swap of swaps) {
                 const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [swap.walletId, userId]);
@@ -598,7 +600,7 @@ module.exports = {
                             }
                             finalAmount = balance.toString();
                         }
-                        console.log(`[BATCH-SWAP] Wallet ${tw.address.slice(0, 8)}: max resolved to ${finalAmount}`);
+                        log.child('BATCHSWAP').info(`Wallet ${tw.address.slice(0, 8)}: max resolved to ${finalAmount}`);
                     } catch (e) {
                         resolvedSwaps.push({ ...swap, tw, error: `Lỗi đọc số dư: ${e.message}` });
                         continue;
@@ -611,7 +613,7 @@ module.exports = {
             if (!isNativeFrom) {
                 const walletsNeedingApprove = resolvedSwaps.filter(s => s.tw && !s.error);
                 if (walletsNeedingApprove.length > 0) {
-                    console.log(`[BATCH-SWAP] Phase 1: Parallel approve for ${walletsNeedingApprove.length} wallets...`);
+                    log.child('BATCHSWAP').info(`Phase 1: Parallel approve for ${walletsNeedingApprove.length} wallets...`);
 
                     // Check allowances in parallel via RPC
                     const erc20AllowanceAbi = ["function allowance(address owner, address spender) view returns (uint256)"];
@@ -654,13 +656,13 @@ module.exports = {
                                             nonce: await provider.getTransactionCount(wallet.address), chainId: chainIdNum
                                         });
                                         await onchainos.broadcastTransaction(approveTx, chainIndex, s.tw.address);
-                                        console.log(`[BATCH-SWAP] ✅ Approve INFINITE sent for wallet ${s.tw.address.slice(0, 8)}`);
+                                        log.child('BATCHSWAP').info(`✅ Approve INFINITE sent for wallet ${s.tw.address.slice(0, 8)}`);
                                     } else {
-                                        console.log(`[BATCH-SWAP] ✅ Allowance sufficient for wallet ${s.tw.address.slice(0, 8)}`);
+                                        log.child('BATCHSWAP').info(`✅ Allowance sufficient for wallet ${s.tw.address.slice(0, 8)}`);
                                     }
                                 }
                             } catch (ae) {
-                                console.error(`[BATCH-SWAP] Approve error for ${s.tw.address.slice(0, 8)}:`, ae.msg || ae.message);
+                                log.child('BATCHSWAP').error(`Approve error for ${s.tw.address.slice(0, 8)}:`, ae.msg || ae.message);
                             }
                         });
                         await Promise.all(approvalPromises);
@@ -673,7 +675,7 @@ module.exports = {
             // ── Upgrade #4: Background Jobs — run swap loop, collect results ──
             const isLargeBatch = resolvedSwaps.length > 5;
             if (isLargeBatch) {
-                console.log(`[BATCH-SWAP] Large batch detected (${resolvedSwaps.length}). Running in background mode.`);
+                log.child('BATCHSWAP').info(`Large batch detected (${resolvedSwaps.length}). Running in background mode.`);
             }
 
             const results = [];
@@ -712,7 +714,7 @@ module.exports = {
                     if (info1) { fromSym = info1.tokenSymbol || '?'; fromDec = Number(info1.decimal || 18); }
                     if (info2) { toSym = info2.tokenSymbol || '?'; toDec = Number(info2.decimal || 18); }
                 }
-            } catch (e) { console.warn('[BATCH-SWAP] Token info pre-resolve failed:', e.message); }
+            } catch (e) { log.child('BATCHSWAP').warn('Token info pre-resolve failed:', e.message); }
 
             if (resolvedSwaps.length > 5 && chatId) {
                 try { bot = require('../../../core/bot'); } catch (e) { /* no bot available */ }
@@ -724,7 +726,7 @@ module.exports = {
                 try {
                     const privateKey = global._decryptTradingKey(tw.encryptedKey);
                     const wallet = new ethers.Wallet(privateKey, provider);
-                    console.log(`[BATCH-SWAP] [${i + 1}/${resolvedSwaps.length}] Processing wallet ${tw.address.slice(0, 8)} (Amount: ${swap.amount})...`);
+                    log.child('BATCHSWAP').info(`[${i + 1}/${resolvedSwaps.length}] Processing wallet ${tw.address.slice(0, 8)} (Amount: ${swap.amount})...`);
 
                     // Get dynamic slippage
                     let dynamicSlippage = Number(args.slippagePercent || '0');
@@ -738,7 +740,7 @@ module.exports = {
                             if (suggestedSlippage > dynamicSlippage) dynamicSlippage = suggestedSlippage;
                         } catch (quoteErr) {
                             if (quoteErr.code === '82112' || (quoteErr.msg && quoteErr.msg.includes('value difference'))) {
-                                console.error(`[BATCH-SWAP] Wallet ${tw.id}: High price impact 82112 error intercepted`);
+                                log.child('BATCHSWAP').error(`Wallet ${tw.id}: High price impact 82112 error intercepted`);
                                 results.push({ id: swap.walletId, address: tw.address, status: '❌', reason: 'Price Impact > 90% (Thanh khoản siêu nhỏ)' });
                                 continue;
                             }
@@ -911,7 +913,7 @@ module.exports = {
                 }
             });
 
-            console.log(`[BATCH-SWAP] ✅ Done: ${successCount}/${resolvedSwaps.length} successful`);
+            log.child('BATCHSWAP').info(`✅ Done: ${successCount}/${resolvedSwaps.length} successful`);
 
             // Telegram message limit: split if report is too long
             const TG_LIMIT = 4000;
@@ -993,15 +995,15 @@ module.exports = {
                         if (String(s.amount).toLowerCase() !== 'max' && !String(s.amount).includes('e+') && Number(s.amount) < 1e9) {
                             const oldAmt = s.amount;
                             s.amount = (Number(s.amount) * Math.pow(10, resolvedDecimals)).toLocaleString('fullwide', { useGrouping: false }).split('.')[0];
-                            console.log(`[SIM-BATCH] Auto-converted ${oldAmt} to ${s.amount} wei based on ${resolvedDecimals} decimals`);
+                            log.child('SIMBATCH').info(`Auto-converted ${oldAmt} to ${s.amount} wei based on ${resolvedDecimals} decimals`);
                         }
                     }
                 }
             } catch (e) {
-                console.error('[SIM-BATCH] Failed auto-decimal:', e.message);
+                log.child('SIMBATCH').error('Failed auto-decimal:', e.message);
             }
 
-            console.log(`[SIM-BATCH] Simulating batch swap for ${args.swaps.length} wallets...`);
+            log.child('SIMBATCH').info(`Simulating batch swap for ${args.swaps.length} wallets...`);
             const simResults = [];
             let totalGasEstimate = 0n;
 

@@ -1,4 +1,6 @@
 const { getLang, t } = require('../../i18n');
+const logger = require('../../core/logger');
+const log = logger.child('TTS');
 const { GEMINI_API_KEYS } = require('../../config');
 const { buildAiUsageKeyboard, buildTtsSettingsKeyboard, buildTtsSettingsText, formatTtsLanguageLabel, formatTtsVoiceLabel, getUserTtsConfig, synthesizeGeminiSpeech } = require('./utils');
 const { sendReply, buildThreadedOptions } = require('../../utils/chat');
@@ -132,20 +134,20 @@ async function handleAiTtsCommand({ msg, lang, payload = '', audioSource = null 
                 } else {
                     advanceGeminiKeyIndex();
                 }
-                console.error(`[AI] Gemini TTS failed with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+                log.child('AI').error(`Gemini TTS failed with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
             } finally {
                 if (downloadInfo?.filePath) {
                     try {
                         await fs.promises.unlink(downloadInfo.filePath);
                     } catch (cleanupError) {
-                        console.warn(`[AI] Failed to clean TTS audio temp file: ${cleanupError.message}`);
+                        log.child('AI').warn(`Failed to clean TTS audio temp file: ${cleanupError.message}`);
                     }
                 }
                 if (uploadedFile?.name) {
                     try {
                         await clientInfo.client.files.delete({ name: uploadedFile.name });
                     } catch (cleanupError) {
-                        console.warn(`[AI] Failed to delete Gemini TTS upload: ${cleanupError.message}`);
+                        log.child('AI').warn(`Failed to delete Gemini TTS upload: ${cleanupError.message}`);
                     }
                 }
             }
@@ -157,7 +159,7 @@ async function handleAiTtsCommand({ msg, lang, payload = '', audioSource = null 
     }
 
     if (!ttsPath || !finalText) {
-        console.warn(`[AI] TTS failed: ${lastError ? lastError.message : 'no output'}`);
+        log.child('AI').warn(`TTS failed: ${lastError ? lastError.message : 'no output'}`);
         await sendReply(msg, t(lang, 'ai_tts_missing_text'), { reply_markup: buildTtsSettingsKeyboard(lang, settings) });
         return;
     }
@@ -172,13 +174,13 @@ async function handleAiTtsCommand({ msg, lang, payload = '', audioSource = null 
             contentType: 'audio/wav'
         });
     } catch (error) {
-        console.warn(`[AI] Failed to send Gemini TTS audio: ${sanitizeSecrets(error.message)}`);
+        log.child('AI').warn(`Failed to send Gemini TTS audio: ${sanitizeSecrets(error.message)}`);
         await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
     } finally {
         try {
             await fs.promises.unlink(ttsPath);
         } catch (cleanupError) {
-            console.warn(`[AI] Failed to clean Gemini TTS file: ${cleanupError.message}`);
+            log.child('AI').warn(`Failed to clean Gemini TTS file: ${cleanupError.message}`);
         }
     }
 }

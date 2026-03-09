@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const logger = require('../core/logger');
+const log = logger.child('Access');
 const db = require('../../db.js');
 const { t } = require('../core/i18n');
 const { escapeHtml } = require('../utils/text');
@@ -55,7 +57,7 @@ async function hydrateCoOwners() {
             }
         }
     } catch (error) {
-        console.error(`[Owner] Failed to hydrate co-owners: ${error.message}`);
+        log.child('Owner').error(`Failed to hydrate co-owners: ${error.message}`);
     }
 }
 
@@ -69,7 +71,7 @@ async function hydrateBannedUsers() {
             }
         }
     } catch (error) {
-        console.error(`[Ban] Failed to hydrate banned users: ${error.message}`);
+        log.child('Ban').error(`Failed to hydrate banned users: ${error.message}`);
     }
 }
 
@@ -83,7 +85,7 @@ async function hydrateBannedDevices() {
             }
         }
     } catch (error) {
-        console.error(`[Ban] Failed to hydrate banned devices: ${error.message}`);
+        log.child('Ban').error(`Failed to hydrate banned devices: ${error.message}`);
     }
 }
 
@@ -185,7 +187,7 @@ async function recordDeviceInfo(update) {
         try {
             await db.upsertUserDevice(update.from.id, info);
         } catch (error) {
-            console.warn(`[Device] Failed to persist device ${info.deviceId}: ${error.message}`);
+            log.child('Device').warn(`Failed to persist device ${info.deviceId}: ${error.message}`);
         }
     }
 
@@ -215,7 +217,7 @@ async function loadDevicesForUsers(userIds = []) {
             const devices = await db.listUserDevices(id);
             result.set(id, devices || []);
         } catch (error) {
-            console.warn(`[Device] Failed to load devices for ${id}: ${error.message}`);
+            log.child('Device').warn(`Failed to load devices for ${id}: ${error.message}`);
             result.set(id, []);
         }
     }
@@ -238,7 +240,7 @@ async function registerCoOwner(userId, fromInfo = {}, addedBy = null) {
     try {
         await db.addCoOwner(userId, payload);
     } catch (error) {
-        console.error(`[Owner] Failed to persist co-owner ${userId}: ${error.message}`);
+        log.child('Owner').error(`Failed to persist co-owner ${userId}: ${error.message}`);
     }
 
     coOwnerIds.add(userId.toString());
@@ -252,7 +254,7 @@ async function revokeCoOwner(userId) {
         await db.removeCoOwner(userId);
         coOwnerIds.delete(userId.toString());
     } catch (error) {
-        console.error(`[Owner] Failed to revoke co-owner ${userId}: ${error.message}`);
+        log.child('Owner').error(`Failed to revoke co-owner ${userId}: ${error.message}`);
     }
 }
 
@@ -280,7 +282,7 @@ async function banUser(userId, fromInfo = {}, addedBy = null, deviceInfo = null)
                 deviceCandidates.push(device);
             }
         } catch (error) {
-            console.warn(`[Ban] Unable to load devices for user ${userId}: ${error.message}`);
+            log.child('Ban').warn(`Unable to load devices for user ${userId}: ${error.message}`);
         }
 
         for (const device of deviceCandidates) {
@@ -294,11 +296,11 @@ async function banUser(userId, fromInfo = {}, addedBy = null, deviceInfo = null)
                 });
                 bannedDeviceIds.add(device.deviceId.toString());
             } catch (error) {
-                console.warn(`[Ban] Failed to ban device ${device.deviceId}: ${error.message}`);
+                log.child('Ban').warn(`Failed to ban device ${device.deviceId}: ${error.message}`);
             }
         }
     } catch (error) {
-        console.error(`[Ban] Failed to ban user ${userId}: ${error.message}`);
+        log.child('Ban').error(`Failed to ban user ${userId}: ${error.message}`);
     }
 }
 
@@ -320,10 +322,10 @@ async function unbanUser(userId) {
                 bannedDeviceIds.delete(device.deviceId.toString());
             }
         } catch (error) {
-            console.warn(`[Ban] Unable to unban devices for user ${userId}: ${error.message}`);
+            log.child('Ban').warn(`Unable to unban devices for user ${userId}: ${error.message}`);
         }
     } catch (error) {
-        console.error(`[Ban] Failed to unban user ${userId}: ${error.message}`);
+        log.child('Ban').error(`Failed to unban user ${userId}: ${error.message}`);
     }
 }
 

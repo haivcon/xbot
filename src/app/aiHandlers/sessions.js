@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('Sessions');
+
 /**
  * AI Sessions Module
  * Handles user session history and image context
@@ -47,7 +50,7 @@ function createSessionHandlers(deps) {
                 messages = memory.conversationHistory.slice(-SESSION_MAX_MESSAGES);
             }
         } catch (e) {
-            console.error('[Session] Failed to hydrate session from DB:', e.message);
+            log.child('Session').error('Failed to hydrate session from DB:', e.message);
         }
         const session = { messages, lastActivity: Date.now() };
         sessionHistory.set(userId, session);
@@ -70,7 +73,7 @@ function createSessionHandlers(deps) {
         try {
             await db.updateAiMemory(userId, { conversationHistory: session.messages });
         } catch (e) {
-            console.error('[Session] Failed to persist session to DB:', e.message);
+            log.child('Session').error('Failed to persist session to DB:', e.message);
         }
     }
 
@@ -83,7 +86,7 @@ function createSessionHandlers(deps) {
         try {
             await db.updateAiMemory(userId, { conversationHistory: [] });
         } catch (e) {
-            console.error('[Session] Failed to clear session in DB:', e.message);
+            log.child('Session').error('Failed to clear session in DB:', e.message);
         }
     }
 

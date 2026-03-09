@@ -1,5 +1,7 @@
 const { ethers } = require('ethers');
 
+const logger = require('../core/logger');
+const log = logger.child('WalletOverview');
 function createWalletOverview({
     db,
     normalizeAddressSafe,
@@ -22,7 +24,7 @@ function createWalletOverview({
         try {
             dexSnapshot = await fetchOkxDexWalletHoldings(normalizedWallet, { chainContext });
         } catch (error) {
-            console.warn(`[DexHoldings] Failed to load live balances for ${shortenAddress(normalizedWallet)}: ${error.message}`);
+            log.child('DexHoldings').warn(`Failed to load live balances for ${shortenAddress(normalizedWallet)}: ${error.message}`);
             return { tokens: [], warning: 'wallet_error' };
         }
 
@@ -199,7 +201,7 @@ function createWalletOverview({
                 }
             } catch (error) {
                 warning = error?.code || 'wallet_error';
-                console.warn(`[WalletOverview] Failed to load ${normalized}: ${error.message}`);
+                log.warn(`Failed to load ${normalized}: ${error.message}`);
             }
 
             results.push({ address: normalized, name: displayName, tokens, warning, cached, totalUsd });

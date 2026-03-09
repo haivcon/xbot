@@ -1,4 +1,7 @@
-﻿function createOwnerFeature(deps) {
+﻿const logger = require('../core/logger');
+const log = logger.child('Owner');
+
+function createOwnerFeature(deps) {
     const {
         t,
         defaultLang,
@@ -222,13 +225,13 @@
         try {
             await db.removeGroupProfile(chatId);
         } catch (error) {
-            console.warn(`[Owner] Failed to purge group profile ${chatId}: ${error.message}`);
+            log.warn(`Failed to purge group profile ${chatId}: ${error.message}`);
         }
 
         try {
             await db.wipeChatFootprint(chatId);
         } catch (error) {
-            console.warn(`[Owner] Failed to wipe group footprint ${chatId}: ${error.message}`);
+            log.warn(`Failed to wipe group footprint ${chatId}: ${error.message}`);
         }
     }
 
@@ -358,7 +361,7 @@
                 return await bot.sendMessage(targetId, text, { disable_web_page_preview: true });
             }
         } catch (error) {
-            console.error(`[Owner] Failed to deliver broadcast payload to ${targetId}: ${error.message}`);
+            log.error(`Failed to deliver broadcast payload to ${targetId}: ${error.message}`);
         }
 
         return null;
@@ -479,7 +482,7 @@
                 await db.setCommandLimit(commandKey, limitValue, deviceTargetId);
             }
         } catch (error) {
-            console.warn(`[Owner] Failed to sync device limits for ${targetId}: ${error.message}`);
+            log.warn(`Failed to sync device limits for ${targetId}: ${error.message}`);
         }
     }
 
@@ -501,7 +504,7 @@
                 await db.clearCommandLimit(commandKey, deviceTargetId);
             }
         } catch (error) {
-            console.warn(`[Owner] Failed to clear device limits for ${targetId}: ${error.message}`);
+            log.warn(`Failed to clear device limits for ${targetId}: ${error.message}`);
         }
     }
 
@@ -541,7 +544,7 @@
                 lang = resolveLangCode(info.lang) || lang;
             }
         } catch (error) {
-            console.error(`[Owner] Unable to resolve language for chat ${normalizedChatId}: ${sanitizeSecrets(error?.message || error?.toString())}`);
+            log.error(`Unable to resolve language for chat ${normalizedChatId}: ${sanitizeSecrets(error?.message || error?.toString())}`);
         }
 
         try {
@@ -582,14 +585,14 @@
                 } catch (error) {
                     const description = error?.response?.body?.description || error?.message || '';
                     if (!description.includes('message to delete not found')) {
-                        console.error(`[Owner] Failed to delete marker message for ${normalizedChatId}: ${sanitizeSecrets(description)}`);
+                        log.error(`Failed to delete marker message for ${normalizedChatId}: ${sanitizeSecrets(description)}`);
                     }
                 }
             }
 
             return { deleted, attempted: true };
         } catch (error) {
-            console.error(`[Owner] Failed to clear chat history for ${normalizedChatId}: ${sanitizeSecrets(error?.message || error?.toString())}`);
+            log.error(`Failed to clear chat history for ${normalizedChatId}: ${sanitizeSecrets(error?.message || error?.toString())}`);
             return { deleted: 0, attempted: false };
         }
     }
@@ -699,7 +702,7 @@
                 type: chat.type || 'supergroup'
             };
         } catch (error) {
-            console.warn(`[Owner] Unable to resolve group metadata for ${normalizedId}: ${error.message}`);
+            log.warn(`Unable to resolve group metadata for ${normalizedId}: ${error.message}`);
             if (isGroupRevokedError(error)) {
                 await cleanupGroupProfile(normalizedId);
                 return { chatId: normalizedId, removed: true };
@@ -759,7 +762,7 @@
             const count = await bot.getChatMemberCount(chatId);
             return Number.isFinite(Number(count)) ? Number(count) : null;
         } catch (error) {
-            console.warn(`[Owner] Failed to fetch member count for ${chatId}: ${error.message}`);
+            log.warn(`Failed to fetch member count for ${chatId}: ${error.message}`);
             if (isGroupRevokedError(error)) {
                 await cleanupGroupProfile(chatId?.toString());
             }
@@ -777,7 +780,7 @@
                 isOwner: entry?.status === 'creator'
             })).filter((admin) => admin.id);
         } catch (error) {
-            console.warn(`[Owner] Failed to load admins for ${chatId}: ${error.message}`);
+            log.warn(`Failed to load admins for ${chatId}: ${error.message}`);
             return [];
         }
     }
@@ -821,7 +824,7 @@
                 disable_notification: true
             });
         } catch (error) {
-            console.warn(`[Owner] Unable to send purge marker in ${chatId}: ${error.message}`);
+            log.warn(`Unable to send purge marker in ${chatId}: ${error.message}`);
         }
 
         const latestId = marker?.message_id || 0;
@@ -867,7 +870,7 @@
             await bot.promoteChatMember(chatId, Number(BOT_ID), promoteConfig);
             return { toggled: true, nextState: !current };
         } catch (error) {
-            console.warn(`[Owner] Failed to toggle anonymous mode in ${chatId}: ${error.message}`);
+            log.warn(`Failed to toggle anonymous mode in ${chatId}: ${error.message}`);
             return { toggled: false, error };
         }
     }
@@ -1554,7 +1557,7 @@
                         success += delivered ? 1 : 0;
                     } catch (error) {
                         failed += 1;
-                        console.error(`[Owner] Failed to broadcast to ${recipient}: ${error.message}`);
+                        log.error(`Failed to broadcast to ${recipient}: ${error.message}`);
                     }
                 }
 
@@ -1876,7 +1879,7 @@
                         success += delivered ? 1 : 0;
                     } catch (error) {
                         failed += 1;
-                        console.error(`[Owner] Failed to broadcast to group ${profile.chatId}: ${error.message}`);
+                        log.error(`Failed to broadcast to group ${profile.chatId}: ${error.message}`);
                         if (isGroupRevokedError(error)) {
                             await cleanupGroupProfile(profile.chatId);
                         }
@@ -1926,12 +1929,12 @@
                             // eslint-disable-next-line no-await-in-loop
                             await bot.unbanChatMember(targetChatId, Number(targetUserId), { only_if_banned: true });
                         } catch (error) {
-                            console.warn(`[Owner] Unban after ban for ${targetUserId} in ${targetChatId}: ${error.message}`);
+                            log.warn(`Unban after ban for ${targetUserId} in ${targetChatId}: ${error.message}`);
                         }
                         banned += 1;
                         continue;
                     } catch (error) {
-                        console.error(`[Owner] Failed to ban ${targetUserId} from ${targetChatId}: ${error.message}`);
+                        log.error(`Failed to ban ${targetUserId} from ${targetChatId}: ${error.message}`);
                     }
 
                     try {
@@ -1957,7 +1960,7 @@
                         });
                         muted += 1;
                     } catch (error) {
-                        console.error(`[Owner] Failed to mute ${targetUserId} in ${targetChatId}: ${error.message}`);
+                        log.error(`Failed to mute ${targetUserId} in ${targetChatId}: ${error.message}`);
                         failed += 1;
                     }
                 }
@@ -1982,14 +1985,14 @@
                     const link = await bot.createChatInviteLink(targetChatId, { creates_join_request: false });
                     inviteLink = link?.invite_link || null;
                 } catch (error) {
-                    console.warn(`[Owner] Failed to create invite link for ${targetChatId}: ${error.message}`);
+                    log.warn(`Failed to create invite link for ${targetChatId}: ${error.message}`);
                 }
 
                 if (!inviteLink) {
                     try {
                         inviteLink = await bot.exportChatInviteLink(targetChatId);
                     } catch (error) {
-                        console.warn(`[Owner] Failed to export invite link for ${targetChatId}: ${error.message}`);
+                        log.warn(`Failed to export invite link for ${targetChatId}: ${error.message}`);
                     }
                 }
 
@@ -2007,7 +2010,7 @@
                         await bot.sendMessage(targetId, t(lang, 'owner_group_invite_template', { link: inviteLink }));
                         sent += 1;
                     } catch (error) {
-                        console.warn(`[Owner] Failed to DM invite to ${targetId}: ${error.message}`);
+                        log.warn(`Failed to DM invite to ${targetId}: ${error.message}`);
                         failed += 1;
                     }
                 }
@@ -2038,7 +2041,7 @@
                 try {
                     await bot.pinChatMessage(targetChatId, sent.message_id, { disable_notification: true });
                 } catch (error) {
-                    console.warn(`[Owner] Failed to pin message in ${targetChatId}: ${error.message}`);
+                    log.warn(`Failed to pin message in ${targetChatId}: ${error.message}`);
                 }
 
                 await sendReply(msg, t(lang, 'owner_group_pin_done'), { reply_markup: buildCloseKeyboard(lang) });
@@ -2063,7 +2066,7 @@
                     await sendOwnerGroupDetail(state.chatId, targetChatId, lang);
                     return true;
                 } catch (error) {
-                    console.warn(`[Owner] Failed to create topic in ${targetChatId}: ${error.message}`);
+                    log.warn(`Failed to create topic in ${targetChatId}: ${error.message}`);
                     await sendReply(msg, t(lang, 'owner_group_topic_failed'), { reply_markup: buildCloseKeyboard(lang) });
                     return true;
                 }
@@ -2092,7 +2095,7 @@
                     }
                     await sendReply(msg, t(lang, 'owner_group_change_info_done'), { reply_markup: buildCloseKeyboard(lang) });
                 } catch (error) {
-                    console.warn(`[Owner] Failed to change group info for ${targetChatId}: ${error.message}`);
+                    log.warn(`Failed to change group info for ${targetChatId}: ${error.message}`);
                     await sendReply(msg, t(lang, 'owner_group_change_info_failed'), { reply_markup: buildCloseKeyboard(lang) });
                     return true;
                 }
@@ -2211,7 +2214,7 @@
                         await bot.processUpdate({ update_id: Date.now(), message: synthetic });
                         success += 1;
                     } catch (error) {
-                        console.error(`[Owner] Failed to run delegated command for ${target.chatId}: ${error.message}`);
+                        log.error(`Failed to run delegated command for ${target.chatId}: ${error.message}`);
                         failed += 1;
                     }
                 }

@@ -1,3 +1,6 @@
+const logger = require('../core/logger');
+const log = logger.child('Rmchat');
+
 function createRmchatHandlers({ t, db, purgeRmchatMessages, rmchatBotMessages, rmchatUserMessages }) {
     async function executeRmchatAction({ chatId, lang, scope }) {
         if (!chatId) {
@@ -21,7 +24,7 @@ function createRmchatHandlers({ t, db, purgeRmchatMessages, rmchatBotMessages, r
                 await db.wipeChatFootprint(chatId.toString());
                 dataWiped = true;
             } catch (error) {
-                console.error(`[Rmchat] Failed to wipe data for ${chatId}: ${error.message}`);
+                log.error(`Failed to wipe data for ${chatId}: ${error.message}`);
             }
         }
 

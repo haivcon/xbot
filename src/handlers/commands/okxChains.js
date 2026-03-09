@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('OkxChains');
+
 async function handleOkxChainsCommand(deps, msg) {
     const {
         enforceOwnerCommandLimit,
@@ -37,7 +40,7 @@ async function handleOkxChainsCommand(deps, msg) {
 
         sendReply(msg, lines.join('\n'), { parse_mode: 'Markdown', reply_markup: buildCloseKeyboard(lang) });
     } catch (error) {
-        console.error(`[OkxChains] Failed to load supported chains: ${error.message}`);
+        log.error(`Failed to load supported chains: ${error.message}`);
         sendReply(msg, t(lang, 'okxchains_error'), { parse_mode: 'Markdown', reply_markup: buildCloseKeyboard(lang) });
     }
 }

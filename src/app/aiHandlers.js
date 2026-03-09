@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
+const logger = require('../core/logger');
+const log = logger.child('AI');
+
 const { sanitizeSecrets } = require('../core/sanitize');
 const { convertMarkdownToTelegram, escapeMarkdownV2 } = require('./utils/markdown');
 const { splitTelegramMarkdownV2Text } = require('./utils/telegram');
@@ -27,72 +30,7 @@ const {
 } = require('./aiHandlers/sharedState');
 // Import customPersonaPrompts from state.js (shared with userInputState for skip detection)
 const { customPersonaPrompts } = require('../core/state');
-
-/**
- * Sanitize HTML to ensure all tags are properly matched for Telegram's strict parser.
- * Telegram only allows: b, i, u, s, code, pre, a, tg-spoiler, tg-emoji
- * This prevents "Unmatched end tag" errors (400 Bad Request).
- */
-function sanitizeTelegramHtml(html) {
-  if (!html) return html;
-
-  const ALLOWED_TAGS = new Set(['b', 'i', 'u', 's', 'code', 'pre', 'a', 'tg-spoiler', 'tg-emoji']);
-  const tagRegex = /<\/?([a-z][a-z0-9-]*)\b[^>]*\/?>/gi;
-  const stack = [];
-  let result = '';
-  let lastIndex = 0;
-
-  let match;
-  const pieces = [];
-  const tags = [];
-  while ((match = tagRegex.exec(html)) !== null) {
-    pieces.push(html.substring(lastIndex, match.index));
-    tags.push({ full: match[0], name: match[1].toLowerCase(), index: pieces.length });
-    pieces.push(null);
-    lastIndex = tagRegex.lastIndex;
-  }
-  pieces.push(html.substring(lastIndex));
-
-  for (const tag of tags) {
-    const isClose = tag.full.startsWith('</');
-    const isSelfClose = tag.full.endsWith('/>');
-
-    if (!ALLOWED_TAGS.has(tag.name)) {
-      pieces[tag.index] = '';
-      continue;
-    }
-
-    if (isSelfClose) {
-      pieces[tag.index] = '';
-      continue;
-    }
-
-    if (isClose) {
-      const openIdx = stack.lastIndexOf(tag.name);
-      if (openIdx === -1) {
-        pieces[tag.index] = '';
-      } else {
-        const unclosed = stack.splice(openIdx);
-        const overlapping = unclosed.slice(1);
-        let prefix = overlapping.map(t => `</${t}>`).reverse().join('');
-        let suffix = overlapping.map(t => `<${t}>`).join('');
-        pieces[tag.index] = prefix + tag.full + suffix;
-        stack.push(...overlapping);
-      }
-    } else {
-      stack.push(tag.name);
-      pieces[tag.index] = tag.full;
-    }
-  }
-
-  result = pieces.join('');
-  while (stack.length > 0) {
-    const unclosed = stack.pop();
-    result += `</${unclosed}>`;
-  }
-
-  return result;
-}
+const { sanitizeTelegramHtml } = require('../utils/text');
 const {
   safeJsonParse,
   startsWithEmoji,
@@ -208,153 +146,20 @@ const {
   executeFunctionCall: executeVoiceFunctionCall
 } = require('../features/liveAudioTools');
 
-// ═══════════════════════════════════════════════════════
-// Token Search Cache & Helpers (used by check_token_price)
-// ═══════════════════════════════════════════════════════
-const _tokenSearchCache = new Map();
-const TKS_PAGE_SIZE = 5;
+// Token Search Cache & Helpers — extracted to aiHandlers/tokenSearch.js
+const {
+  _tokenSearchCache,
+  TKS_PAGE_SIZE,
+  _buildPriceCard,
+  _buildSparkline,
+  _calculateRSI,
+  _calculateMA,
+  _extractCandelCloses,
+  _buildTokenListPage,
+  _buildTokenListKeyboard
+} = require('./aiHandlers/tokenSearch');
 const { t: _t } = require('../core/i18n');
 
-async function _buildPriceCard(onchainos, chainIndex, tokenAddress, tokenSymbol, tokenFullName, chainNames, t, lang) {
-  const tf = t || _t;
-  const l = lang || 'en';
-  const [priceInfo, candleData] = await Promise.all([
-    onchainos.getTokenPriceInfo([{ chainIndex, tokenContractAddress: tokenAddress }]).catch(() => null),
-    onchainos.getMarketCandles(chainIndex, tokenAddress, { bar: '1D', limit: 7 }).catch(() => null)
-  ]);
-  const info = priceInfo && Array.isArray(priceInfo) && priceInfo.length > 0 ? priceInfo[0] : null;
-  const price = Number(info?.price || 0);
-  const change24h = Number(info?.priceChange24H || 0);
-  const marketCap = Number(info?.marketCap || 0);
-  const volume24h = Number(info?.volume24H || 0);
-  const liquidity = Number(info?.liquidity || 0);
-  const priceStr = price < 0.0001 ? price.toFixed(10) : price < 0.01 ? price.toFixed(8) : price < 1 ? price.toFixed(4) : price.toFixed(2);
-  const changeIcon = change24h >= 0 ? '📈' : '📉';
-  const changeStr = `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%`;
-  const addrShort = tokenAddress ? `${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-4)}` : '';
-  let card = `💰 <b>${tokenSymbol}</b> (${tokenFullName})\n`;
-  card += `━━━━━━━━━━━━━━━━━━\n`;
-  card += `💵 ${tf(l, 'ai_price_label')}: <b>$${priceStr}</b>\n`;
-  card += `${changeIcon} 24h: <b>${changeStr}</b>\n`;
-  if (marketCap > 0) card += `📊 MCap: $${marketCap > 1e9 ? (marketCap / 1e9).toFixed(2) + 'B' : (marketCap / 1e6).toFixed(2) + 'M'}\n`;
-  if (volume24h > 0) card += `📈 Vol: $${volume24h > 1e9 ? (volume24h / 1e9).toFixed(2) + 'B' : (volume24h / 1e6).toFixed(2) + 'M'}\n`;
-  if (liquidity > 0) card += `💧 Liq: $${liquidity > 1e6 ? (liquidity / 1e6).toFixed(2) + 'M' : liquidity.toFixed(0)}\n`;
-  // Mini chart sparkline (7D)
-  const sparkline = _buildSparkline(candleData);
-  if (sparkline) card += `📉 ${tf(l, 'ai_chart_7d')}: <code>${sparkline}</code>\n`;
-  const chainSlugs = { '1': 'eth', '56': 'bsc', '196': 'xlayer', '137': 'polygon', '501': 'solana', '42161': 'arbitrum', '8453': 'base', '43114': 'avalanche', '10': 'optimism' };
-  const slug = chainSlugs[chainIndex] || 'xlayer';
-  card += `🔗 ${chainNames[chainIndex] || 'Chain ' + chainIndex}`;
-  if (tokenAddress && tokenAddress !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
-    const explorerUrl = `https://www.okx.com/web3/explorer/${slug}/token/${tokenAddress}`;
-    card += ` · <a href="${explorerUrl}">${addrShort}</a>`;
-  }
-  return card;
-}
-
-function _buildSparkline(candleData) {
-  if (!candleData || !Array.isArray(candleData) || candleData.length < 2) return null;
-  const blocks = '▁▂▃▄▅▆▇█';
-  // candleData: each item is [timestamp, open, high, low, close, ...] or {c: close}
-  const closes = candleData.map(c => Number(Array.isArray(c) ? c[4] : c.close || c.c || 0)).filter(v => v > 0);
-  if (closes.length < 2) return null;
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  const range = max - min || 1;
-  return closes.map(v => blocks[Math.min(7, Math.floor(((v - min) / range) * 7))]).join('');
-}
-
-// ═══════════════════════════════════════════════════════
-// Technical Analysis Helpers (Feature 1: AI Insight)
-// ═══════════════════════════════════════════════════════
-function _calculateRSI(closes, period = 14) {
-  if (!closes || closes.length < period + 1) return null;
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const diff = closes[i] - closes[i - 1];
-    if (diff > 0) gains += diff; else losses -= diff;
-  }
-  let avgGain = gains / period;
-  let avgLoss = losses / period;
-  for (let i = period + 1; i < closes.length; i++) {
-    const diff = closes[i] - closes[i - 1];
-    avgGain = (avgGain * (period - 1) + (diff > 0 ? diff : 0)) / period;
-    avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
-  }
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return 100 - (100 / (1 + rs));
-}
-
-function _calculateMA(closes, period) {
-  if (!closes || closes.length < period) return null;
-  const slice = closes.slice(-period);
-  return slice.reduce((a, b) => a + b, 0) / period;
-}
-
-function _extractCandelCloses(candleData) {
-  if (!candleData || !Array.isArray(candleData)) return [];
-  return candleData.map(c => Number(Array.isArray(c) ? c[4] : c.close || c.c || 0)).filter(v => v > 0);
-}
-
-function _buildTokenListPage(results, keyword, page, chainNames, t, lang) {
-  const tf = t || _t;
-  const l = lang || 'en';
-  const totalPages = Math.ceil(results.length / TKS_PAGE_SIZE);
-  const start = page * TKS_PAGE_SIZE;
-  const pageItems = results.slice(start, start + TKS_PAGE_SIZE);
-  let text = `🔍 <b>${tf(l, 'ai_token_search_title', { count: results.length, keyword: keyword.toUpperCase() })}</b> (${page + 1}/${totalPages})\n`;
-  text += `━━━━━━━━━━━━━━━━━━\n`;
-  pageItems.forEach((tk, i) => {
-    const idx = start + i + 1;
-    const price = Number(tk.price || 0);
-    const priceStr = price < 0.0001 ? '$' + price.toFixed(10) : price < 0.01 ? '$' + price.toFixed(8) : price < 1 ? '$' + price.toFixed(4) : '$' + price.toFixed(2);
-    const chain = chainNames[tk.chainIndex] || tk.chainIndex || '?';
-    const addr = tk.tokenContractAddress ? `${tk.tokenContractAddress.slice(0, 6)}...${tk.tokenContractAddress.slice(-4)}` : '';
-    const vol = tk.volume24H ? ` · Vol: $${Number(tk.volume24H) > 1e6 ? (Number(tk.volume24H) / 1e6).toFixed(1) + 'M' : Number(tk.volume24H).toFixed(0)}` : '';
-    text += `\n<b>${idx}.</b> ${tk.tokenSymbol || '?'} (${tk.tokenFullName || ''})\n`;
-    text += `   🔗 ${chain} · ${priceStr}${vol}\n`;
-    text += `   📍 <code>${addr}</code>\n`;
-  });
-  text += `\n💡 <i>${tf(l, 'ai_token_search_hint')}</i>`;
-  return text;
-}
-
-function _buildTokenListKeyboard(results, cacheKey, page, t, lang) {
-  const tf = t || _t;
-  const l = lang || 'en';
-  const totalPages = Math.ceil(results.length / TKS_PAGE_SIZE);
-  const start = page * TKS_PAGE_SIZE;
-  const pageItems = results.slice(start, start + TKS_PAGE_SIZE);
-  const keyboard = [];
-  // Token selection buttons (2 per row)
-  const row = [];
-  pageItems.forEach((tk, i) => {
-    const idx = start + i;
-    const label = `${idx + 1}. ${tk.tokenSymbol || '?'}`;
-    row.push({ text: label, callback_data: `tks|s|${cacheKey}|${idx}` });
-    if (row.length === 2 || i === pageItems.length - 1) {
-      keyboard.push([...row]);
-      row.length = 0;
-    }
-  });
-  // Action buttons for first result on page (quick actions)
-  const firstIdx = start;
-  const actionRow = [
-    { text: '💱 Swap', callback_data: `tks|swap|${cacheKey}|${firstIdx}` },
-    { text: '📊 Chart', callback_data: `tks|chart|${cacheKey}|${firstIdx}` },
-    { text: '🔒 Security', callback_data: `tks|sec|${cacheKey}|${firstIdx}` },
-  ];
-  keyboard.push(actionRow);
-  // Pagination row
-  const navRow = [];
-  if (page > 0) navRow.push({ text: tf(l, 'ai_token_search_prev'), callback_data: `tks|p|${cacheKey}|${page - 1}` });
-  navRow.push({ text: `${page + 1}/${totalPages}`, callback_data: 'tks|noop' });
-  if (page < totalPages - 1) navRow.push({ text: tf(l, 'ai_token_search_next'), callback_data: `tks|p|${cacheKey}|${page + 1}` });
-  keyboard.push(navRow);
-  keyboard.push([{ text: tf(l, 'ai_token_search_close'), callback_data: 'tks|close' }]);
-  return keyboard;
-}
 
 // ═══════════════════════════════════════════════════════
 // /importkey command — DM only, encrypted storage
@@ -445,7 +250,7 @@ function registerImportKeyCommand(bot, getLang, t) {
     summary += `\n🔐 ${t(lang, 'tw_key_encrypted')}`;
 
     await bot.sendMessage(msg.chat.id, summary, { parse_mode: 'HTML' });
-    console.log(`[ImportKey] ✔ User ${userId} batch import: ${results.imported.length} imported, ${results.duplicates.length} dupes, ${results.invalid.length} invalid`);
+    log.child('ImportKey').info(`✔ User ${userId} batch import: ${results.imported.length} imported, ${results.duplicates.length} dupes, ${results.invalid.length} invalid`);
   });
 
   // /deletekey command
@@ -480,7 +285,7 @@ function registerImportKeyCommand(bot, getLang, t) {
     card += `#${walletCount + 1}\n\n`;
     card += `${t(lang, 'tw_backup_warning')}`;
     await bot.sendMessage(msg.chat.id, card, { parse_mode: 'HTML' });
-    console.log(`[CreateWallet] ✔ User ${userId} created wallet #${walletCount + 1}: ${newWallet.address.slice(0, 8)}...`);
+    log.child('CreateWallet').info(`✔ User ${userId} created wallet #${walletCount + 1}: ${newWallet.address.slice(0, 8)}...`);
   });
 
   // /exportkey — DM only, show private key
@@ -504,7 +309,7 @@ function registerImportKeyCommand(bot, getLang, t) {
     setTimeout(() => { bot.deleteMessage(msg.chat.id, keyMsg.message_id).catch(() => { }); }, 30000);
   });
 
-  console.log('[ImportKey] ✔ /importkey, /createwallet, /exportkey, /deletekey registered');
+  log.child('ImportKey').info('✔ /importkey, /createwallet, /exportkey, /deletekey registered');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -562,7 +367,7 @@ function registerTradingWalletCallbacks(bot, getLang, t) {
           const keyMsg = await bot.sendMessage(msg.chat.id, exportMsg, { parse_mode: 'Markdown' });
           setTimeout(() => { bot.deleteMessage(msg.chat.id, keyMsg.message_id).catch(() => { }); }, 30000);
         } catch (e) {
-          console.error('[TW-EXPORT] Failed to send key:', e);
+          log.child('TW').error('Failed to send key:', e);
           await bot.sendMessage(msg.chat.id, `❌ Failed to send private key. Error: ${e.message}`);
         }
 
@@ -661,7 +466,7 @@ function registerTradingWalletCallbacks(bot, getLang, t) {
           const keyMsg = await bot.sendMessage(msg.chat.id, exportMsg, { parse_mode: 'Markdown' });
           setTimeout(() => { bot.deleteMessage(msg.chat.id, keyMsg.message_id).catch(() => { }); }, 30000);
         } catch (e) {
-          console.error('[TW-ALL-EXPORT] Failed to send keys:', e);
+          log.child('TW').error('Failed to send keys:', e);
           await bot.sendMessage(msg.chat.id, `❌ Failed to send private keys. Error: ${e.message}`);
         }
 
@@ -772,12 +577,12 @@ function registerTradingWalletCallbacks(bot, getLang, t) {
         await _sendTradingWalletSubMenu(bot, msg.chat.id, msg.message_id, lang, t);
       }
     } catch (err) {
-      console.error('[TW Callback] Error:', err.message);
+      log.child('TW').error('Error:', err.message);
       await bot.answerCallbackQuery(query.id, { text: '❌ Error', show_alert: true }).catch(() => { });
     }
   });
 
-  console.log('[TradingWallet] ✔ Trading wallet callbacks registered');
+  log.child('TW').info('✔ Trading wallet callbacks registered');
 }
 
 // Helper: send trading wallet sub-menu using the new walletUi builder
@@ -807,7 +612,7 @@ async function _sendTradingWalletSubMenu(bot, chatId, messageId, lang, t, page =
       await bot.sendMessage(chatId, menu.text, { parse_mode: 'HTML', reply_markup: menu.replyMarkup, disable_web_page_preview: true });
     }
   } catch (e) {
-    console.error('[TW SubMenu]', e.message);
+    log.child('TW').error('SubMenu:', e.message);
   }
 }
 
@@ -870,12 +675,12 @@ function registerWalletHubCallbacks(bot, getLang, t) {
         }).catch(() => { });
       }
     } catch (err) {
-      console.error('[WH Callback] Error:', err.message);
+      log.child('WalletHub').error('Error:', err.message);
       await bot.answerCallbackQuery(query.id, { text: '❌ Error', show_alert: true }).catch(() => { });
     }
   });
 
-  console.log('[WalletHub] ✔ Wallet hub callbacks registered');
+  log.child('WalletHub').info('✔ Wallet hub callbacks registered');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -942,7 +747,7 @@ function registerSwapConfirmCallback(bot, getLang, t) {
       successCard += `🔗 <a href="${explorerLink}">${t(lang, 'ai_swap_tx')}</a>\n`;
       await bot.editMessageText(successCard, { chat_id: msg.chat.id, message_id: msg.message_id, parse_mode: 'HTML', disable_web_page_preview: true });
     } catch (err) {
-      console.error('[SwapExec] Error:', err.message);
+      log.child('Swap').error('Error:', err.message);
       await bot.editMessageText(`❌ ${t(lang, 'ai_swap_sign_error')}: ${err.message?.substring(0, 100)}`, {
         chat_id: msg.chat.id, message_id: msg.message_id, parse_mode: 'HTML'
       }).catch(() => { });
@@ -956,7 +761,7 @@ function registerSwapConfirmCallback(bot, getLang, t) {
     await bot.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => { });
   });
 
-  console.log('[SwapConfirm] ✔ Swap confirm callback registered');
+  log.child('Swap').info('✔ Swap confirm callback registered');
 }
 
 function registerTokenSearchCallbacks(bot) {
@@ -1018,11 +823,11 @@ function registerTokenSearchCallbacks(bot) {
         // Action buttons + back
         const backKeyboard = [
           [
-            { text: '💱 Swap', callback_data: `tks|swap|${cacheKey}|${idx}` },
-            { text: '📊 Chart', callback_data: `tks|chart|${cacheKey}|${idx}` },
-            { text: '🔒 Security', callback_data: `tks|sec|${cacheKey}|${idx}` },
+            { text: tf(cl, 'ai_token_btn_swap') || '💱 Swap', callback_data: `tks|swap|${cacheKey}|${idx}` },
+            { text: tf(cl, 'ai_token_btn_chart') || '📊 Chart', callback_data: `tks|chart|${cacheKey}|${idx}` },
+            { text: tf(cl, 'ai_token_btn_security') || '🔒 Security', callback_data: `tks|sec|${cacheKey}|${idx}` },
           ],
-          [{ text: '📋 Copy CA', callback_data: `tks|copy|${cacheKey}|${idx}` }],
+          [{ text: tf(cl, 'ai_token_btn_copy_ca') || '📋 Copy CA', callback_data: `tks|copy|${cacheKey}|${idx}` }],
           [{ text: tf(cl, 'ai_token_search_back'), callback_data: `tks|p|${cacheKey}|${Math.floor(idx / TKS_PAGE_SIZE)}` }],
           [{ text: tf(cl, 'ai_token_search_close'), callback_data: 'tks|close' }]
         ];
@@ -1134,11 +939,11 @@ function registerTokenSearchCallbacks(bot) {
         return;
       }
     } catch (error) {
-      console.error('[TokenSearch] Callback error:', error.message);
+      log.child('TokenSearch').error('Callback error:', error.message);
       await bot.answerCallbackQuery(query.id, { text: _t('en', 'ai_token_error'), show_alert: false }).catch(() => { });
     }
   });
-  console.log('[TokenSearch] ✓ Callback handler registered');
+  log.child('TokenSearch').info('✓ Callback handler registered');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1200,11 +1005,11 @@ function registerInlineQueryHandler(bot) {
       });
       await bot.answerInlineQuery(query.id, results, { cache_time: 30 });
     } catch (err) {
-      console.error('[Inline] Error:', err.message);
+      log.child('Inline').error('Error:', err.message);
       await bot.answerInlineQuery(query.id, [], { cache_time: 5 }).catch(() => { });
     }
   });
-  console.log('[Inline] ✓ Inline query handler registered');
+  log.child('Inline').info('✓ Inline query handler registered');
 }
 
 function createAiHandlers(deps) {
@@ -1224,7 +1029,7 @@ function createAiHandlers(deps) {
         try {
           // Always send to userId (DM/private chat) for AI-scheduled tasks
           const targetChatId = task.userId || task.chatId;
-          if (!targetChatId) { console.warn(`[Scheduler] Task ${task.id} has no target`); return; }
+          if (!targetChatId) { log.child('Scheduler').warn(`Task ${task.id} has no target`); return; }
           const { bot } = deps;
           const taskLang = task.lang || 'vi';
           const t = (key, params) => schedulerSkill.schedulerT(taskLang, key, params);
@@ -1236,9 +1041,9 @@ function createAiHandlers(deps) {
             try {
               await bot.sendMessage(chatId, text, options);
             } catch (sendErr) {
-              console.error(`[Scheduler] ⚠️ Failed to send message to ${chatId}:`, sendErr.message);
+              log.child('Scheduler').error(`⚠️ Failed to send message to ${chatId}:`, sendErr.message);
               if (/blocked|deactivated|not found|PEER_ID_INVALID/i.test(sendErr.message)) {
-                console.warn(`[Scheduler] User ${chatId} has blocked the bot or is deactivated. Disabling task ${task.id}.`);
+                log.child('Scheduler').warn(`User ${chatId} has blocked the bot or is deactivated. Disabling task ${task.id}.`);
                 const { dbRun } = require('../../db/core');
                 await dbRun(`UPDATE ai_scheduled_tasks SET enabled = 0 WHERE id = ?`, [task.id]);
               }
@@ -1258,7 +1063,7 @@ function createAiHandlers(deps) {
                   chainIndex: task.params.chainIndex || '196'
                 });
               }
-            } catch (e) { console.warn(`[Scheduler] Price fetch failed for ${token}:`, e.message); }
+            } catch (e) { log.child('Scheduler').warn(`Price fetch failed for ${token}:`, e.message); }
 
             const price = snapshot?.priceUsd ? Number(snapshot.priceUsd) : null;
             if (price) {
@@ -1359,7 +1164,7 @@ function createAiHandlers(deps) {
               try {
                 await processAibRequest(mockMsg, overridePrompt);
               } catch (err) {
-                console.error('[Scheduler] Failed dynamic AI prompt execution:', err);
+                log.child('Scheduler').error('Failed dynamic AI prompt execution:', err);
               }
 
 
@@ -1376,14 +1181,14 @@ function createAiHandlers(deps) {
             }
           }
         } catch (execErr) {
-          console.error(`[Scheduler] ❌ Error executing task ${task.id}:`, execErr);
+          log.child('Scheduler').error(`❌ Error executing task ${task.id}:`, execErr);
         }
       });
       schedulerSkill.startScheduler();
-      console.log('[AI] ✅ Scheduler skill started inside aiHandlers');
+      log.info('✅ Scheduler skill started inside aiHandlers');
     }
   } catch (e) {
-    console.warn('[AI] Scheduler startup skipped:', e.message);
+    log.warn('Scheduler startup skipped:', e.message);
   }
 
   const {
@@ -1455,13 +1260,13 @@ function createAiHandlers(deps) {
             const msg = `🔔 <b>${_t(alertLang, 'ai_alert_triggered')}</b>\n\n<b>${alert.symbol}</b> ${dirStr} $${alert.targetPrice}\n💵 ${_t(alertLang, 'ai_current_price')}: <b>$${priceStr}</b>`;
             await bot.sendMessage(alert.chatId, msg, { parse_mode: 'HTML', disable_web_page_preview: true }).catch(() => { });
             await dbRun('UPDATE user_price_alerts SET active = 0, triggeredAt = ? WHERE id = ?', [Math.floor(Date.now() / 1000), alert.id]);
-            console.log(`[PriceAlert] Triggered #${alert.id}: ${alert.symbol} ${alert.direction} $${alert.targetPrice} (current: $${priceStr})`);
+            log.child('PriceAlert').info(`Triggered #${alert.id}: ${alert.symbol} ${alert.direction} $${alert.targetPrice} (current: $${priceStr})`);
           }
         }
       }
-    } catch (err) { console.error('[PriceAlert] Cron error:', err.message); }
+    } catch (err) { log.child('PriceAlert').error('Cron error:', err.message); }
   }, 60000);
-  console.log('[PriceAlert] ✓ Cron job started (60s interval)');
+  log.child('PriceAlert').info('✓ Cron job started (60s interval)');
   // ========================================================================
   // FUNCTION DECLARATIONS - Gaming & Utility Functions
   // ========================================================================
@@ -1693,7 +1498,7 @@ function createAiHandlers(deps) {
     if (!userId || !chatId || !messageId) return;
     const state = { chatId: chatId.toString(), messageId, timestamp: Date.now() };
     customPersonaPrompts.set(userId, state);
-    console.log('[CustomPersona] Remembered prompt:', { userId, chatId: state.chatId, messageId, mapSize: customPersonaPrompts.size });
+    log.child('Persona').info('Remembered prompt:', { userId, chatId: state.chatId, messageId, mapSize: customPersonaPrompts.size });
   }
   async function promptCustomPersonaInput(msg, lang) {
     const userId = msg.from?.id?.toString();
@@ -2008,7 +1813,7 @@ function createAiHandlers(deps) {
         }
       });
     } catch (error) {
-      console.error('[AI Usage] Error:', error.message);
+      log.child('Usage').error('Error:', error.message);
       await sendReply(msg, t(lang, 'error_generic') || '❌ An error occurred');
     }
   }
@@ -2260,10 +2065,10 @@ function createAiHandlers(deps) {
         let uploadedFile = null;
         try {
           if (!finalText && audioSource) {
-            console.log('[AI Voice] Processing audio source:', { hasAudio: !!audioSource?.audio, fileId: audioSource?.audio?.file_id?.slice(0, 20) + '...' });
-            console.log('[AI Voice] downloadTelegramFile available:', typeof downloadTelegramFile);
+            log.child('Voice').info('Processing audio source:', { hasAudio: !!audioSource?.audio, fileId: audioSource?.audio?.file_id?.slice(0, 20) + '...' });
+            log.child('Voice').info('downloadTelegramFile available:', typeof downloadTelegramFile);
             downloadInfo = await downloadTelegramFile(audioSource.audio.file_id, 'ai-tts-audio');
-            console.log('[AI Voice] Downloaded:', { filePath: downloadInfo?.filePath, format: downloadInfo?.format });
+            log.child('Voice').info('Downloaded:', { filePath: downloadInfo?.filePath, format: downloadInfo?.format });
             const mimeType = resolveAudioMimeType(downloadInfo.format);
             uploadedFile = await clientInfo.client.files.upload({
               file: downloadInfo.filePath,
@@ -2310,20 +2115,20 @@ function createAiHandlers(deps) {
           } else {
             advanceGeminiKeyIndex();
           }
-          console.error(`[AI] Gemini TTS failed with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+          log.error(`Gemini TTS failed with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
         } finally {
           if (downloadInfo?.filePath) {
             try {
               await fs.promises.unlink(downloadInfo.filePath);
             } catch (cleanupError) {
-              console.warn(`[AI] Failed to clean TTS audio temp file: ${cleanupError.message}`);
+              log.warn(`Failed to clean TTS audio temp file: ${cleanupError.message}`);
             }
           }
           if (uploadedFile?.name) {
             try {
               await clientInfo.client.files.delete({ name: uploadedFile.name });
             } catch (cleanupError) {
-              console.warn(`[AI] Failed to delete Gemini TTS upload: ${cleanupError.message}`);
+              log.warn(`Failed to delete Gemini TTS upload: ${cleanupError.message}`);
             }
           }
         }
@@ -2333,7 +2138,7 @@ function createAiHandlers(deps) {
       }
     }
     if (!ttsPath || !finalText) {
-      console.warn(`[AI] TTS failed: ${lastError ? lastError.message : 'no output'}`);
+      log.warn(`TTS failed: ${lastError ? lastError.message : 'no output'}`);
       await sendReply(msg, t(lang, 'ai_tts_missing_text'), { reply_markup: buildTtsSettingsKeyboard(lang, settings) });
       return;
     }
@@ -2347,13 +2152,13 @@ function createAiHandlers(deps) {
         contentType: 'audio/wav'
       });
     } catch (error) {
-      console.warn(`[AI] Failed to send Gemini TTS audio: ${sanitizeSecrets(error.message)}`);
+      log.warn(`Failed to send Gemini TTS audio: ${sanitizeSecrets(error.message)}`);
       await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
     } finally {
       try {
         await fs.promises.unlink(ttsPath);
       } catch (cleanupError) {
-        console.warn(`[AI] Failed to clean Gemini TTS file: ${cleanupError.message}`);
+        log.warn(`Failed to clean Gemini TTS file: ${cleanupError.message}`);
       }
     }
   }
@@ -2381,7 +2186,7 @@ function createAiHandlers(deps) {
     groqUserKeys = [],
     openAiUserKeys = []
   }) {
-    console.log('[AI Request] Entry:', { provider, hasAudio, hasPhoto, hasAudioSource: !!audioSource });
+    log.child('Request').info('Entry:', { provider, hasAudio, hasPhoto, hasAudioSource: !!audioSource });
     const normalizedProvider = normalizeAiProvider(provider);
     const providerMeta = buildAiProviderMeta(lang, normalizedProvider);
     const personalKeys = normalizedProvider === 'google'
@@ -2455,7 +2260,7 @@ function createAiHandlers(deps) {
       try {
         await db.incrementCommandUsage('ai', userId, usageDate);
       } catch (usageErr) {
-        console.warn(`[AI] Failed to record AI usage: ${usageErr.message}`);
+        log.warn(`Failed to record AI usage: ${usageErr.message}`);
       }
     }
     const audioCapableProviders = new Set(['openai', 'google']);
@@ -2486,9 +2291,9 @@ function createAiHandlers(deps) {
       });
       return;
     }
-    console.log('[AI Request] Audio check:', { hasAudio, normalizedProvider, isGoogleAudio: hasAudio && normalizedProvider === 'google' });
+    log.child('Request').info('Audio check:', { hasAudio, normalizedProvider, isGoogleAudio: hasAudio && normalizedProvider === 'google' });
     if (hasAudio && normalizedProvider === 'google') {
-      console.log('[AI Request] Entering Google Audio branch, calling runGoogleAudioCompletion');
+      log.child('Request').info('Entering Google Audio branch, calling runGoogleAudioCompletion');
       try {
         await bot.sendChatAction(msg.chat.id, 'record_voice');
       } catch (error) {
@@ -2529,17 +2334,17 @@ function createAiHandlers(deps) {
         const userKeyIndex = getUserGeminiKeyIndex(userId);
         const clientInfo = getGeminiClient(userKeyIndex, personalKeys);
         if (clientInfo?.client) {
-          console.log('[AI Intent] Classifying user intent with model:', classifyModel);
+          log.child('Intent').info('Classifying user intent with model:', classifyModel);
           const aiIntent = await classifyImageIntentWithAI(clientInfo.client, promptText, hasPhoto, classifyModel);
           if (aiIntent) {
-            console.log('[AI Intent] Classification result:', aiIntent);
+            log.child('Intent').info('Classification result:', aiIntent);
             imageAction = aiIntent;
           } else {
-            console.log('[AI Intent] Classification result: CHAT (normal conversation)');
+            log.child('Intent').info('Classification result: CHAT (normal conversation)');
           }
         }
       } catch (classifyError) {
-        console.warn('[AI Intent] Classification failed, falling back to keywords:', classifyError.message);
+        log.child('Intent').warn('Classification failed, falling back to keywords:', classifyError.message);
         // Fallback to keyword detection
         imageAction = detectImageAction(promptText, hasPhoto);
       }
@@ -2662,7 +2467,7 @@ function createAiHandlers(deps) {
         });
       }
     } catch (error) {
-      console.error(`[AI] Failed to generate content: ${error.message}`);
+      log.error(`Failed to generate content: ${error.message}`);
       const isQuotaError = isQuotaOrRateLimitError(error);
       const isTimeoutError = error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '');
       const isBillingLimit = normalizedProvider === 'openai' && isOpenAiBillingError(error);
@@ -2720,7 +2525,7 @@ function createAiHandlers(deps) {
         reply_markup: keyboard
       });
     } catch (notifyError) {
-      console.warn('[AI] Failed to send expired key notification:', notifyError.message);
+      log.warn('Failed to send expired key notification:', notifyError.message);
     }
   }
   async function runGeminiCompletion({ msg, lang, parts, promptText, keySource, limitNotice, personalKeys, serverLimitState, userId, serverKeys, providerMeta }) {
@@ -2846,7 +2651,7 @@ function createAiHandlers(deps) {
           } else {
             advanceGeminiKeyIndex();
           }
-          console.error(`[AI] Failed to generate content with ${pool.type} Gemini key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+          log.error(`Failed to generate content with ${pool.type} Gemini key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
         }
       }
       if (response) {
@@ -2895,7 +2700,7 @@ function createAiHandlers(deps) {
         await sendMessageRespectingThread(msg.chat.id, msg, chunk, options);
       } catch (sendError) {
         // If MarkdownV2 fails, try sending as HTML (better for complex content)
-        console.warn('[AI] MarkdownV2 send failed, falling back to HTML:', sendError.message);
+        log.warn('MarkdownV2 send failed, falling back to HTML:', sendError.message);
         try {
           // Convert MarkdownV2 to HTML-safe format
           const htmlChunk = chunk
@@ -2918,7 +2723,7 @@ function createAiHandlers(deps) {
           const htmlOptions = { ...options, parse_mode: 'HTML' };
           await sendMessageRespectingThread(msg.chat.id, msg, sanitizedHtmlChunk, htmlOptions);
         } catch (htmlError) {
-          console.warn('[AI] HTML send failed, falling back to plain text:', htmlError.message);
+          log.warn('HTML send failed, falling back to plain text:', htmlError.message);
           // Last resort: plain text with minimal processing
           try {
             const plainChunk = chunk
@@ -2930,7 +2735,7 @@ function createAiHandlers(deps) {
             const plainOptions = { ...options, parse_mode: undefined };
             await sendMessageRespectingThread(msg.chat.id, msg, plainChunk, plainOptions);
           } catch (plainError) {
-            console.error('[AI] All send attempts failed:', plainError.message);
+            log.error('All send attempts failed:', plainError.message);
           }
         }
       }
@@ -2966,7 +2771,7 @@ function createAiHandlers(deps) {
     const useFlashLive = true; // Was: isFlashLiveModel(selectedModelId)
 
     if (useFlashLive && personalKeys.length > 0) {
-      console.log('[AI Audio] Routing audio to Flash Live (user model:', selectedModelId || 'default', ')');
+      log.child('Audio').info('Routing audio to Flash Live (user model:', selectedModelId || 'default', ')');
 
       let downloadInfo = null;
       try {
@@ -3037,7 +2842,7 @@ function createAiHandlers(deps) {
           ? contextParts.join('\n')
           : null;
 
-        console.log('[Live Audio] Context parts:', contextParts.length);
+        log.child('LiveAudio').info('Context parts:', contextParts.length);
 
         // Process with Live API - use ttsLanguage for auto-detection
         // Enable Google Search AND function calling for voice commands
@@ -3057,7 +2862,7 @@ function createAiHandlers(deps) {
 
         // Check if tool calls were detected (voice command)
         if (result?.toolCalls && result.toolCalls.length > 0) {
-          console.log('[Live Audio] Tool calls detected:', result.toolCalls.map(tc => tc.name).join(', '));
+          log.child('LiveAudio').info('Tool calls detected:', result.toolCalls.map(tc => tc.name).join(', '));
 
           // Generate a unique token for this confirmation
           const confirmToken = uuidv4();
@@ -3224,7 +3029,7 @@ function createAiHandlers(deps) {
           } catch (sendError) {
             const errMsg = (sendError?.message || '').toLowerCase();
             if (errMsg.includes('thread not found') || errMsg.includes('topic')) {
-              console.warn('[AI Audio] Thread error, retrying without thread_id');
+              log.child('Audio').warn('Thread error, retrying without thread_id');
               const { message_thread_id, ...fallbackOptions } = voiceOptions;
               await bot.sendAudio(msg.chat.id, result.audioPath, fallbackOptions, {
                 filename: path.basename(result.audioPath),
@@ -3277,13 +3082,13 @@ function createAiHandlers(deps) {
           try {
             await fs.promises.unlink(result.audioPath);
           } catch (cleanupErr) {
-            console.warn('[AI Audio] Failed to cleanup Live audio:', cleanupErr.message);
+            log.child('Audio').warn('Failed to cleanup Live audio:', cleanupErr.message);
           }
 
           return; // Done with Live API processing
         }
       } catch (liveError) {
-        console.error('[AI Audio] Live API error:', liveError.message);
+        log.child('Audio').error('Live API error:', liveError.message);
         // If Live API fails, show error but don't fall through to regular processing
         // because Flash Live cannot use generateContent
         await sendReply(msg, t(lang, 'ai_live_audio_error') || '⚠️ Voice processing failed. Please try again or switch to a different model.', {
@@ -3295,7 +3100,7 @@ function createAiHandlers(deps) {
           try {
             await fs.promises.unlink(downloadInfo.filePath);
           } catch (cleanupErr) {
-            console.warn('[AI Audio] Failed to cleanup temp file:', cleanupErr.message);
+            log.child('Audio').warn('Failed to cleanup temp file:', cleanupErr.message);
           }
         }
       }
@@ -3357,7 +3162,7 @@ function createAiHandlers(deps) {
           // Always route voice through function calling system
           // This allows AI to decide if a function call is needed for any request
           if (transcript && transcript.trim()) {
-            console.log('[AI Voice] Routing transcript through /aib:', transcript.slice(0, 50) + '...');
+            log.child('Voice').info('Routing transcript through /aib:', transcript.slice(0, 50) + '...');
             // Create synthetic message with transcript as /aib command
             // IMPORTANT: Remove audio properties to prevent infinite loop
             const syntheticMsg = {
@@ -3376,10 +3181,10 @@ function createAiHandlers(deps) {
               };
               bot.processUpdate(syntheticUpdate);
               // Early return - /aib handler will respond
-              console.log('[AI Voice] Routed to /aib, returning');
+              log.child('Voice').info('Routed to /aib, returning');
               return;
             } catch (routeError) {
-              console.warn('[AI Voice] Failed to route to /aib:', routeError.message);
+              log.child('Voice').warn('Failed to route to /aib:', routeError.message);
               // Fall through to regular response
             }
           }
@@ -3424,20 +3229,20 @@ function createAiHandlers(deps) {
           } else {
             advanceGeminiKeyIndex();
           }
-          console.error(`[AI] Failed to process Gemini audio with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+          log.error(`Failed to process Gemini audio with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
         } finally {
           if (downloadInfo?.filePath) {
             try {
               await fs.promises.unlink(downloadInfo.filePath);
             } catch (cleanupError) {
-              console.warn(`[AI] Failed to clean audio temp file: ${cleanupError.message}`);
+              log.warn(`Failed to clean audio temp file: ${cleanupError.message}`);
             }
           }
           if (uploadedFile?.name) {
             try {
               await clientInfo.client.files.delete({ name: uploadedFile.name });
             } catch (cleanupError) {
-              console.warn(`[AI] Failed to delete Gemini file: ${cleanupError.message}`);
+              log.warn(`Failed to delete Gemini file: ${cleanupError.message}`);
             }
           }
         }
@@ -3502,7 +3307,7 @@ function createAiHandlers(deps) {
               contentType: 'audio/wav'
             });
           } catch (sendError) {
-            console.warn(`[AI] Failed to send voice reply: ${sanitizeSecrets(sendError.message)}`);
+            log.warn(`Failed to send voice reply: ${sanitizeSecrets(sendError.message)}`);
           } finally {
             try {
               await fs.promises.unlink(ttsPath);
@@ -3513,7 +3318,7 @@ function createAiHandlers(deps) {
         }
       }
     } catch (ttsError) {
-      console.warn(`[AI] Voice reply TTS failed: ${sanitizeSecrets(ttsError.message)}`);
+      log.warn(`Voice reply TTS failed: ${sanitizeSecrets(ttsError.message)}`);
     }
   }
   async function runGroqCompletion({ msg, lang, promptText, parts, keySource, limitNotice, personalKeys, serverLimitState, userId, serverKeys, providerMeta }) {
@@ -3592,14 +3397,14 @@ function createAiHandlers(deps) {
             }
           }
           if (error?.response?.status === 429) {
-            console.warn('[AI] Groq rate limit hit, rotating key');
+            log.warn('Groq rate limit hit, rotating key');
           }
           if (pool.type === 'user') {
             advanceUserGroqKeyIndex(userId, pool.keys.length);
           } else {
             advanceGroqKeyIndex();
           }
-          console.error(`[AI] Failed to generate Groq content with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+          log.error(`Failed to generate Groq content with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
         }
       }
       if (response) {
@@ -3701,7 +3506,7 @@ function createAiHandlers(deps) {
         return modalResult;
       }
     } catch (error) {
-      console.warn(`[AI] Multimodal audio request failed: ${sanitizeSecrets(error.message)}`);
+      log.warn(`Multimodal audio request failed: ${sanitizeSecrets(error.message)}`);
     }
     const fallbackPrompt = combinedPrompt || 'Please respond to this audio message.';
     const completion = await axios.post('https://api.openai.com/v1/chat/completions', {
@@ -3734,7 +3539,7 @@ function createAiHandlers(deps) {
       try {
         audioReply = await synthesizeOpenAiSpeech(text, apiKey);
       } catch (speechError) {
-        console.warn(`[AI] OpenAI speech synthesis failed: ${sanitizeSecrets(speechError.message)}`);
+        log.warn(`OpenAI speech synthesis failed: ${sanitizeSecrets(speechError.message)}`);
       }
     }
     return { text, audioBuffer: audioReply };
@@ -3804,20 +3609,20 @@ function createAiHandlers(deps) {
             }
           }
           if (error?.response?.status === 429) {
-            console.warn('[AI] OpenAI audio rate limit hit, rotating key');
+            log.warn('OpenAI audio rate limit hit, rotating key');
           }
           if (pool.type === 'user') {
             advanceUserOpenAiKeyIndex(userId, pool.keys.length);
           } else {
             advanceOpenAiKeyIndex();
           }
-          console.error(`[AI] Failed to process OpenAI audio with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+          log.error(`Failed to process OpenAI audio with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
         } finally {
           if (downloadInfo?.filePath) {
             try {
               await fs.promises.unlink(downloadInfo.filePath);
             } catch (cleanupError) {
-              console.warn(`[AI] Failed to clean audio temp file: ${cleanupError.message}`);
+              log.warn(`Failed to clean audio temp file: ${cleanupError.message}`);
             }
           }
         }
@@ -3862,7 +3667,7 @@ function createAiHandlers(deps) {
       try {
         await bot.sendVoice(msg.chat.id, voiceBuffer, voiceOptions);
       } catch (voiceError) {
-        console.warn(`[AI] Failed to send voice reply: ${voiceError.message}`);
+        log.warn(`Failed to send voice reply: ${voiceError.message}`);
       }
     }
   }
@@ -3975,14 +3780,14 @@ function createAiHandlers(deps) {
             }
           }
           if (error?.response?.status === 429) {
-            console.warn('[AI] OpenAI rate limit hit during image request, rotating key');
+            log.warn('OpenAI rate limit hit during image request, rotating key');
           }
           if (pool.type === 'user') {
             advanceUserOpenAiKeyIndex(userId, pool.keys.length);
           } else {
             advanceOpenAiKeyIndex();
           }
-          console.error(`[AI] Failed to generate OpenAI image with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+          log.error(`Failed to generate OpenAI image with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
         }
       }
       if (response) {
@@ -3993,7 +3798,7 @@ function createAiHandlers(deps) {
       const errorMessage = lastError?.message || 'Unknown error';
       const quotaHit = isQuotaOrRateLimitError(lastError);
       const billingLimit = isOpenAiBillingError(lastError);
-      console.error(`[AI] OpenAI image request failed: ${sanitizeSecrets(errorMessage)}`);
+      log.error(`OpenAI image request failed: ${sanitizeSecrets(errorMessage)}`);
       const messageKey = billingLimit ? 'ai_provider_billing_limit' : quotaHit ? 'ai_provider_quota' : 'ai_error';
       await sendReply(msg, t(lang, messageKey, { provider: providerMeta.label }), {
         parse_mode: 'HTML',
@@ -4003,7 +3808,7 @@ function createAiHandlers(deps) {
     }
     const imageData = response?.data?.[0]?.b64_json || null;
     if (!imageData) {
-      console.error('[AI] OpenAI image response missing payload');
+      log.error('OpenAI image response missing payload');
       await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
       return;
     }
@@ -4034,11 +3839,11 @@ function createAiHandlers(deps) {
         try {
           await db.incrementCommandUsage('image_gen', userId, new Date().toISOString().slice(0, 10));
         } catch (usageErr) {
-          console.warn(`[AI] Failed to record image usage: ${usageErr.message}`);
+          log.warn(`Failed to record image usage: ${usageErr.message}`);
         }
       }
     } catch (error) {
-      console.error(`[AI] Failed to send image response: ${error.message}`);
+      log.error(`Failed to send image response: ${error.message}`);
       await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
     }
   }
@@ -4145,14 +3950,14 @@ function createAiHandlers(deps) {
             }
           }
           if (error?.response?.status === 429) {
-            console.warn('[AI] Gemini rate limit hit during image request, rotating key');
+            log.warn('Gemini rate limit hit during image request, rotating key');
           }
           if (pool.type === 'user') {
             advanceUserGeminiKeyIndex(userId, pool.keys.length);
           } else {
             advanceGeminiKeyIndex();
           }
-          console.error(`[AI] Failed to generate Gemini image with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+          log.error(`Failed to generate Gemini image with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
         }
       }
       if (response) {
@@ -4163,7 +3968,7 @@ function createAiHandlers(deps) {
       const errorMessage = lastError?.message || 'Unknown error';
       const quotaHit = isQuotaOrRateLimitError(lastError);
       const expiredKey = isGeminiApiKeyExpired(lastError);
-      console.error(`[AI] Gemini image request failed: ${sanitizeSecrets(errorMessage)}`);
+      log.error(`Gemini image request failed: ${sanitizeSecrets(errorMessage)}`);
       const messageKey = expiredKey ? 'ai_provider_gemini_key_expired' : quotaHit ? 'ai_provider_quota' : 'ai_error';
       await sendReply(msg, t(lang, messageKey, { provider: providerMeta.label }), {
         parse_mode: 'HTML',
@@ -4199,7 +4004,7 @@ function createAiHandlers(deps) {
     }
     const imageDataFinal = imageData;
     if (!imageDataFinal) {
-      console.error('[AI] Gemini image response missing payload');
+      log.error('Gemini image response missing payload');
       await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
       return;
     }
@@ -4233,11 +4038,11 @@ function createAiHandlers(deps) {
         try {
           await db.incrementCommandUsage('image_gen', userId, new Date().toISOString().slice(0, 10));
         } catch (usageErr) {
-          console.warn(`[AI] Failed to record image usage: ${usageErr.message}`);
+          log.warn(`Failed to record image usage: ${usageErr.message}`);
         }
       }
     } catch (error) {
-      console.error(`[AI] Failed to send Gemini image response: ${error.message}`);
+      log.error(`Failed to send Gemini image response: ${error.message}`);
       await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
     }
   }
@@ -4315,14 +4120,14 @@ function createAiHandlers(deps) {
             }
           }
           if (error?.response?.status === 429) {
-            console.warn('[AI] OpenAI rate limit hit, rotating key');
+            log.warn('OpenAI rate limit hit, rotating key');
           }
           if (pool.type === 'user') {
             advanceUserOpenAiKeyIndex(userId, pool.keys.length);
           } else {
             advanceOpenAiKeyIndex();
           }
-          console.error(`[AI] Failed to generate OpenAI content with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+          log.error(`Failed to generate OpenAI content with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
         }
       }
       if (response) {
@@ -5928,7 +5733,7 @@ function createAiHandlers(deps) {
             message_thread_id: msg.message_thread_id || undefined,
             disable_web_page_preview: true
           });
-          return { success: true, action: 'price_displayed', displayMessage: `Price displayed for ${sr.tokenSymbol}.` };
+          return { success: true, action: 'price_displayed', displayMessage: t(lang, 'ai_token_search_found_single', { symbol: sr.tokenSymbol }) || `Price displayed for ${sr.tokenSymbol}.` };
         }
         // Multiple results → paginated inline keyboard
         // Cache search results for callback (includes t and lang for i18n)
@@ -5951,7 +5756,7 @@ function createAiHandlers(deps) {
         return {
           success: true,
           action: 'token_search_list',
-          displayMessage: `Found ${searchResults.length} tokens matching "${keyword}". Sent selection list.`
+          displayMessage: t(lang, 'ai_token_search_found_multi', { count: searchResults.length, keyword }) || `Found ${searchResults.length} tokens matching "${keyword}". Sent selection list.`
         };
       } catch (error) {
         return { success: false, error: `Failed to check price: ${error.message}` };
@@ -6411,7 +6216,7 @@ function createAiHandlers(deps) {
             const dbModule = require('../../db.js');
             await dbModule.addWalletToUser(userId, lang, newWallet.address, { name: autoName });
           } catch (err) {
-            console.error('[TW-AI] Failed to auto-register watch wallet:', err.message);
+            log.child('TW').error('Failed to auto-register watch wallet:', err.message);
           }
 
           let card = `${t(lang, 'tw_created')}\n━━━━━━━━━━━━━━━━━━\n`;
@@ -6421,7 +6226,7 @@ function createAiHandlers(deps) {
           card += `> #${walletCount + 1}\n\n`;
           card += `${t(lang, 'tw_backup_warning').replace(/<[^>]+>/g, '')}`;
           await bot.sendMessage(msg.chat.id, card, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
-          console.log(`[TW-AI] ✔ Created wallet #${walletCount + 1} for user ${userId}: ${newWallet.address.slice(0, 8)}... (name: ${autoName})`);
+          log.child('TW').info(`✔ Created wallet #${walletCount + 1} for user ${userId}: ${newWallet.address.slice(0, 8)}... (name: ${autoName})`);
 
           // Auto-trigger wallet manager
           try {
@@ -6430,7 +6235,7 @@ function createAiHandlers(deps) {
             await bot.sendMessage(msg.chat.id, `👛 ${t(lang, 'wallet_manager_title') || t(lang, 'wh_title')}\n\n${menuData.text}`, {
               parse_mode: 'HTML', reply_markup: menuData.replyMarkup, disable_web_page_preview: true
             });
-          } catch (err) { console.error('[TW-AI] Failed to auto-trigger /mywallet:', err.message); }
+          } catch (err) { log.child('TW').error('Failed to auto-trigger /mywallet:', err.message); }
 
           return { success: true, action: 'create_wallet', walletAddress: newWallet.address, walletName: autoName, walletNumber: walletCount + 1 };
 
@@ -7149,7 +6954,7 @@ function createAiHandlers(deps) {
         const member = await bot.getChatMember(chatId, userId);
         isAdminUser = ['creator', 'administrator'].includes(member.status);
       } catch (error) {
-        console.warn(`[AIA] Failed to check admin status: ${error.message}`);
+        log.child('FnCall').warn(`Failed to check admin status: ${error.message}`);
       }
     }
     if (isAdminUser) {
@@ -7238,7 +7043,7 @@ function createAiHandlers(deps) {
       const result = await toolFunctionImplementations[name](args, context);
       return result;
     } catch (error) {
-      console.error(`[AIA] Function ${name} failed:`, error);
+      log.child('FnCall').error(`Function ${name} failed:`, error);
       return {
         success: false,
         error: `Function execution failed: ${error.message}`
@@ -7318,7 +7123,7 @@ function createAiHandlers(deps) {
       functionDeclarations: availableFunctions
     }];
     if (userOptedOutOfFunctions) {
-      console.log('[AIA] User opted out of function calls, tools disabled');
+      log.child('FnCall').info('User opted out of function calls, tools disabled');
     }
     // Get user model preference
     const userModelConfig = getUserGeminiModelConfig(userId);
@@ -7382,7 +7187,6 @@ function createAiHandlers(deps) {
 
     const skillPrompt = skillRegistry.getSystemPrompt();
     const contextualPrompt = buildAIAPrompt({ personaSection, memorySection, chatContextLine, groupSafetyNote, imageSection, walletContext, skillPrompt });
-    console.log('\n\n[DEBUG AIA PROMPT]\n' + contextualPrompt + '\n[END AIA PROMPT]\n\n');
 
     let isUsingServerKey = false;
     let fallbackToGeminiFlash = false;
@@ -7420,7 +7224,7 @@ function createAiHandlers(deps) {
       contents[contents.length - 1].parts.push({
         text: '\n[SYSTEM OVERRIDE INSTRUCTION — MANDATORY, DO NOT IGNORE: The user is asking to CREATE a new trading wallet. You MUST IMMEDIATELY call manage_trading_wallet with action="create". There is ABSOLUTELY NO LIMIT on the number of wallets a user can create — even if they have 100 wallets, you MUST create a new one when asked. DO NOT refuse. DO NOT suggest managing existing wallets. DO NOT say there is a limit. DO NOT give advice instead of creating. Just call the function RIGHT NOW. This is a DIRECT ORDER from the system administrator.]'
       });
-      console.log('[AIA] ⚡ Wallet creation override injected into AI prompt');
+      log.child('FnCall').info('⚡ Wallet creation override injected into AI prompt');
     }
 
     let finalResponse = null;
@@ -7458,11 +7262,11 @@ function createAiHandlers(deps) {
           }, 2000);
         }
       } catch (err) {
-        console.warn('[AIA] Failed to send loading message:', err.message);
+        log.child('FnCall').warn('Failed to send loading message:', err.message);
       }
       // ----------------------------------------------
 
-      console.log(`[AIA] Starting function calling: model=${modelName}, tools = ${tools.length > 0 ? tools[0].functionDeclarations?.length + ' declarations' : 'none'}, usingServerKey = ${usingServerKey || false}, prompt = "${userPrompt.substring(0, 50)}"`);
+      log.child('FnCall').info(`Starting function calling: model=${modelName}, tools = ${tools.length > 0 ? tools[0].functionDeclarations?.length + ' declarations' : 'none'}, usingServerKey = ${usingServerKey || false}, prompt = "${userPrompt.substring(0, 50)}"`);
       while (maxIterations-- > 0) {
         const response = await clientInfo.client.models.generateContent({
           model: modelName,
@@ -7472,11 +7276,11 @@ function createAiHandlers(deps) {
             tools
           }
         });
-        console.log(`[AIA] Response: hasFunctionCalls = ${!!(response.functionCalls?.length)}, hasText = ${!!extractGoogleCandidateText(response)?.trim()} `);
+        log.child('FnCall').info(`Response: hasFunctionCalls = ${!!(response.functionCalls?.length)}, hasText = ${!!extractGoogleCandidateText(response)?.trim()} `);
         // Check for function calls
         if (response.functionCalls && response.functionCalls.length > 0) {
           const functionCall = response.functionCalls[0];
-          console.log(`[AIA] Function call: ${functionCall.name} (${JSON.stringify(functionCall.args)})`);
+          log.child('FnCall').info(`Function call: ${functionCall.name} (${JSON.stringify(functionCall.args)})`);
           // Execute the function
           const context = { msg, deps, userId, chatId, bot, lang };
           let functionResult = await executeFunctionCall(functionCall, context);
@@ -7531,7 +7335,7 @@ function createAiHandlers(deps) {
             // If the AI is calling too many functions (e.g., checking 4 wallets), force it to stop and return the data directly
             // to avoid hitting the strict Free Tier rate limit and causing a 503 crash.
             if (iterCount >= 4) {
-              console.warn(`[AIA] ⚠️ Forcing loop exit to prevent 503 Rate Limit (Iteration ${iterCount}). Function: ${functionCall.name}`);
+              log.child('FnCall').warn(`⚠️ Forcing loop exit to prevent 503 Rate Limit (Iteration ${iterCount}). Function: ${functionCall.name}`);
 
               let fallbackDisplay = functionResult?.displayMessage || 'Đã lấy dữ liệu (một phần).';
               if (typeof fallbackDisplay !== 'string') {
@@ -7549,7 +7353,7 @@ function createAiHandlers(deps) {
           // Check if this is a command-routing function (uses processUpdate)
           // These functions trigger native commands which handle their own responses
           if (functionResult.success && functionResult.action) {
-            console.log(`[AIA] ✓ Function ${functionCall.name} triggered command, returning`);
+            log.child('FnCall').info(`✓ Function ${functionCall.name} triggered command, returning`);
             // Save history BEFORE returning so context is preserved for next conversation
             await addToSessionHistory(userId, 'user', userPrompt);
 
@@ -7711,7 +7515,7 @@ function createAiHandlers(deps) {
         return;
       } else if (errorCode === 404 && errorMessage.includes('not supported for generateContent')) {
         // Flash Live model cannot generateContent - only function calling
-        console.error(`[AIA] Flash Live generateContent error: ${errorMessage}`);
+        log.child('FnCall').error(`Flash Live generateContent error: ${errorMessage}`);
         await sendReply(msg, t(lang, 'ai_error_flash_live_no_content'), {
           parse_mode: 'HTML',
           reply_markup: closeKeyboard
@@ -7719,7 +7523,7 @@ function createAiHandlers(deps) {
         return;
       } else if (errorCode === 503 || errorMessage.includes('overloaded')) {
         // Model overloaded - suggest switching model
-        console.error(`[AIA] Model overloaded: ${errorMessage}`);
+        log.child('FnCall').error(`Model overloaded: ${errorMessage}`);
         await sendReply(msg, t(lang, 'ai_error_model_overloaded'), {
           parse_mode: 'HTML',
           reply_markup: closeKeyboard
@@ -7736,7 +7540,7 @@ function createAiHandlers(deps) {
         return;
       } else {
         // Log non-quota errors
-        console.error(`[AIA] Error during function calling: ${error.message}`);
+        log.child('FnCall').error(`Error during function calling: ${error.message}`);
         // Use HTML to avoid markdown parsing errors from special chars in error.message
         const safeErrorMsg = String(error.message || 'Unknown error').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
         await sendReply(msg, t(lang, 'ai_error') + '\n\n' + safeErrorMsg, {

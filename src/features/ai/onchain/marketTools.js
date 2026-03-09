@@ -79,11 +79,11 @@ module.exports = {
                 _tokenSearchCache.set(cacheKey, { results: data, keyword, chainNames, timestamp: Date.now(), t, lang });
                 const keyboard = [
                     [
-                        { text: '💱 Swap', callback_data: `tks|swap|${cacheKey}|0` },
-                        { text: '📊 Chart', callback_data: `tks|chart|${cacheKey}|0` },
-                        { text: '🔒 Security', callback_data: `tks|sec|${cacheKey}|0` },
+                        { text: t(lang, 'ai_token_btn_swap') || '💱 Swap', callback_data: `tks|swap|${cacheKey}|0` },
+                        { text: t(lang, 'ai_token_btn_chart') || '📊 Chart', callback_data: `tks|chart|${cacheKey}|0` },
+                        { text: t(lang, 'ai_token_btn_security') || '🔒 Security', callback_data: `tks|sec|${cacheKey}|0` },
                     ],
-                    [{ text: '📋 Copy CA', callback_data: `tks|copy|${cacheKey}|0` }],
+                    [{ text: t(lang, 'ai_token_btn_copy_ca') || '📋 Copy CA', callback_data: `tks|copy|${cacheKey}|0` }],
                     [{ text: t(lang, 'ai_token_search_close') || '✖️ Close', callback_data: 'tks|close' }]
                 ];
                 await bot.sendMessage(msg.chat.id, priceCard, {
@@ -93,7 +93,7 @@ module.exports = {
                     message_thread_id: msg.message_thread_id || undefined,
                     disable_web_page_preview: true
                 });
-                return { success: true, action: 'search_displayed', displayMessage: `Found ${sr.tokenSymbol}. Price card displayed.` };
+                return { success: true, action: 'search_displayed', displayMessage: t(lang, 'ai_token_search_found_single', { symbol: sr.tokenSymbol }) || `Price displayed for ${sr.tokenSymbol}.` };
             }
 
             // Multiple results → paginated list with inline keyboard
@@ -115,7 +115,7 @@ module.exports = {
             return {
                 success: true,
                 action: 'search_displayed',
-                displayMessage: `Found ${data.length} tokens matching "${keyword}". Selection list displayed.`
+                displayMessage: t(lang, 'ai_token_search_found_multi', { count: data.length, keyword }) || `Found ${data.length} tokens matching "${keyword}". Selection list displayed.`
             };
         } catch (error) {
             return `❌ Error searching token: ${error.msg || error.message}`;

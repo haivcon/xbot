@@ -1,4 +1,6 @@
 const { buildPaginatedChainKeyboard, sortChainsWithPriority } = require('../../features/chainMenu');
+const logger = require('../../core/logger');
+const log = logger.child('TopToken');
 const { getChainIcon } = require('../../features/chainIcons');
 
 function createTopTokenHelpers(deps) {
@@ -258,7 +260,7 @@ function createTopTokenHelpers(deps) {
             const directory = await ensureOkxChainDirectory();
             chains = Array.isArray(directory?.market) ? directory.market : [];
         } catch (error) {
-            console.warn(`[TopToken] Failed to load chain directory: ${error.message}`);
+            log.warn(`Failed to load chain directory: ${error.message}`);
         }
 
         const fallbackChainIndex = Number.isFinite(OKX_CHAIN_INDEX) ? OKX_CHAIN_INDEX : OKX_CHAIN_INDEX_FALLBACK;
@@ -427,7 +429,7 @@ function createTopTokenHelpers(deps) {
                 })
             };
         } catch (error) {
-            console.error(`[TopToken] Failed to fetch ranking: ${error.message}`);
+            log.error(`Failed to fetch ranking: ${error.message}`);
             if (sessionKey) {
                 updateTopTokenSession(sessionKey, {
                     chainIndex: numericChain,
@@ -464,7 +466,7 @@ function createTopTokenHelpers(deps) {
             const menu = await buildTopTokenChainMenu(lang);
             await sendReply(msg, menu.text, { parse_mode: 'HTML', reply_markup: menu.replyMarkup });
         } catch (error) {
-            console.error(`[TopToken] Failed to start command: ${error.message}`);
+            log.error(`Failed to start command: ${error.message}`);
             await sendReply(msg, t(lang, 'toptoken_error'), { parse_mode: 'Markdown' });
         }
     }

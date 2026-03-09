@@ -1,3 +1,6 @@
+const logger = require('../core/logger');
+const log = logger.child('StartHandlers');
+
 function createStartHandlers({
     bot,
     t,
@@ -39,7 +42,7 @@ function createStartHandlers({
                 await p;
                 return;
             } catch (error) {
-                console.error(`[Start] Failed to send intro video: ${error.message}`);
+                log.child('Start').error(`Failed to send intro video: ${error.message}`);
                 disableStartVideo(startVideo, error);
             }
         }

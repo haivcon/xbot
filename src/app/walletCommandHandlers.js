@@ -1,3 +1,6 @@
+const logger = require('../core/logger');
+const log = logger.child('WalletCmd');
+
 function createWalletCommandHandlers({
     enforceOwnerCommandLimit,
     getLang,
@@ -68,7 +71,7 @@ function createWalletCommandHandlers({
 
             return prompt;
         } catch (error) {
-            console.warn(`[RegisterWizard] Cannot DM ${userId}: ${error.message}`);
+            log.child('RegisterWizard').warn(`Cannot DM ${userId}: ${error.message}`);
             if (notifyInChat) {
                 await sendReply(notifyInChat, t(lang, 'help_action_dm_blocked'), {
                     reply_markup: buildCloseKeyboard(lang)
@@ -89,7 +92,7 @@ function createWalletCommandHandlers({
             try {
                 await startRegisterWizard(msg.from?.id?.toString(), lang, { notifyInChat: msg });
             } catch (error) {
-                console.warn(`[Register] Wizard failed for ${chatId}: ${error.message}`);
+                log.child('Register').warn(`Wizard failed for ${chatId}: ${error.message}`);
                 await sendReply(msg, t(lang, 'register_usage'), { parse_mode: 'Markdown', reply_markup: buildWalletActionKeyboard(lang) });
             }
             return;
@@ -112,15 +115,15 @@ function createWalletCommandHandlers({
             const message = t(lang, messageKey, { wallet: `<code>${escapeHtml(parsed.wallet)}</code>`, name: `<b>${escapeHtml(effectiveName)}</b>` });
             const portfolioLinks = [{ address: parsed.wallet, url: buildPortfolioEmbedUrl(parsed.wallet) }];
             await sendReply(msg, message, { parse_mode: 'HTML', reply_markup: buildWalletActionKeyboard(lang, portfolioLinks) });
-            console.log(`[BOT] Dang ky ${walletLabel} -> ${chatId} (tokens: auto-detect)`);
+            log.child('BOT').info(`Dang ky ${walletLabel} -> ${chatId} (tokens: auto-detect)`);
 
             try {
                 await sendWalletManagerMenu(chatId, lang, { replyTo: msg });
             } catch (error) {
-                console.warn(`[Register] Failed to refresh wallet manager for ${chatId}: ${error.message}`);
+                log.child('Register').warn(`Failed to refresh wallet manager for ${chatId}: ${error.message}`);
             }
         } catch (error) {
-            console.error(`[Register] Failed to save token for ${chatId}: ${error.message}`);
+            log.child('Register').error(`Failed to save token for ${chatId}: ${error.message}`);
             await sendReply(msg, t(lang, 'register_help_error'), { parse_mode: 'Markdown', reply_markup: buildCloseKeyboard(lang) });
         }
     }
@@ -138,7 +141,7 @@ function createWalletCommandHandlers({
         try {
             await sendWalletManagerMenu(chatId, lang, { replyTo: msg });
         } catch (error) {
-            console.error(`[WalletManager] Failed to open manager for ${chatId}: ${error.message}`);
+            log.child('WalletManager').error(`Failed to open manager for ${chatId}: ${error.message}`);
             await sendReply(msg, t(lang, 'wallet_overview_error'), { parse_mode: 'Markdown', reply_markup: buildCloseKeyboard(lang) });
         }
     }

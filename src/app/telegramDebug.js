@@ -1,3 +1,6 @@
+const logger = require('../core/logger');
+const log = logger.child('TelegramDebug');
+
 function createTelegramDebugHelpers({
     detectTelegramMessageType,
     collectTelegramFileIds,
@@ -18,7 +21,7 @@ function createTelegramDebugHelpers({
                 return value;
             }));
         } catch (error) {
-            console.warn(`[IdTelegram] Failed to sanitize message: ${error.message}`);
+            log.child('IdTelegram').warn(`Failed to sanitize message: ${error.message}`);
             return { error: 'sanitize_failed' };
         }
     }

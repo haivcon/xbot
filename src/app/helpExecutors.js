@@ -1,3 +1,6 @@
+const logger = require('../core/logger');
+const log = logger.child('HelpExecutors');
+
 function createHelpExecutors(deps) {
     const {
         bot,
@@ -179,7 +182,7 @@ function createHelpExecutors(deps) {
                         reply_markup: buildRandomMenuKeyboard(lang)
                     });
                 } catch (error) {
-                    console.warn(`[Help] Failed to open random menu from help: ${error.message}`);
+                    log.child('Help').warn(`Failed to open random menu from help: ${error.message}`);
                 }
             }
             return { message: t(lang, 'help_action_executed') };

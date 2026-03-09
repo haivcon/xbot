@@ -1,4 +1,6 @@
 const { t } = require('../../i18n');
+const logger = require('../../core/logger');
+const log = logger.child('Ai');
 const { GEMINI_API_KEYS, GROQ_API_KEYS, OPENAI_API_KEYS, startVideoFileIds } = require('../../config');
 const { buildCloseKeyboard, buildAiUsageKeyboard } = require('../../utils/builders');
 const { sendReply, buildThreadedOptions } = require('../../utils/chat');
@@ -113,7 +115,7 @@ async function sendAiIntroMedia(msg, lang, caption, replyMarkup = null) {
         await bot.sendVideo(msg.chat.id, startVideo, videoOptions);
         return true;
     } catch (error) {
-        console.error(`[AI] Failed to send intro media: ${error.message}`);
+        log.error(`Failed to send intro media: ${error.message}`);
         disableStartVideo(startVideo, error);
     }
 

@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('IdTelegram');
+
 function createIdTelegramHandler({
     bot,
     getLang,
@@ -24,7 +27,7 @@ function createIdTelegramHandler({
             try {
                 await sendIdTelegramDetails(targetMessage, msg, lang);
             } catch (error) {
-                console.error(`[IdTelegram] Failed to send details: ${error.message}`);
+                log.error(`Failed to send details: ${error.message}`);
             }
             return { status: 'details_sent' };
         }

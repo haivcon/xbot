@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('Scheduler');
+
 function createCheckinScheduler({
     db,
     getScheduleSlots,
@@ -25,7 +28,7 @@ function createCheckinScheduler({
             try {
                 groups = await db.listCheckinGroups();
             } catch (error) {
-                console.error(`[Checkin] Khong the tai danh sach nhom: ${error.message}`);
+                log.child('Checkin').error(`Khong the tai danh sach nhom: ${error.message}`);
                 return;
             }
 
@@ -106,7 +109,7 @@ function createCheckinScheduler({
 
         const tick = () => {
             runCheckinSchedulerTick().catch((error) => {
-                console.error(`[Checkin] Tick loi: ${error.message}`);
+                log.child('Checkin').error(`Tick loi: ${error.message}`);
             });
         };
 

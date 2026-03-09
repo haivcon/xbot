@@ -7,6 +7,8 @@
  */
 const { dbRun, dbGet, dbAll } = require('../../../db/core');
 
+const logger = require('../../core/logger');
+const log = logger.child('Scheduler');
 // ═══════════════════════════════════════════════════════
 // Inline i18n for scheduler responses (vi/en/zh)
 // ═══════════════════════════════════════════════════════
@@ -332,7 +334,7 @@ async function addScheduledTask({ userId, chatId, type, intervalMs, params = {},
          VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
         [id, String(userId), String(chatId), type, clampedInterval, nextRunAt, JSON.stringify(params), lang, now]
     );
-    console.log(`[Scheduler] ➕ addScheduledTask: id=${id}, type=${type}, chatId=${chatId}, userId=${userId}, lang=${lang}, nextRunAt=${new Date(nextRunAt).toISOString()}`);
+    log.info(`➕ addScheduledTask: id=${id}, type=${type}, chatId=${chatId}, userId=${userId}, lang=${lang}, nextRunAt=${new Date(nextRunAt).toISOString()}`);
     return { id, userId, chatId, type, intervalMs: clampedInterval, nextRunAt, params, enabled: true, lang, createdAt: now };
 }
 
@@ -373,7 +375,7 @@ let _onTaskDue = null;
 
 function setTaskExecutor(callback) {
     _onTaskDue = callback;
-    console.log('[Scheduler] ✅ Task executor SET, type:', typeof callback);
+    log.info('✅ Task executor SET, type:', typeof callback);
 }
 
 async function schedulerTick() {
@@ -387,27 +389,27 @@ async function schedulerTick() {
 
         if (dueTasks.length === 0) return;
 
-        console.log(`[Scheduler] Tick: ${dueTasks.length} tasks due, executor: ${typeof _onTaskDue}`);
+        log.info(`Tick: ${dueTasks.length} tasks due, executor: ${typeof _onTaskDue}`);
 
         for (const row of dueTasks) {
             const task = parseTaskRow(row);
-            console.log(`[Scheduler] 🔥 FIRING task ${task.id} (${task.type}), chatId: ${task.chatId}, userId: ${task.userId}, lang: ${task.lang}`);
+            log.info(`🔥 FIRING task ${task.id} (${task.type}), chatId: ${task.chatId}, userId: ${task.userId}, lang: ${task.lang}`);
 
             try {
                 if (_onTaskDue) {
                     await _onTaskDue(task);
-                    console.log(`[Scheduler] ✅ Task ${task.id} executed successfully`);
+                    log.info(`✅ Task ${task.id} executed successfully`);
                 } else {
-                    console.log(`[Scheduler] ⚠️ No executor set, skipping task ${task.id}`);
+                    log.info(`⚠️ No executor set, skipping task ${task.id}`);
                 }
             } catch (error) {
-                console.error(`[Scheduler] ❌ Task ${task.id} (${task.type}) failed:`, error.message);
+                log.error(`❌ Task ${task.id} (${task.type}) failed:`, error.message);
             }
 
             // Update next run time or delete if one-shot
             if (task.params?.oneShot) {
                 await dbRun(`DELETE FROM ai_scheduled_tasks WHERE id = ?`, [task.id]);
-                console.log(`[Scheduler] 🗑️ Deleted one-shot task ${task.id}`);
+                log.info(`🗑️ Deleted one-shot task ${task.id}`);
             } else {
                 const nextRunAt = now + task.intervalMs;
                 await dbRun(
@@ -417,14 +419,14 @@ async function schedulerTick() {
             }
         }
     } catch (error) {
-        console.error(`[Scheduler] ❌ Tick error:`, error.message);
+        log.error(`❌ Tick error:`, error.message);
     }
 }
 
 function startScheduler() {
     if (_tickInterval) return;
     _tickInterval = setInterval(schedulerTick, 10000); // Every 10 seconds
-    console.log('[Scheduler] ⏰ Started autonomous scheduler (10s tick)');
+    log.info('⏰ Started autonomous scheduler (10s tick)');
 }
 
 function stopScheduler() {

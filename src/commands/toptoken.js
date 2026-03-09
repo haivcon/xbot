@@ -1,4 +1,6 @@
 const { enforceBanForMessage, enforceOwnerCommandLimit } = require('../features/auth/utils');
+const logger = require('../core/logger');
+const log = logger.child('Toptoken');
 const { getLang, t } = require('../../i18n');
 const { buildTopTokenSessionKey, updateTopTokenSession, buildTopTokenChainMenu } = require('../features/top-tokens');
 const { sendReply } = require('../utils/chat');
@@ -21,7 +23,7 @@ module.exports = {
             const menu = await buildTopTokenChainMenu(lang);
             await sendReply(msg, menu.text, { parse_mode: 'HTML', reply_markup: menu.replyMarkup });
         } catch (error) {
-            console.error(`[TopToken] Failed to start command: ${error.message}`);
+            log.error(`Failed to start command: ${error.message}`);
             await sendReply(msg, t(lang, 'toptoken_error'), { parse_mode: 'Markdown' });
         }
     }

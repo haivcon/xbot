@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('Okx402');
+
 async function handleOkx402StatusCommand(deps, msg) {
     const {
         enforceOwnerCommandLimit,
@@ -22,7 +25,7 @@ async function handleOkx402StatusCommand(deps, msg) {
         ];
         sendReply(msg, lines.join('\n'), { parse_mode: 'Markdown', reply_markup: buildCloseKeyboard(lang) });
     } catch (error) {
-        console.error(`[Okx402] Failed to check x402 support: ${error.message}`);
+        log.error(`Failed to check x402 support: ${error.message}`);
         sendReply(msg, t(lang, 'okx402_error'), { parse_mode: 'Markdown', reply_markup: buildCloseKeyboard(lang) });
     }
 }

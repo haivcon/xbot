@@ -1,4 +1,6 @@
 const fs = require('fs');
+const logger = require('../core/logger');
+const log = logger.child('AiAudio');
 const path = require('path');
 const os = require('os');
 
@@ -102,7 +104,7 @@ function createAiAudio({
             });
             return tempPath;
         } catch (error) {
-            console.warn(`[AI] Gemini TTS failed: ${sanitizeSecrets(error.message)}`);
+            log.child('AI').warn(`Gemini TTS failed: ${sanitizeSecrets(error.message)}`);
             return null;
         }
     }

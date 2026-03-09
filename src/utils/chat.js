@@ -1,4 +1,6 @@
 const bot = require('../core/bot');
+const logger = require('../core/logger');
+const log = logger.child('Chat');
 const { startVideoFileIds } = require('../config');
 const { enforceOwnerCommandLimit } = require('../features/auth/utils');
 const { getLang, t } = require('../../i18n');
@@ -73,7 +75,7 @@ async function sendMessageRespectingThread(chatId, source, text, options = {}) {
                 lowered.includes('not enough rights to send messages in the topic');
 
             if (shouldFallback) {
-                console.warn(`[ThreadFallback] Gửi tin nhắn tới thread ${threadedOptions.message_thread_id} thất bại (${description}). Thử gửi không chỉ định thread.`);
+                log.child('ThreadFallback').warn(`Gửi tin nhắn tới thread ${threadedOptions.message_thread_id} thất bại (${description}). Thử gửi không chỉ định thread.`);
                 const fallbackOptions = { ...options };
                 try {
                     return await sendWithOptions(fallbackOptions);
@@ -93,7 +95,7 @@ async function sendMessageRespectingThread(chatId, source, text, options = {}) {
             const plainOptions = buildThreadedOptions(source, { ...options });
             delete plainOptions.parse_mode;
             delete plainOptions.entities;
-            console.warn(`[MarkdownFallback] Failed to parse entities (${parseDescription}). Sending as plain text.`);
+            log.child('MarkdownFallback').warn(`Failed to parse entities (${parseDescription}). Sending as plain text.`);
             try {
                 return await sendWithOptions(plainOptions);
             } catch (fallbackError) {
@@ -134,7 +136,7 @@ function disableStartVideo(videoId, error) {
 
     startVideoFileIds.splice(index, 1);
     const reason = error?.message ? ` (${error.message})` : '';
-    console.warn(`[Start] Disabled intro video ID after failure: ${videoId}${reason}`);
+    log.child('Start').warn(`Disabled intro video ID after failure: ${videoId}${reason}`);
 }
 
 async function handleStartNoToken(msg) {
@@ -158,7 +160,7 @@ async function handleStartNoToken(msg) {
             await p;
             return;
         } catch (error) {
-            console.error(`[Start] Failed to send intro video: ${error.message}`);
+            log.child('Start').error(`Failed to send intro video: ${error.message}`);
             disableStartVideo(startVideo, error);
         }
     }

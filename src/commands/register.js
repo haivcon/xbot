@@ -1,4 +1,6 @@
 const { enforceBanForMessage, enforceOwnerCommandLimit } = require('../features/auth/utils');
+const logger = require('../core/logger');
+const log = logger.child('Register');
 const { getLang, t } = require('../../i18n');
 const db = require('../../db.js');
 const { sendReply } = require('../utils/chat');
@@ -40,9 +42,9 @@ module.exports = {
             const message = t(lang, messageKey, { wallet: walletLabel, name: effectiveName });
             const portfolioLinks = [{ address: parsed.wallet, url: buildPortfolioEmbedUrl(parsed.wallet) }];
             await sendReply(msg, message, { parse_mode: 'Markdown', reply_markup: buildWalletActionKeyboard(lang, portfolioLinks) });
-            console.log(`[BOT] Đăng ký ${shortenAddress(parsed.wallet)} -> ${chatId} (tokens: auto-detect)`);
+            log.child('BOT').info(`Đăng ký ${shortenAddress(parsed.wallet)} -> ${chatId} (tokens: auto-detect)`);
         } catch (error) {
-            console.error(`[Register] Failed to save token for ${chatId}: ${error.message}`);
+            log.error(`Failed to save token for ${chatId}: ${error.message}`);
             await sendReply(msg, t(lang, 'register_help_error'), { parse_mode: 'Markdown', reply_markup: buildCloseKeyboard(lang) });
         }
     }

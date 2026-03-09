@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('Summary');
+
 function createCheckinSummary({
     db,
     bot,
@@ -86,10 +89,10 @@ function createCheckinSummary({
             } else {
                 await bot.sendMessage(chatId, summaryText, options);
             }
-            console.log(`[Checkin] Sent summary announcement to ${chatId} (${triggeredBy}).`);
+            log.child('Checkin').info(`Sent summary announcement to ${chatId} (${triggeredBy}).`);
             return true;
         } catch (error) {
-            console.error(`[Checkin] Failed to send summary announcement to ${chatId}: ${error.message}`);
+            log.child('Checkin').error(`Failed to send summary announcement to ${chatId}: ${error.message}`);
             return false;
         }
     }

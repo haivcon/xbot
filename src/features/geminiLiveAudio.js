@@ -13,6 +13,8 @@
  */
 
 const fs = require('fs');
+const logger = require('../core/logger');
+const log = logger.child('LiveAudio');
 const path = require('path');
 const os = require('os');
 const { execFile } = require('child_process');
@@ -24,9 +26,9 @@ const { GoogleGenAI, Modality } = require('@google/genai');
 let ffmpegPath = 'ffmpeg'; // fallback to system ffmpeg
 try {
     ffmpegPath = require('ffmpeg-static');
-    console.log('[Live Audio] Using ffmpeg-static:', ffmpegPath);
+    log.info('Using ffmpeg-static:', ffmpegPath);
 } catch (e) {
-    console.log('[Live Audio] ffmpeg-static not found, using system ffmpeg');
+    log.info('ffmpeg-static not found, using system ffmpeg');
 }
 
 const execFileAsync = promisify(execFile);
@@ -186,7 +188,7 @@ function buildLiveConfig(options = {}) {
             }
         }
     };
-    console.log('[Live Audio] Using voice:', effectiveVoice, 'requested:', voice);
+    log.info('Using voice:', effectiveVoice, 'requested:', voice);
 
     // Thinking configuration
     if (enableThinking && thinkingBudget > 0) {
@@ -268,9 +270,9 @@ async function processAudioWithLiveAPI(audioBuffer, apiKey, options = {}) {
 
     try {
         wav.fromBuffer(audioBuffer);
-        console.log('[Live Audio] Loaded WAV file directly');
+        log.info('Loaded WAV file directly');
     } catch (error) {
-        console.log('[Live Audio] Not a WAV file, converting with ffmpeg...');
+        log.info('Not a WAV file, converting with ffmpeg...');
         try {
             // Detect format from magic bytes
             let inputFormat = 'ogg'; // Default for Telegram voice
@@ -285,9 +287,9 @@ async function processAudioWithLiveAPI(audioBuffer, apiKey, options = {}) {
             processedBuffer = await convertToWav(audioBuffer, inputFormat);
             wav = new WaveFile();
             wav.fromBuffer(processedBuffer);
-            console.log('[Live Audio] Converted to WAV successfully');
+            log.info('Converted to WAV successfully');
         } catch (convertError) {
-            console.error('[Live Audio] ffmpeg conversion failed:', convertError.message);
+            log.error('ffmpeg conversion failed:', convertError.message);
             throw new Error('Failed to convert audio. Make sure ffmpeg is installed.');
         }
     }
@@ -309,7 +311,7 @@ async function processAudioWithLiveAPI(audioBuffer, apiKey, options = {}) {
                 return message;
             }
             if (Date.now() - startTime > timeoutMs) {
-                console.error('[Live Audio] Timeout after', (Date.now() - startTime) / 1000, 'seconds');
+                log.error('Timeout after', (Date.now() - startTime) / 1000, 'seconds');
                 throw new Error('Timeout waiting for Live API response');
             }
             await new Promise((resolve) => setTimeout(resolve, 100));
@@ -325,7 +327,7 @@ async function processAudioWithLiveAPI(audioBuffer, apiKey, options = {}) {
 
         while (!done && !sessionClosed) {
             if (Date.now() - startTime > maxWaitMs) {
-                console.warn('[Live Audio] Timeout waiting for turn completion');
+                log.warn('Timeout waiting for turn completion');
                 break;
             }
 
@@ -363,7 +365,7 @@ async function processAudioWithLiveAPI(audioBuffer, apiKey, options = {}) {
     let session = null;
 
     // Debug: Uncomment to see config
-    // console.log('[Live Audio] Config:', JSON.stringify(config, null, 2));
+    // log.info('Config:', JSON.stringify(config, null, 2));
 
     try {
         // Connect to Live API
@@ -378,7 +380,7 @@ async function processAudioWithLiveAPI(audioBuffer, apiKey, options = {}) {
                     responseQueue.push(message);
                 },
                 onerror: function (e) {
-                    console.error('[Live Audio] Error:', e.message);
+                    log.error('Error:', e.message);
                 },
                 onclose: function (e) {
                     sessionClosed = true;
@@ -452,7 +454,7 @@ async function processAudioWithLiveAPI(audioBuffer, apiKey, options = {}) {
         // If we have tool calls but no audio, return the tool calls
         // (This happens when AI detects a command and wants to execute a function)
         if (toolCalls.length > 0) {
-            console.log('[Live Audio] Tool calls detected, returning without audio:', toolCalls.map(tc => tc.name).join(', '));
+            log.info('Tool calls detected, returning without audio:', toolCalls.map(tc => tc.name).join(', '));
             return {
                 audioPath: null,
                 duration: 0,
@@ -487,7 +489,7 @@ async function processAudioWithLiveAPI(audioBuffer, apiKey, options = {}) {
             try {
                 session.close();
             } catch (closeErr) {
-                console.warn('[Live Audio] Error closing session:', closeErr.message);
+                log.warn('Error closing session:', closeErr.message);
             }
         }
     }

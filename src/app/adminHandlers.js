@@ -1,5 +1,7 @@
 const { extractThreadId } = require('./utils/telegram');
 
+const logger = require('../core/logger');
+const log = logger.child('Admin');
 const ADMIN_COMMAND_CARDS = [
     { key: 'admin', usageKeys: [] },
     { key: 'admin_info', usageKeys: ['admin_help_info_usage_reply', 'admin_help_info_usage_buttons'] },
@@ -522,7 +524,7 @@ function createAdminHandlers({
                     break;
             }
         } catch (error) {
-            console.error(`[AdminCommand] Failed to execute ${command}: ${error.message}`);
+            log.child('AdminCommand').error(`Failed to execute ${command}: ${error.message}`);
             await sendFeedback('❌ ' + t(lang, 'admin_action_error'));
         }
     }
@@ -543,9 +545,9 @@ function createAdminHandlers({
         let adminList = [];
         let memberCount = '-';
 
-        try { chatInfo = await bot.getChat(targetChatId); } catch (e) { console.warn(`[AdminPanel] getChat failed: ${e.message}`); }
-        try { adminList = await bot.getChatAdministrators(targetChatId); } catch (e) { console.warn(`[AdminPanel] getChatAdmins failed: ${e.message}`); }
-        try { memberCount = await bot.getChatMemberCount(targetChatId); } catch (e) { console.warn(`[AdminPanel] getChatMemberCount failed: ${e.message}`); }
+        try { chatInfo = await bot.getChat(targetChatId); } catch (e) { log.child('AdminPanel').warn(`getChat failed: ${e.message}`); }
+        try { adminList = await bot.getChatAdministrators(targetChatId); } catch (e) { log.child('AdminPanel').warn(`getChatAdmins failed: ${e.message}`); }
+        try { memberCount = await bot.getChatMemberCount(targetChatId); } catch (e) { log.child('AdminPanel').warn(`getChatMemberCount failed: ${e.message}`); }
 
         const rawLink = chatInfo?.invite_link || (chatInfo?.username ? `https://t.me/${chatInfo.username}` : t(lang, 'admin_group_info_no_link'));
         const link = /^https?:\/\//i.test(rawLink || '') ? `<a href="${escapeHtml(rawLink)}">${escapeHtml(rawLink)}</a>` : escapeHtml(rawLink);
@@ -616,7 +618,7 @@ function createAdminHandlers({
                 if (/message is not modified/i.test(description)) {
                     return { status: 'updated', lang };
                 }
-                console.error(`[AdminPanel] Failed to edit panel: ${error.message}`);
+                log.child('AdminPanel').error(`Failed to edit panel: ${error.message}`);
                 // Fallback: send a fresh panel in the same chat/thread
                 try {
                     await sendSafeInlineKeyboardMessage(deliverToChatId || editMessage.chat.id, textBlock, replyMarkup, {
@@ -626,7 +628,7 @@ function createAdminHandlers({
                     }, lang);
                     return { status: 'sent', lang };
                 } catch (fallbackError) {
-                    console.error(`[AdminPanel] Fallback send failed: ${fallbackError.message}`);
+                    log.child('AdminPanel').error(`Fallback send failed: ${fallbackError.message}`);
                     return { status: 'error', lang };
                 }
             }
@@ -642,7 +644,7 @@ function createAdminHandlers({
         } catch (error) {
             const statusCode = error?.response?.statusCode;
             const status = statusCode === 403 ? 'dm_blocked' : 'error';
-            console.error(`[AdminPanel] Failed to send panel: ${error.message}`);
+            log.child('AdminPanel').error(`Failed to send panel: ${error.message}`);
             return { status, lang };
         }
     }

@@ -1,50 +1,8 @@
 
 require('dotenv').config();
 const ethers = require('ethers');
+const { normalizeAddress, normalizeOkxConfigAddress } = require('../utils/helpers');
 
-function normalizeAddress(value) {
-    if (!value || typeof value !== 'string') {
-        return null;
-    }
-
-    const trimmed = value.trim();
-    if (!trimmed) {
-        return null;
-    }
-
-    try {
-        return ethers.getAddress(trimmed);
-    } catch (error) {
-        const basicHexPattern = /^0x[0-9a-fA-F]{40}$/;
-        if (basicHexPattern.test(trimmed)) {
-            return trimmed;
-        }
-    }
-
-    return null;
-}
-
-function normalizeOkxConfigAddress(value) {
-    if (!value || typeof value !== 'string') {
-        return null;
-    }
-
-    const trimmed = value.trim();
-    if (!trimmed) {
-        return null;
-    }
-
-    try {
-        return ethers.getAddress(trimmed);
-    } catch (error) {
-        const basicHexPattern = /^0x[0-9a-fA-F]{40}$/;
-        if (basicHexPattern.test(trimmed)) {
-            return trimmed;
-        }
-    }
-
-    return null;
-}
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const BOT_USERNAME = (process.env.BOT_USERNAME || '').replace(/^@+/, '') || null;

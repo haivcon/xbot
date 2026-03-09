@@ -1,11 +1,13 @@
 const { v4: uuidv4 } = require('uuid');
+const logger = require('../../core/logger');
+const log = logger.child('Top-tokens');
 const bot = require('../../core/bot');
 const { t_ } = require('../../../i18n');
 const { handleWalletTokenCallback } = require('../../callbacks/wallet');
 
 // Placeholder function. I will implement this later.
 async function displayTopTokens(message, lang) {
-    console.log('displayTopTokens called with:', message, lang);
+    log.info('displayTopTokens called with:', message, lang);
 }
 
 const topTokenSessions = new Map();

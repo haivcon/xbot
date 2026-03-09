@@ -1,3 +1,6 @@
+const logger = require('../core/logger');
+const log = logger.child('Welcome');
+
 function createWelcomeVerification({
     t,
     defaultLang,
@@ -94,7 +97,7 @@ function createWelcomeVerification({
                 await bot.unbanChatMember(challenge.chatId, challenge.userId, { only_if_banned: true });
             }
         } catch (error) {
-            console.error(`[WelcomeVerify] Failed to enforce ${action} for ${challenge.userId} in ${challenge.chatId}: ${error.message}`);
+            log.child('WelcomeVerify').error(`Failed to enforce ${action} for ${challenge.userId} in ${challenge.chatId}: ${error.message}`);
         }
 
         try {
@@ -105,7 +108,7 @@ function createWelcomeVerification({
                 reason: reasonText
             })}`, { disable_web_page_preview: true });
         } catch (error) {
-            console.warn(`[WelcomeVerify] Unable to send enforcement notice: ${error.message}`);
+            log.child('WelcomeVerify').warn(`Unable to send enforcement notice: ${error.message}`);
         }
 
         return notice;
@@ -158,7 +161,7 @@ function createWelcomeVerification({
             try {
                 successMessage = await bot.sendMessage(challenge.chatId, `🎉 ${t(challenge.lang, 'welcome_verify_success', { user: challenge.displayName })}`);
             } catch (error) {
-                console.warn(`[WelcomeVerify] Unable to send success message: ${error.message}`);
+                log.child('WelcomeVerify').warn(`Unable to send success message: ${error.message}`);
             }
 
             if (challenge.messageId) {
@@ -276,7 +279,7 @@ function createWelcomeVerification({
                 try {
                     await sendWelcomeVerificationChallenge(task);
                 } catch (error) {
-                    console.error(`[WelcomeVerify] Failed to send challenge: ${error.message}`);
+                    log.child('WelcomeVerify').error(`Failed to send challenge: ${error.message}`);
                 }
             }
 

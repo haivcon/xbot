@@ -1,4 +1,6 @@
 const os = require('os');
+const logger = require('./logger');
+const log = logger.child('Queue');
 const crypto = require('crypto');
 
 let BullMQ = null;
@@ -91,7 +93,7 @@ async function drainMemoryQueue() {
         try {
             await runHandler(job.name, job.data);
         } catch (error) {
-            console.error(`[Queue][memory] Job ${job.name} failed:`, error.message || error);
+            log.error(`[memory] Job ${job.name} failed:`, error.message || error);
         }
     }
 
@@ -111,14 +113,14 @@ function startJobWorkers() {
         try {
             connection = new IORedis(REDIS_URL, redisOptions);
         } catch (error) {
-            console.error('[Queue][redis] Failed to create Redis connection:', error?.message || error);
+            log.error('[redis] Failed to create Redis connection:', error?.message || error);
             return;
         }
 
         try {
             queue = new BullMQ.Queue(QUEUE_NAME, { connection });
         } catch (error) {
-            console.error('[Queue][redis] Failed to create Queue:', error?.message || error);
+            log.error('[redis] Failed to create Queue:', error?.message || error);
             return;
         }
 
@@ -126,17 +128,17 @@ function startJobWorkers() {
             try {
                 scheduler = new BullMQ.QueueScheduler(QUEUE_NAME, { connection });
             } catch (error) {
-                console.warn('[Queue][redis] QueueScheduler init failed:', error?.message || error);
+                log.warn('[redis] QueueScheduler init failed:', error?.message || error);
             }
         } else {
-            console.warn('[Queue][redis] QueueScheduler not available (bullmq v5+). Skipping.');
+            log.warn('[redis] QueueScheduler not available (bullmq v5+). Skipping.');
         }
 
         if (queueEventsSupported) {
             try {
                 queueEvents = new BullMQ.QueueEvents(QUEUE_NAME, { connection });
             } catch (error) {
-                console.warn('[Queue][redis] QueueEvents init failed:', error?.message || error);
+                log.warn('[redis] QueueEvents init failed:', error?.message || error);
                 queueEvents = null;
             }
         }
@@ -151,16 +153,16 @@ function startJobWorkers() {
                 }
             );
         } catch (error) {
-            console.error('[Queue][redis] Failed to start Worker:', error?.message || error);
+            log.error('[redis] Failed to start Worker:', error?.message || error);
             return;
         }
 
         worker.on('error', (error) => {
-            console.error('[Queue][redis] Worker error:', error?.message || error);
+            log.error('[redis] Worker error:', error?.message || error);
         });
 
         worker.on('failed', (job, error) => {
-            console.error(
+            log.error(
                 `[Queue][redis] Job ${job?.name || job?.id} failed:`,
                 error?.message || error
             );
@@ -168,7 +170,7 @@ function startJobWorkers() {
 
         if (queueEvents) {
             queueEvents.on('failed', ({ jobId, failedReason, name }) => {
-                console.error(`[Queue][redis] Job ${name || jobId} failed:`, failedReason);
+                log.error(`[redis] Job ${name || jobId} failed:`, failedReason);
             });
         }
 
@@ -176,7 +178,7 @@ function startJobWorkers() {
             `[Queue][redis] Started queue "${QUEUE_NAME}" with concurrency=${QUEUE_CONCURRENCY}`
         );
     } else {
-        console.warn('[Queue] Using in-memory queue (no Redis/bullmq). Jobs will not persist.');
+        log.warn('Using in-memory queue (no Redis/bullmq). Jobs will not persist.');
     }
 }
 

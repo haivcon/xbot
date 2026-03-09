@@ -8,6 +8,8 @@
  * Inspired by OpenClaw's skill architecture.
  */
 const fs = require('fs');
+const logger = require('../core/logger');
+const log = logger.child('SkillEngine');
 const path = require('path');
 
 // ═══════════════════════════════════════════════════════
@@ -32,7 +34,7 @@ class SkillRegistry {
             throw new Error('Skill must have a name');
         }
         if (this.skills.has(skill.name)) {
-            console.warn(`[SkillEngine] Skill "${skill.name}" already registered, overwriting.`);
+            log.warn(`Skill "${skill.name}" already registered, overwriting.`);
         }
         this.skills.set(skill.name, skill);
 
@@ -46,7 +48,7 @@ class SkillRegistry {
                 }
             }
         }
-        console.log(`[SkillEngine] ✅ Registered skill: ${skill.name} (${this._countTools(skill)} tools)`);
+        log.info(`✅ Registered skill: ${skill.name} (${this._countTools(skill)} tools)`);
     }
 
     /**
@@ -68,7 +70,7 @@ class SkillRegistry {
             }
         }
         this.skills.delete(skillName);
-        console.log(`[SkillEngine] ❌ Unregistered skill: ${skillName}`);
+        log.info(`❌ Unregistered skill: ${skillName}`);
         return true;
     }
 
@@ -143,7 +145,7 @@ class SkillRegistry {
         try {
             return await handler(functionCall.args || {}, context);
         } catch (error) {
-            console.error(`[SkillEngine] Error in ${skillName}.${functionCall.name}:`, error);
+            log.error(`Error in ${skillName}.${functionCall.name}:`, error);
             return `Error executing ${functionCall.name}: ${error.message || 'Unknown error'}`;
         }
     }
@@ -168,7 +170,7 @@ class SkillRegistry {
         const skill = this.skills.get(skillName);
         if (!skill) return false;
         skill.enabled = enabled;
-        console.log(`[SkillEngine] ${enabled ? '✅ Enabled' : '⏸️ Disabled'} skill: ${skillName}`);
+        log.info(`${enabled ? '✅ Enabled' : '⏸️ Disabled'} skill: ${skillName}`);
         return true;
     }
 
@@ -196,7 +198,7 @@ class SkillRegistry {
 function loadSkillsFromDirectory(registry, skillsDir) {
     const dir = skillsDir || path.join(__dirname);
     if (!fs.existsSync(dir)) {
-        console.warn(`[SkillEngine] Skills directory not found: ${dir}`);
+        log.warn(`Skills directory not found: ${dir}`);
         return;
     }
 
@@ -216,7 +218,7 @@ function loadSkillsFromDirectory(registry, skillsDir) {
                 registry.register(skill);
             }
         } catch (error) {
-            console.error(`[SkillEngine] Failed to load skill from ${entry.name}:`, error.message);
+            log.error(`Failed to load skill from ${entry.name}:`, error.message);
         }
     }
 }

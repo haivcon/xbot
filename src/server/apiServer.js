@@ -1,4 +1,6 @@
 const express = require('express');
+const logger = require('../core/logger');
+const log = logger.child('API');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../../db.js');
@@ -39,7 +41,7 @@ registerJobHandler('generate-token', async ({ walletAddress, token }) => {
         throw new Error('walletAddress and token are required');
     }
     await db.addPendingToken(token, walletAddress);
-    console.log(`[Queue] Stored token for wallet: ${walletAddress}`);
+    log.child('Queue').info(`Stored token for wallet: ${walletAddress}`);
 });
 
 startJobWorkers();
@@ -172,13 +174,39 @@ function startApiServer() {
     app.use(backpressureGuard);
     app.use(rateLimit);
 
-    app.get(['/health', '/healthz'], (req, res) => {
+    app.get(['/health', '/healthz'], async (req, res) => {
         const now = Date.now();
+        const mem = process.memoryUsage();
+
+        // DB connectivity check
+        let dbStatus = 'unknown';
+        try {
+            await db.getUserLanguage('__health_check__');
+            dbStatus = 'ok';
+        } catch {
+            dbStatus = 'error';
+        }
+
+        // Event loop lag estimate
+        const lagStart = process.hrtime.bigint();
+        await new Promise(resolve => setImmediate(resolve));
+        const lagNs = Number(process.hrtime.bigint() - lagStart);
+        const lagMs = Math.round(lagNs / 1e6);
+
         res.json({
-            status: 'ok',
-            uptimeSeconds: process.uptime(),
+            status: dbStatus === 'ok' ? 'ok' : 'degraded',
+            uptimeSeconds: Math.round(process.uptime()),
             startedAt: startedAt.toISOString(),
             now: new Date(now).toISOString(),
+            version: process.env.npm_package_version || 'unknown',
+            node: process.version,
+            memory: {
+                rss: Math.round(mem.rss / 1024 / 1024) + 'MB',
+                heapUsed: Math.round(mem.heapUsed / 1024 / 1024) + 'MB',
+                heapTotal: Math.round(mem.heapTotal / 1024 / 1024) + 'MB'
+            },
+            eventLoopLagMs: lagMs,
+            db: dbStatus,
             inFlight,
             rateLimitMax: RATE_LIMIT_MAX,
             rateLimitWindowMs: RATE_LIMIT_WINDOW_MS,
@@ -186,6 +214,7 @@ function startApiServer() {
             queue: queueInfo()
         });
     });
+
 
     app.get('/metrics', async (req, res) => {
         if (!METRICS_ENABLED) {
@@ -312,7 +341,7 @@ function startApiServer() {
 
             if (shouldQueue) {
                 await enqueueJob('generate-token', { walletAddress, token });
-                console.log(`[API] Queued token generation for wallet: ${walletAddress}`);
+                log.info(`Queued token generation for wallet: ${walletAddress}`);
                 res.json({
                     token,
                     queued: true,
@@ -322,10 +351,10 @@ function startApiServer() {
             }
 
             await db.addPendingToken(token, walletAddress);
-            console.log(`[API] Da tao token cho vi: ${walletAddress}`);
+            log.info(`Da tao token cho vi: ${walletAddress}`);
             res.json({ token, queued: false });
         } catch (error) {
-            console.error('[API] Loi generate-token:', error.message);
+            log.error('Loi generate-token:', error.message);
             res.status(500).json({ error: 'Dia chi vi khong hop le' });
         }
     });
@@ -347,17 +376,17 @@ function startApiServer() {
     app.locals.apiServerStarted = true;
     const tryListen = (port, attemptsLeft = 5) => {
         const server = app.listen(port, '0.0.0.0', () => {
-            console.log(`[API Server] Dang chay tai http://0.0.0.0:${port}`);
+            log.child('APIServer').info(`Dang chay tai http://0.0.0.0:${port}`);
         });
         server.on('error', (err) => {
             if (err?.code === 'EADDRINUSE' && attemptsLeft > 0) {
                 const nextPort = port + 1;
-                console.error(`[API Server] Port ${port} dang bi chiem. Thu port ${nextPort}...`);
+                log.child('APIServer').error(`Port ${port} dang bi chiem. Thu port ${nextPort}...`);
                 tryListen(nextPort, attemptsLeft - 1);
             } else if (err?.code === 'EADDRINUSE') {
-                console.error(`[API Server] Khong the mo port (thu ${port}) sau nhieu lan thu. Dat env API_PORT de chon port khac.`);
+                log.child('APIServer').error(`Khong the mo port (thu ${port}) sau nhieu lan thu. Dat env API_PORT de chon port khac.`);
             } else {
-                console.error('[API Server] Loi khi khoi dong:', err);
+                log.child('APIServer').error('Loi khi khoi dong:', err);
             }
         });
     };

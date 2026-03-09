@@ -7,6 +7,8 @@
  */
 
 const { containsGamingKeyword, extractBotMention, parseGamingCommand, hasGamingIntent } = require('../../utils/gamingKeywords');
+const logger = require('../../core/logger');
+const log = logger.child('AutoDetect');
 const { shouldSkipAutoDetection } = require('../../core/userInputState');
 const { customPersonaPrompts } = require('../../core/state');
 const {
@@ -20,12 +22,21 @@ function registerAutoDetection(context) {
     const { bot, handleAiaCommand, handleAiCommand, handleCustomPersonaReply, handlePriceWizardMessage } = context;
 
     if (!handleAiaCommand) {
-        console.warn('[AutoDetection] handleAiaCommand not available - disabled');
+        log.child('AutoDetection').warn('handleAiaCommand not available - disabled');
         return;
     }
 
-    // Store processed message IDs to prevent infinite loops
-    const processedMessages = new Set();
+    // Store processed message IDs with timestamps to prevent infinite loops (TTL-based cleanup)
+    const processedMessages = new Map();
+    const PROCESSED_MSG_TTL_MS = 60000; // 60 seconds
+
+    // Cleanup expired entries every 60s
+    setInterval(() => {
+        const cutoff = Date.now() - PROCESSED_MSG_TTL_MS;
+        for (const [key, ts] of processedMessages) {
+            if (ts < cutoff) processedMessages.delete(key);
+        }
+    }, PROCESSED_MSG_TTL_MS);
 
     bot.on('message', async (msg) => {
         try {
@@ -42,32 +53,24 @@ function registerAutoDetection(context) {
                     const text = msg.text || msg.caption || '';
                     const handled = await handlePriceWizardMessage(msg, text);
                     if (handled) {
-                        console.log('[AutoDetection] ⏸ Skipping - handled by price wizard');
+                        log.child('AutoDetection').info('⏸ Skipping - handled by price wizard');
                         return;
                     }
                 } catch (e) {
-                    console.error('[AutoDetection] handlePriceWizardMessage error:', e.message);
+                    log.child('AutoDetection').error('handlePriceWizardMessage error:', e.message);
                 }
             }
 
             // === PRIORITY 1: Check for custom persona reply ===
-            // DEBUG: Log to trace custom persona check
-            console.log('[AutoDetection] PersonaReplyCheck:', {
-                hasHandler: !!handleCustomPersonaReply,
-                hasReplyTo: !!msg.reply_to_message,
-                replyToId: msg.reply_to_message?.message_id
-            });
 
             if (handleCustomPersonaReply && msg.reply_to_message) {
                 try {
                     const handled = await handleCustomPersonaReply(msg);
-                    console.log('[AutoDetection] handleCustomPersonaReply returned:', handled);
                     if (handled) {
-                        console.log('[AutoDetection] ⏸ Skipping - handled by custom persona reply');
                         return;
                     }
                 } catch (e) {
-                    console.error('[AutoDetection] handleCustomPersonaReply error:', e.message);
+                    log.child('AutoDetection').error('handleCustomPersonaReply error:', e.message);
                 }
             }
 
@@ -76,7 +79,7 @@ function registerAutoDetection(context) {
 
             // === SMART CHECK: Only skip if this message is a REPLY to a wizard prompt ===
             if (userId && shouldSkipAutoDetection(userId, chatId, msg)) {
-                console.log('[AutoDetection] ⏸ Skipping - message is reply to wizard prompt');
+                log.child('AutoDetection').info('⏸ Skipping - message is reply to wizard prompt');
                 return;
             }
 
@@ -109,7 +112,7 @@ function registerAutoDetection(context) {
                 }
 
                 if (foundKeys.length > 0) {
-                    console.log(`[AutoDetection] 🔐 Detected ${foundKeys.length} potential private key(s) in DM`);
+                    log.child('AutoDetection').info(`🔐 Detected ${foundKeys.length} potential private key(s) in DM`);
                     try {
                         const ethers = require('ethers');
                         const crypto = require('crypto');
@@ -188,16 +191,16 @@ function registerAutoDetection(context) {
                         setTimeout(async () => {
                             try {
                                 await bot.deleteMessage(msg.chat.id, msg.message_id);
-                                console.log(`[AutoDetection] 🗑️ Deleted private key message ${msg.message_id}`);
+                                log.child('AutoDetection').info(`🗑️ Deleted private key message ${msg.message_id}`);
                             } catch (delErr) {
-                                console.error('[AutoDetection] Could not delete key message:', delErr.message);
+                                log.child('AutoDetection').error('Could not delete key message:', delErr.message);
                             }
                         }, AUTO_DELETE_SECONDS * 1000);
 
-                        console.log(`[AutoDetection] 🔐 Auto-import done: imported=${results.imported}, dup=${results.duplicates}, invalid=${results.invalid}`);
+                        log.child('AutoDetection').info(`🔐 Auto-import done: imported=${results.imported}, dup=${results.duplicates}, invalid=${results.invalid}`);
                         return; // Stop further processing
                     } catch (autoImportErr) {
-                        console.error('[AutoDetection] Auto-import error:', autoImportErr.message);
+                        log.child('AutoDetection').error('Auto-import error:', autoImportErr.message);
                         // Fall through to normal AI processing if auto-import fails
                     }
                 }
@@ -217,7 +220,7 @@ function registerAutoDetection(context) {
 
                 // Enhanced logging for voice reply debugging
                 if (hasAudioMedia) {
-                    console.log('[AutoDetection] Voice in group:', {
+                    log.child('AutoDetection').info('Voice in group:', {
                         hasReply: !!msg.reply_to_message,
                         replyFromId: msg.reply_to_message?.from?.id,
                         botId: botInfo.id,
@@ -229,24 +232,18 @@ function registerAutoDetection(context) {
                 if (mention.isMention) {
                     shouldTrigger = true;
                     extractedText = mention.textAfterMention || textOrCaption;
-                    console.log('[AutoDetection] ✓ @mention detected, text:', extractedText);
+                    log.child('AutoDetection').info('✓ @mention detected, text:', extractedText);
                 }
                 // NEW: Voice reply to bot's message - trigger AI
                 else if (hasAudioMedia && msg.reply_to_message?.from?.id === botInfo.id) {
                     shouldTrigger = true;
-                    console.log('[AutoDetection] ✓ Voice reply to bot detected');
+                    log.child('AutoDetection').info('✓ Voice reply to bot detected');
                 }
             }
 
             if (shouldTrigger && (extractedText.trim() || hasAudioMedia)) {
-                // Mark as processed
-                processedMessages.add(msgKey);
-
-                // Memory cleanup
-                if (processedMessages.size > 1000) {
-                    const entries = Array.from(processedMessages);
-                    entries.slice(0, 500).forEach(e => processedMessages.delete(e));
-                }
+                // Mark as processed (with timestamp for TTL-based cleanup)
+                processedMessages.set(msgKey, Date.now());
 
                 // ==============================================
                 // PRIORITY: Skip if message looks like a wallet address
@@ -261,7 +258,7 @@ function registerAutoDetection(context) {
                     solanaPattern.test(extractedText.trim());
 
                 if (looksLikeAddress) {
-                    console.log('[AutoDetection] ✓ Wallet address detected, routing to AI');
+                    log.child('AutoDetection').info('✓ Wallet address detected, routing to AI');
                     const syntheticMsg = {
                         ...msg,
                         text: `/aib ${extractedText}`,
@@ -278,7 +275,7 @@ function registerAutoDetection(context) {
                 const diceMatch = extractedText.match(/\b(\d+)d(\d+)([+-]\d+)?(?:\s|$)/i);
                 if (diceMatch) {
                     const commandText = `/roll ${diceMatch[0].trim()}`;
-                    console.log('[AutoDetection] ✓ Universal dice pattern:', diceMatch[0]);
+                    log.child('AutoDetection').info('✓ Universal dice pattern:', diceMatch[0]);
 
                     // Simulate command using processUpdate
                     const syntheticUpdate = {
@@ -299,7 +296,7 @@ function registerAutoDetection(context) {
                 const gamingCmd = parseGamingCommand(extractedText);
 
                 if (gamingCmd) {
-                    console.log('[AutoDetection] ✓ Keyword match:', gamingCmd);
+                    log.child('AutoDetection').info('✓ Keyword match:', gamingCmd);
 
                     // === SMART CONFIRMATION ===
                     // Thay vì gọi command trực tiếp, hiện confirmation để user xác nhận
@@ -344,9 +341,9 @@ function registerAutoDetection(context) {
                             }, CONFIRMATION_TIMEOUT_MS);
                         }
 
-                        console.log('[AutoDetection] ✓ Sent confirmation for:', gamingCmd.command);
+                        log.child('AutoDetection').info('✓ Sent confirmation for:', gamingCmd.command);
                     } catch (error) {
-                        console.error('[AutoDetection] Failed to send confirmation:', error.message);
+                        log.child('AutoDetection').error('Failed to send confirmation:', error.message);
                     }
 
                     return;
@@ -356,7 +353,7 @@ function registerAutoDetection(context) {
                 // FALLBACK TO AI
                 // ==============================================
                 const intentDetected = hasGamingIntent(extractedText);
-                console.log('[AutoDetection] ✓', intentDetected ? 'Gaming intent' : 'General query', '- AI chat');
+                log.child('AutoDetection').info('✓', intentDetected ? 'Gaming intent' : 'General query', '- AI chat');
 
                 // Check if message has photo or audio - route to native /ai command
                 const hasPhoto = Array.isArray(msg.photo) && msg.photo.length > 0;
@@ -364,10 +361,10 @@ function registerAutoDetection(context) {
 
                 if (hasPhoto || hasAudio) {
                     // Route to native /ai command which handles images/audio properly
-                    console.log('[AutoDetection] ✓ Media detected, routing to handleAiCommand');
+                    log.child('AutoDetection').info('✓ Media detected, routing to handleAiCommand');
 
                     if (!handleAiCommand) {
-                        console.warn('[AutoDetection] handleAiCommand not available for media');
+                        log.child('AutoDetection').warn('handleAiCommand not available for media');
                         return;
                     }
 
@@ -393,11 +390,11 @@ function registerAutoDetection(context) {
                 }
             }
         } catch (error) {
-            console.error('[AutoDetection] Error:', error.message);
+            log.child('AutoDetection').error('Error:', error.message);
         }
     });
 
-    console.log('[AutoDetection] ✓ Registered with @mention requirement for groups');
+    log.child('AutoDetection').info('✓ Registered with @mention requirement for groups');
 }
 
 module.exports = { registerAutoDetection };

@@ -1,4 +1,6 @@
 const { containsGamingKeyword, extractBotMention } = require('../../utils/gamingKeywords');
+const logger = require('../../core/logger');
+const log = logger.child('Messages');
 const { shouldSkipAutoDetection } = require('../../core/userInputState');
 
 function registerMessageHandlers(context) {
@@ -68,7 +70,7 @@ function registerMessageHandlers(context) {
             const userId = msg.from?.id?.toString();
             const chatId = msg.chat?.id?.toString();
             if (userId && shouldSkipAutoDetection(userId, chatId, msg)) {
-                console.log('[AutoAIB] ⏸ Skipping - message is reply to wizard prompt');
+                log.child('AutoAIB').info('⏸ Skipping - message is reply to wizard prompt');
                 return;
             }
 
@@ -95,14 +97,14 @@ function registerMessageHandlers(context) {
                     const botInfo = await bot.getMe();
                     mention = extractBotMention(textOrCaption, botInfo.username);
                 } catch (error) {
-                    console.error('[AutoDetect] Failed to fetch bot info for mention detection:', error.message);
+                    log.child('AutoDetect').error('Failed to fetch bot info for mention detection:', error.message);
                 }
             }
 
             let shouldTriggerAib = false;
             let extractedText = textOrCaption;
 
-            console.log('[AutoAIB] Checking message:', { text: textOrCaption, chatType, isPrivateChat, isGroup });
+            log.child('AutoAIB').info('Checking message:', { text: textOrCaption, chatType, isPrivateChat, isGroup });
 
             if (shouldTriggerProfileIntent(textOrCaption, { isPrivateChat, isGroup, botMentioned: mention.isMention })) {
                 const syntheticProfileMsg = {
@@ -117,24 +119,24 @@ function registerMessageHandlers(context) {
 
             if (isPrivateChat) {
                 // DM: Trigger on all text (except commands)
-                console.log('[AutoAIB] Private chat - will trigger');
+                log.child('AutoAIB').info('Private chat - will trigger');
                 shouldTriggerAib = true;
             } else if (isGroup) {
                 // Groups: Check for @mention first
                 if (mention.isMention) {
                     // Mentioned bot - trigger with text after mention
-                    console.log('[AutoAIB] Bot mentioned in group');
+                    log.child('AutoAIB').info('Bot mentioned in group');
                     shouldTriggerAib = true;
                     extractedText = mention.textAfterMention || textOrCaption;
                 } else if (containsGamingKeyword(textOrCaption)) {
                     // Gaming keyword detected - trigger
-                    console.log('[AutoAIB] Gaming keyword detected');
+                    log.child('AutoAIB').info('Gaming keyword detected');
                     shouldTriggerAib = true;
                 }
             }
 
             if (shouldTriggerAib && extractedText.trim()) {
-                console.log('[AutoAIB] Triggering with text:', extractedText);
+                log.child('AutoAIB').info('Triggering with text:', extractedText);
                 // Trigger /aib with extracted text via handleAiaCommand
                 const { handleAiaCommand } = context;
 
@@ -147,11 +149,11 @@ function registerMessageHandlers(context) {
                     };
                     await handleAiaCommand(syntheticMsg);
                 } else {
-                    console.warn('[AutoAIB] handleAiaCommand not available in context');
+                    log.child('AutoAIB').warn('handleAiaCommand not available in context');
                 }
             }
         } catch (error) {
-            console.error(`[AutoAIB] Error in auto-detection: ${error.message}`);
+            log.child('AutoAIB').error(`Error in auto-detection: ${error.message}`);
         }
     }
 
@@ -195,7 +197,7 @@ function registerMessageHandlers(context) {
             try {
                 await sendIdTelegramDetails(msg, msg, idSession.lang || (await getLang(msg)));
             } catch (error) {
-                console.error(`[IdTelegram] Failed to deliver details: ${error.message}`);
+                log.child('IdTelegram').error(`Failed to deliver details: ${error.message}`);
             }
 
             idTelegramSessions.delete(sessionKey);
@@ -463,7 +465,7 @@ function registerMessageHandlers(context) {
                     }), {}, 20000);
                     registerWizardStates.delete(userId);
                 } catch (error) {
-                    console.error(`[RegisterWizard] Failed to save wallet for ${userId}: ${error.message}`);
+                    log.child('RegisterWizard').error(`Failed to save wallet for ${userId}: ${error.message}`);
                     await sendEphemeralMessage(userId, t(lang, 'register_help_error'));
                 }
                 return;
@@ -507,7 +509,7 @@ function registerMessageHandlers(context) {
                     });
                     txhashWizardStates.delete(userId);
                 } catch (error) {
-                    console.error(`[TxhashWizard] Failed to handle txhash for ${userId}: ${error.message}`);
+                    log.child('TxhashWizard').error(`Failed to handle txhash for ${userId}: ${error.message}`);
                     await sendReply(msg, t(effectiveLang, 'txhash_error'), {
                         reply_markup: buildCloseKeyboard(effectiveLang, { backCallbackData: 'txhash_back' })
                     });
@@ -553,7 +555,7 @@ function registerMessageHandlers(context) {
                     });
                     tokenWizardStates.delete(userId);
                 } catch (error) {
-                    console.error(`[TokenWizard] Failed to handle token for ${userId}: ${error.message}`);
+                    log.child('TokenWizard').error(`Failed to handle token for ${userId}: ${error.message}`);
                     await sendReply(msg, t(effectiveLang, 'token_error'), {
                         reply_markup: buildCloseKeyboard(effectiveLang, { backCallbackData: 'token_back' })
                     });
@@ -611,7 +613,7 @@ function registerMessageHandlers(context) {
 
                     contractWizardStates.delete(userId);
                 } catch (error) {
-                    console.error(`[ContractWizard] Failed to respond for ${userId}: ${error.message}`);
+                    log.child('ContractWizard').error(`Failed to respond for ${userId}: ${error.message}`);
                     await sendMessageRespectingThread(contractState.chatId, msg, t(effectiveLang, 'contract_invalid'), {
                         reply_markup: buildCloseKeyboard(effectiveLang)
                     });
@@ -664,7 +666,7 @@ function registerMessageHandlers(context) {
                         await sendEphemeralMessage(userId, t(lang, 'checkin_dm_secret_confirm'));
                     }
                 } catch (error) {
-                    console.error(`[Checkin] Khng th? chuy?n ti?p tin nh?n b m?t: ${error.message}`);
+                    log.child('Checkin').error(`Khng th? chuy?n ti?p tin nh?n b m?t: ${error.message}`);
                     await sendEphemeralMessage(userId, t(lang, 'checkin_dm_secret_error'), {}, 15000);
                 } finally {
                     pendingSecretMessages.delete(userId);

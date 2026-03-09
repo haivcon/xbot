@@ -4,6 +4,8 @@
  * (REFACTORED: Implementations moved to src/features/ai/onchain/)
  */
 const { ONCHAIN_COMMON_RULES } = require('../../config/prompts');
+const logger = require('../../core/logger');
+const log = logger.child('Ai-onchain');
 const { ONCHAIN_TOOLS } = require('./onchain/declarations');
 
 const walletTools = require('./onchain/walletTools');
@@ -29,7 +31,7 @@ async function executeToolCall(functionCall, context) {
     try {
         return await handler(functionCall.args || {}, context);
     } catch (error) {
-        console.error(`[AI-Onchain] Tool execution error for ${functionCall.name}:`, error);
+        log.child('AIOnchain').error(`Tool execution error for ${functionCall.name}:`, error);
         return `Error executing ${functionCall.name}: ${error.message || 'Unknown error'}`;
     }
 }

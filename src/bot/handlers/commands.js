@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('Commands');
+
 function registerCommandHandlers(context) {
     let handleIdTelegramCommand;
     let buildFiltersListView;
@@ -604,7 +607,7 @@ function registerCommandHandlers(context) {
             try {
                 await sendIdTelegramDetails(targetMessage, msg, lang);
             } catch (error) {
-                console.error(`[IdTelegram] Failed to send details: ${error.message}`);
+                log.child('IdTelegram').error(`Failed to send details: ${error.message}`);
             }
             return { status: 'details_sent' };
         }
@@ -912,7 +915,7 @@ function registerCommandHandlers(context) {
             try {
                 await openAdminHub(userId, { fallbackLang: lang, mode: 'welcome' });
             } catch (error) {
-                console.error(`[WelcomeCommand] Failed to open hub in DM for ${userId}: ${error.message}`);
+                log.child('WelcomeCommand').error(`Failed to open hub in DM for ${userId}: ${error.message}`);
                 await sendReply(msg, t(lang, 'welcome_admin_dm_error'));
             }
             return;
@@ -939,7 +942,7 @@ function registerCommandHandlers(context) {
         try {
             await db.ensureCheckinGroup(chatId.toString());
         } catch (error) {
-            console.error(`[WelcomeCommand] Failed to register group ${chatId}: ${error.message}`);
+            log.child('WelcomeCommand').error(`Failed to register group ${chatId}: ${error.message}`);
         }
 
         try {
@@ -949,7 +952,7 @@ function registerCommandHandlers(context) {
                 allow_sending_without_reply: true
             });
         } catch (error) {
-            console.error(`[WelcomeCommand] Failed to send welcome admin menu for ${userId} in ${chatId}: ${error.message}`);
+            log.child('WelcomeCommand').error(`Failed to send welcome admin menu for ${userId} in ${chatId}: ${error.message}`);
             await sendMessageRespectingThread(chatId, msg, t(replyLang, 'welcome_admin_dm_error'), {
                 allow_sending_without_reply: true
             });

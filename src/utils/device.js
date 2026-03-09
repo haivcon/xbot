@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const logger = require('../core/logger');
+const log = logger.child('Device');
 const db = require('../../db.js');
 const { DEVICE_TARGET_PREFIX } = require('../config');
 
@@ -88,7 +90,7 @@ async function recordDeviceInfo(update) {
         try {
             await db.upsertUserDevice(update.from.id, info);
         } catch (error) {
-            console.warn(`[Device] Failed to persist device ${info.deviceId}: ${error.message}`);
+            log.warn(`Failed to persist device ${info.deviceId}: ${error.message}`);
         }
     }
 

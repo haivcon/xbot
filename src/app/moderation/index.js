@@ -1,4 +1,6 @@
 const db = require('../../../db.js');
+const logger = require('../../core/logger');
+const log = logger.child('Moderation');
 const { bot } = require('../../core/bot');
 const {
     groupAdminSettings,
@@ -13,6 +15,18 @@ const {
     WELCOME_ENFORCEMENT_ACTIONS,
     sanitizeWeightValue
 } = require('../../features/checkin/constants');
+
+// Cache admin check results to reduce API calls (TTL 5 minutes)
+const adminCache = new Map();
+const ADMIN_CACHE_TTL = 5 * 60 * 1000;
+
+// Cleanup expired admin cache entries every 5 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, val] of adminCache) {
+        if (now >= val.expiry) adminCache.delete(key);
+    }
+}, ADMIN_CACHE_TTL);
 
 function getGroupSettings(chatId) {
     const key = chatId.toString();
@@ -122,7 +136,7 @@ async function ensureFilterState(chatId) {
             });
         }
     } catch (error) {
-        console.error(`[Filters] Failed to hydrate filters for ${key}: ${error.message}`);
+        log.child('Filters').error(`Failed to hydrate filters for ${key}: ${error.message}`);
     }
 
     filterCacheHydrated.add(key);
@@ -148,16 +162,22 @@ function normalizeFilterResponse(raw, keyword) {
 }
 
 async function isGroupAdmin(chatId, userId) {
+    // Check cache first (TTL 5 minutes)
+    const cacheKey = `${chatId}:${userId}`;
+    const cached = adminCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiry) {
+        return cached.isAdmin;
+    }
+
     try {
         const p = bot.getChatMember(chatId, userId);
-        p.catch(() => {}); // suppress request-promise duplicate rejection
+        p.catch(() => { }); // suppress request-promise duplicate rejection
         const member = await p;
-        if (!member) {
-            return false;
-        }
-        return ['creator', 'administrator'].includes(member.status);
+        const isAdmin = member ? ['creator', 'administrator'].includes(member.status) : false;
+        adminCache.set(cacheKey, { isAdmin, expiry: Date.now() + ADMIN_CACHE_TTL });
+        return isAdmin;
     } catch (error) {
-        console.warn(`[Checkin] Kh�ng th? ki?m tra quy?n admin c?a ${userId} trong ${chatId}: ${error.message}`);
+        log.warn(`Admin check failed for ${userId} in ${chatId}: ${error.message}`);
         return false;
     }
 }
@@ -170,13 +190,17 @@ async function isGroupAdminFlexible(chatId, userId) {
 
     try {
         const p = bot.getChatAdministrators(chatId);
-        p.catch(() => {}); // suppress request-promise duplicate rejection
+        p.catch(() => { }); // suppress request-promise duplicate rejection
         const admins = await p;
-        return Array.isArray(admins)
+        const result = Array.isArray(admins)
             ? admins.some((admin) => admin?.user?.id?.toString() === userId?.toString())
             : false;
+        // Cache the result
+        const cacheKey = `${chatId}:${userId}`;
+        adminCache.set(cacheKey, { isAdmin: result, expiry: Date.now() + ADMIN_CACHE_TTL });
+        return result;
     } catch (error) {
-        console.warn(`[Checkin] Fallback admin lookup failed for ${userId} in ${chatId}: ${error.message}`);
+        log.warn(`Fallback admin lookup failed for ${userId} in ${chatId}: ${error.message}`);
         return false;
     }
 }

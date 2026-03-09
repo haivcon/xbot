@@ -1,4 +1,7 @@
-﻿function createCheckinRuntime(deps) {
+﻿const logger = require('../../core/logger');
+const log = logger.child('Checkin');
+
+function createCheckinRuntime(deps) {
     const {
         t,
         defaultLang,
@@ -266,7 +269,7 @@
 
             return formatter.format(date);
         } catch (error) {
-            console.warn(`[Checkin] Không thể format ngày cho timezone ${timezone}: ${error.message}`);
+            log.warn(`Không thể format ngày cho timezone ${timezone}: ${error.message}`);
             const year = date.getUTCFullYear();
             const month = String(date.getUTCMonth() + 1).padStart(2, '0');
             const day = String(date.getUTCDate()).padStart(2, '0');
@@ -285,7 +288,7 @@
 
             return formatter.format(date);
         } catch (error) {
-            console.warn(`[Checkin] Không thể format giờ cho timezone ${timezone}: ${error.message}`);
+            log.warn(`Không thể format giờ cho timezone ${timezone}: ${error.message}`);
             const hours = String(date.getUTCHours()).padStart(2, '0');
             const minutes = String(date.getUTCMinutes()).padStart(2, '0');
             return `${hours}:${minutes}`;
@@ -463,7 +466,7 @@
                 await bot.unbanChatMember(challenge.chatId, challenge.userId, { only_if_banned: true });
             }
         } catch (error) {
-            console.error(`[WelcomeVerify] Failed to enforce ${action} for ${challenge.userId} in ${challenge.chatId}: ${error.message}`);
+            log.child('WelcomeVerify').error(`Failed to enforce ${action} for ${challenge.userId} in ${challenge.chatId}: ${error.message}`);
         }
 
         try {
@@ -473,7 +476,7 @@
                 reason: reasonText
             }), { disable_web_page_preview: true });
         } catch (error) {
-            console.warn(`[WelcomeVerify] Unable to send enforcement notice: ${error.message}`);
+            log.child('WelcomeVerify').warn(`Unable to send enforcement notice: ${error.message}`);
         }
 
         return notice;
@@ -526,7 +529,7 @@
             try {
                 successMessage = await bot.sendMessage(challenge.chatId, t(challenge.lang, 'welcome_verify_success', { user: challenge.displayName }));
             } catch (error) {
-                console.warn(`[WelcomeVerify] Unable to send success message: ${error.message}`);
+                log.child('WelcomeVerify').warn(`Unable to send success message: ${error.message}`);
             }
 
             if (challenge.messageId) {
@@ -644,7 +647,7 @@
                 try {
                     await sendWelcomeVerificationChallenge(task);
                 } catch (error) {
-                    console.error(`[WelcomeVerify] Failed to send challenge: ${error.message}`);
+                    log.child('WelcomeVerify').error(`Failed to send challenge: ${error.message}`);
                 }
             }
 
@@ -675,7 +678,7 @@
                 promptTemplate: typeof settings.promptTemplate === 'string' ? settings.promptTemplate : ''
             };
         } catch (error) {
-            console.warn(`[Checkin] Không thể đọc cấu hình nhóm ${chatKey}: ${error.message}`);
+            log.warn(`Không thể đọc cấu hình nhóm ${chatKey}: ${error.message}`);
             return {
                 chatId: chatKey,
                 checkinTime: CHECKIN_DEFAULT_TIME,
@@ -821,9 +824,9 @@
             }
 
             await db.updateAutoMessageDate(chatId, today);
-            console.log(`[Checkin] Sent check-in announcement to ${chatId} (${triggeredBy}) targets=${sentCount}.`);
+            log.info(`Sent check-in announcement to ${chatId} (${triggeredBy}) targets=${sentCount}.`);
         } catch (error) {
-            console.error(`[Checkin] Failed to send announcement to ${chatId}: ${error.message}`);
+            log.error(`Failed to send announcement to ${chatId}: ${error.message}`);
         }
     }
 
@@ -967,12 +970,12 @@
                     sentAny = true;
                 }
             } catch (error) {
-                console.error(`[Checkin] Failed to send summary announcement to ${chatId} topic=${threadId || 'main'}: ${error.message}`);
+                log.error(`Failed to send summary announcement to ${chatId} topic=${threadId || 'main'}: ${error.message}`);
             }
         }
 
         if (sentAny) {
-            console.log(`[Checkin] Sent summary announcement to ${chatId} (${triggeredBy}).`);
+            log.info(`Sent summary announcement to ${chatId} (${triggeredBy}).`);
         }
         return sentAny;
     }
@@ -1051,7 +1054,7 @@
             return { status: 'sent', userLang };
         } catch (error) {
             pendingCheckinChallenges.delete(token);
-            console.warn(`[Checkin] Unable to send DM to ${userId}: ${error.message}`);
+            log.warn(`Unable to send DM to ${userId}: ${error.message}`);
 
             return {
                 status: 'failed',
@@ -1078,7 +1081,7 @@
                 walletAddress = normalizeAddressSafe(topWallet?.address || topWallet) || topWallet?.address || topWallet;
             }
         } catch (error) {
-            console.warn(`[Checkin] Không thể lấy ví cho ${userId}: ${error.message}`);
+            log.warn(`Không thể lấy ví cho ${userId}: ${error.message}`);
         }
 
         const points = Number(settings.dailyPoints || 0) || 0;
@@ -1146,7 +1149,7 @@
             try {
                 await concludeCheckinSuccess(token, challenge);
             } catch (error) {
-                console.error(`[Checkin] Failed to record check-in: ${error.message}`);
+                log.error(`Failed to record check-in: ${error.message}`);
                 await bot.sendMessage(userId, t(lang, 'checkin_error_record_failed'));
                 pendingCheckinChallenges.delete(token);
             }
@@ -1224,7 +1227,7 @@
             try {
                 await db.updateCheckinFeedback(prompt.chatId, prompt.userId, prompt.date, { emotion: decoded });
             } catch (error) {
-                console.error(`[Checkin] Unable to save emotion: ${error.message}`);
+                log.error(`Unable to save emotion: ${error.message}`);
                 bot.answerCallbackQuery(query.id, { text: t(lang, 'checkin_error_save_emotion'), show_alert: true });
                 return;
             }
@@ -1270,7 +1273,7 @@
                 await bot.sendMessage(prompt.userId, t(lang, 'checkin_dm_goal_success'));
                 pendingEmotionPrompts.delete(token);
             } catch (error) {
-                console.error(`[Checkin] Unable to save preset goal: ${error.message}`);
+                log.error(`Unable to save preset goal: ${error.message}`);
                 bot.answerCallbackQuery(query.id, { text: t(lang, 'checkin_error_goal_save'), show_alert: true });
             }
             return;
@@ -1316,7 +1319,7 @@
             await bot.sendMessage(userId, t(lang, 'checkin_alert_goal_saved'));
             pendingEmotionPrompts.delete(pending.token);
         } catch (error) {
-            console.error(`[Checkin] Unable to save custom goal: ${error.message}`);
+            log.error(`Unable to save custom goal: ${error.message}`);
             await bot.sendMessage(userId, t(lang, 'checkin_error_goal_save'));
         } finally {
             pendingGoalInputs.delete(userId);
@@ -1437,7 +1440,7 @@
                 await maybeAdd(profile.chatId, profile.title || profile.username);
             }
         } catch (error) {
-            console.error(`[AdminHub] Failed to load group profiles: ${error.message}`);
+            log.child('AdminHub').error(`Failed to load group profiles: ${error.message}`);
         }
 
         try {
@@ -1449,7 +1452,7 @@
                 await maybeAdd(entry.chatId, entry.title);
             }
         } catch (error) {
-            console.error(`[AdminHub] Failed to load check-in groups: ${error.message}`);
+            log.child('AdminHub').error(`Failed to load check-in groups: ${error.message}`);
         }
 
         return Array.from(results.values()).sort((a, b) => a.title.localeCompare(b.title, 'en', { sensitivity: 'base' }));
@@ -3188,7 +3191,7 @@
                 await openAdminHub(actorId, { fallbackLang: lang, mode: 'welcome' });
                 return { status: 'dm_opened' };
             } catch (error) {
-                console.error(`[WelcomeAdmin] Failed to open hub for ${actorId}: ${error.message}`);
+                log.child('WelcomeAdmin').error(`Failed to open hub for ${actorId}: ${error.message}`);
                 return { status: 'error', error };
             }
         }
@@ -3205,7 +3208,7 @@
         try {
             await db.ensureCheckinGroup(chatId.toString());
         } catch (error) {
-            console.error(`[WelcomeAdmin] Failed to register group ${chatId}: ${error.message}`);
+            log.child('WelcomeAdmin').error(`Failed to register group ${chatId}: ${error.message}`);
         }
 
         try {
@@ -3216,7 +3219,7 @@
             }
             return { status: 'opened' };
         } catch (error) {
-            console.error(`[WelcomeAdmin] Failed to open menu for ${actorId} in ${chatId}: ${error.message}`);
+            log.child('WelcomeAdmin').error(`Failed to open menu for ${actorId} in ${chatId}: ${error.message}`);
             return { status: 'error', error };
         }
     }
@@ -3425,7 +3428,7 @@
                 contentType: mimeType
             });
         } catch (error) {
-            console.error(`[Checkin Export] Error exporting data: ${error.message}`);
+            log.child('CheckinExport').error(`Error exporting data: ${error.message}`);
             await sendEphemeralMessage(adminId, t(lang, 'checkin_admin_export_error'));
         }
     }

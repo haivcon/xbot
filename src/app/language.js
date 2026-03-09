@@ -1,4 +1,6 @@
 const db = require('../../db.js');
+const logger = require('../core/logger');
+const log = logger.child('Lang');
 const { resolveLangCode } = require('../core/i18n');
 const { defaultLang } = require('../config/env');
 
@@ -49,7 +51,7 @@ async function getLang(msg) {
                 return topicLang;
             }
         } catch (error) {
-            console.warn(`[TopicLang] Khong the doc lang cho topic ${chatId}/${topicId}: ${error.message}`);
+            log.child('TopicLang').warn(`Khong the doc lang cho topic ${chatId}/${topicId}: ${error.message}`);
         }
     }
 
@@ -95,7 +97,7 @@ async function resolveNotificationLanguage(chatId, fallbackLang) {
             }
         }
     } catch (error) {
-        console.warn(`[Notify] Khong the doc ngon ngu da luu cho ${chatId}: ${error.message}`);
+        log.child('Notify').warn(`Khong the doc ngon ngu da luu cho ${chatId}: ${error.message}`);
     }
 
     return resolveLangCode(fallbackLang || defaultLang);
@@ -121,7 +123,7 @@ async function resolveGroupLanguage(chatId, fallbackLang, topicId = null) {
             return resolveLangCode(info.lang);
         }
     } catch (error) {
-        console.warn(`[Notify] Khong the doc ngon ngu da luu cho nhom ${chatKey}: ${error.message}`);
+        log.child('Notify').warn(`Khong the doc ngon ngu da luu cho nhom ${chatKey}: ${error.message}`);
     }
 
     try {
@@ -130,7 +132,7 @@ async function resolveGroupLanguage(chatId, fallbackLang, topicId = null) {
             return resolveLangCode(subscription.lang);
         }
     } catch (error) {
-        console.warn(`[Notify] Khong the doc ngon ngu nhom cho ${chatKey}: ${error.message}`);
+        log.child('Notify').warn(`Khong the doc ngon ngu nhom cho ${chatKey}: ${error.message}`);
     }
 
     return resolvedFallback;
@@ -148,7 +150,7 @@ async function resolveTopicLanguage(chatId, topicId, fallbackLang) {
             return resolveLangCode(info.lang);
         }
     } catch (error) {
-        console.warn(`[Notify] Khong the doc ngon ngu topic ${chatId}/${topicId}: ${error.message}`);
+        log.child('Notify').warn(`Khong the doc ngon ngu topic ${chatId}/${topicId}: ${error.message}`);
     }
 
     return fallback;

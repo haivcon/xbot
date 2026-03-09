@@ -5,6 +5,8 @@
  */
 
 const fs = require('fs');
+const logger = require('../core/logger');
+const log = logger.child('CmdLoader');
 const path = require('path');
 const { commandRegistry } = require('./commandRegistry');
 
@@ -20,7 +22,7 @@ async function loadCommands(deps = {}) {
     let loaded = 0;
 
     if (!fs.existsSync(COMMANDS_DIR)) {
-        console.log('[CommandLoader] Creating commands directory:', COMMANDS_DIR);
+        log.child('CommandLoader').info('Creating commands directory:', COMMANDS_DIR);
         fs.mkdirSync(COMMANDS_DIR, { recursive: true });
         return { loaded: 0, errors: ['Commands directory was empty/missing'] };
     }
@@ -59,13 +61,13 @@ async function loadCommands(deps = {}) {
         } catch (error) {
             const relativePath = path.relative(COMMANDS_DIR, filePath);
             errors.push(`${relativePath}: ${error.message}`);
-            console.error(`[CommandLoader] Error loading ${relativePath}:`, error.message);
+            log.child('CommandLoader').error(`Error loading ${relativePath}:`, error.message);
         }
     }
 
-    console.log(`[CommandLoader] Loaded ${loaded} commands from ${files.length} files`);
+    log.child('CommandLoader').info(`Loaded ${loaded} commands from ${files.length} files`);
     if (errors.length > 0) {
-        console.warn(`[CommandLoader] ${errors.length} errors encountered`);
+        log.child('CommandLoader').warn(`${errors.length} errors encountered`);
     }
 
     return { loaded, errors };
@@ -117,14 +119,14 @@ function reloadCommand(filePath, deps = {}) {
             const config = commandModule(deps);
             if (config && config.name) {
                 commandRegistry.register(config);
-                console.log(`[CommandLoader] Reloaded: ${config.name}`);
+                log.child('CommandLoader').info(`Reloaded: ${config.name}`);
             }
         } else if (commandModule && commandModule.name) {
             commandRegistry.register(commandModule);
-            console.log(`[CommandLoader] Reloaded: ${commandModule.name}`);
+            log.child('CommandLoader').info(`Reloaded: ${commandModule.name}`);
         }
     } catch (error) {
-        console.error(`[CommandLoader] Reload error:`, error.message);
+        log.child('CommandLoader').error(`Reload error:`, error.message);
     }
 }
 
@@ -134,7 +136,7 @@ function reloadCommand(filePath, deps = {}) {
  */
 function startHotReload(deps = {}) {
     if (process.env.NODE_ENV !== 'development') {
-        console.log('[CommandLoader] Hot reload disabled (not in development mode)');
+        log.child('CommandLoader').info('Hot reload disabled (not in development mode)');
         return;
     }
 
@@ -142,13 +144,13 @@ function startHotReload(deps = {}) {
         return;
     }
 
-    console.log('[CommandLoader] Hot reload enabled - watching for changes');
+    log.child('CommandLoader').info('Hot reload enabled - watching for changes');
 
     fs.watch(COMMANDS_DIR, { recursive: true }, (eventType, filename) => {
         if (filename && filename.endsWith('.cmd.js')) {
             const filePath = path.join(COMMANDS_DIR, filename);
             if (fs.existsSync(filePath)) {
-                console.log(`[CommandLoader] File changed: ${filename}`);
+                log.child('CommandLoader').info(`File changed: ${filename}`);
                 setTimeout(() => reloadCommand(filePath, deps), 100);
             }
         }

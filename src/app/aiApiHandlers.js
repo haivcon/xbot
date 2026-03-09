@@ -8,6 +8,8 @@ const {
     rememberAiApiMenuState
 } = require('../features/aiService');
 const { aiApiAddPrompts, aiApiMenuStates } = require('../core/state');
+const logger = require('../core/logger');
+const log = logger.child('AiApiHandlers');
 const { getPersonaStrings } = require('./personaI18n');
 
 function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiKey, escapeHtml }) {
@@ -38,7 +40,7 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
                 if (description.includes('message is not modified')) {
                     return message;
                 }
-                console.warn(`[ApiHub] editMessageText failed, sending new message instead: ${error.message}`);
+                log.child('ApiHub').warn(`editMessageText failed, sending new message instead: ${error.message}`);
             }
         }
 
@@ -49,7 +51,7 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
         try {
             return await bot.sendMessage(message.chat.id, text, baseOptions);
         } catch (error) {
-            console.warn(`[ApiHub] sendMessage fallback failed: ${error.message}`);
+            log.child('ApiHub').warn(`sendMessage fallback failed: ${error.message}`);
             return null;
         }
     }

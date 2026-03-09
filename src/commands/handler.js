@@ -1,4 +1,6 @@
 const fs = require('fs');
+const logger = require('../core/logger');
+const log = logger.child('Handler');
 const path = require('path');
 const bot = require('../core/bot');
 
@@ -11,10 +13,10 @@ function registerCommands() {
                 const command = require(path.join(commandsPath, file));
                 if (command.command && command.handler) {
                     bot.onText(command.command, command.handler);
-                    console.log(`[Commands] Registered command from ${file}`);
+                    log.child('Commands').info(`Registered command from ${file}`);
                 }
             } catch (error) {
-                console.error(`[Commands] Failed to load command from ${file}: ${error.message}`);
+                log.child('Commands').error(`Failed to load command from ${file}: ${error.message}`);
             }
         }
     });

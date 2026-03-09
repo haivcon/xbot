@@ -1,3 +1,6 @@
+const logger = require('../core/logger');
+const log = logger.child('ModerationCommands');
+
 function registerModerationCommands(deps = {}) {
     const {
         bot,
@@ -263,7 +266,7 @@ function registerModerationCommands(deps = {}) {
             try {
                 await openAdminHub(userId, { fallbackLang: lang, mode: 'welcome' });
             } catch (error) {
-                console.error(`[WelcomeCommand] Failed to open hub in DM for ${userId}: ${error.message}`);
+                log.child('WelcomeCommand').error(`Failed to open hub in DM for ${userId}: ${error.message}`);
                 await sendReply(msg, t(lang, 'welcome_admin_dm_error'));
             }
             return;
@@ -288,7 +291,7 @@ function registerModerationCommands(deps = {}) {
         try {
             await db.ensureCheckinGroup(chatId.toString());
         } catch (error) {
-            console.error(`[WelcomeCommand] Failed to register group ${chatId}: ${error.message}`);
+            log.child('WelcomeCommand').error(`Failed to register group ${chatId}: ${error.message}`);
         }
 
         try {
@@ -296,7 +299,7 @@ function registerModerationCommands(deps = {}) {
             await sendWelcomeAdminMenu(userId, chatId, { fallbackLang: replyLang });
             await sendReply(msg, t(replyLang, 'welcome_admin_dm_notice'));
         } catch (error) {
-            console.error(`[WelcomeCommand] Failed to send welcome admin menu for ${userId} in ${chatId}: ${error.message}`);
+            log.child('WelcomeCommand').error(`Failed to send welcome admin menu for ${userId} in ${chatId}: ${error.message}`);
             await sendReply(msg, t(replyLang, 'welcome_admin_dm_error'));
         }
     });

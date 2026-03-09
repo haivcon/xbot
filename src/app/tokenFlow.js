@@ -1,4 +1,6 @@
 const { appendCloseButton } = require('../features/ui');
+const logger = require('../core/logger');
+const log = logger.child('TokenFlow');
 const { buildPaginatedChainKeyboard, sortChainsWithPriority } = require('../features/chainMenu');
 const { getChainIcon } = require('../features/chainIcons');
 
@@ -102,7 +104,7 @@ function createTokenFlow({
             actionResult = normalizeWalletTokenActionResult('token_info', payload, lang, enhancedContext);
             Object.assign(baseContext.token, tokenMeta);
         } catch (error) {
-            console.error(`[Token] Failed to fetch token info for ${normalizedAddress}: ${error.message}`);
+            log.child('Token').error(`Failed to fetch token info for ${normalizedAddress}: ${error.message}`);
         }
 
         const tokenCallbackId = registerWalletTokenContext(baseContext);
@@ -138,7 +140,7 @@ function createTokenFlow({
         try {
             chainEntries = await collectTxhashChainEntries();
         } catch (error) {
-            console.error(`[Token] Failed to load chain directory: ${error.message}`);
+            log.child('Token').error(`Failed to load chain directory: ${error.message}`);
         }
 
         if (!Array.isArray(chainEntries) || chainEntries.length === 0) {

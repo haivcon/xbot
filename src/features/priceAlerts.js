@@ -1,3 +1,6 @@
+const logger = require('../core/logger');
+const log = logger.child('PriceAlert');
+
 // Module-level wizard state for external access by userInputState.js
 const priceWizardStates = new Map();
 
@@ -1995,21 +1998,36 @@ function createPriceAlerts(deps) {
             await delay(PRICE_ALERT_RATE_LIMIT_MS);
         }
     };
+    // Circuit breaker: stop hammering when network is down
+    let priceAlertConsecutiveFailures = 0;
+    const PRICE_ALERT_MAX_CONSECUTIVE_FAILURES = 5;
+
     const runPriceSchedulerTick = async () => {
+        // Circuit breaker: skip tick if too many consecutive failures
+        if (priceAlertConsecutiveFailures >= PRICE_ALERT_MAX_CONSECUTIVE_FAILURES) {
+            log.warn(`Circuit breaker active (${priceAlertConsecutiveFailures} consecutive failures), skipping tick`);
+            // Gradually recover: decrement to allow retry after a few skipped ticks
+            priceAlertConsecutiveFailures--;
+            return;
+        }
+
         try {
             const due = await listDuePriceAlertTokens(PRICE_ALERT_MAX_PER_TICK, Date.now());
             for (const token of due) {
                 try {
                     await sendPriceAlertNow(token);
+                    priceAlertConsecutiveFailures = 0; // Reset on success
                 } catch (error) {
-                    console.error(`[PriceAlert] Failed to send alert for ${token.tokenAddress}: ${error.message}`);
+                    priceAlertConsecutiveFailures++;
+                    log.error(`Failed to send alert for ${token.tokenAddress}: ${error.message}`);
                 } finally {
                     await recordPriceAlertRun(token.id, token.intervalSeconds);
                 }
                 await delay(PRICE_ALERT_RATE_LIMIT_MS);
             }
         } catch (error) {
-            console.error(`[PriceAlert] Scheduler tick failed: ${error.message}`);
+            priceAlertConsecutiveFailures++;
+            log.error(`Scheduler tick failed: ${error.message}`);
         }
     };
     const startPriceAlertScheduler = () => {
@@ -2019,7 +2037,7 @@ function createPriceAlerts(deps) {
         }
         const tick = () => {
             runPriceSchedulerTick().catch((error) => {
-                console.error(`[PriceAlert] Tick error: ${error.message}`);
+                log.error(`Tick error: ${error.message}`);
             });
         };
         tick();

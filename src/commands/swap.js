@@ -2,6 +2,8 @@
  * /swap — Get swap quote via OnchainOS DEX Aggregator
  */
 const { enforceBanForMessage, enforceOwnerCommandLimit } = require('../features/auth/utils');
+const logger = require('../core/logger');
+const log = logger.child('Swap');
 const { getLang, t } = require('../../i18n');
 const { sendReply } = require('../utils/chat');
 const { buildCloseKeyboard } = require('../utils/builders');
@@ -144,7 +146,7 @@ module.exports = {
             await editOrReply(msg, statusMsg, lines.join('\n'), lang, keyboard);
 
         } catch (error) {
-            console.error(`[Swap] Error: ${error.message || error.msg}`);
+            log.error(`Error: ${error.message || error.msg}`);
             await editOrReply(msg, statusMsg, t(lang, 'swap_error'), lang);
         }
     }
@@ -183,7 +185,7 @@ async function resolveToken(keyword, chainIndex) {
             };
         }
     } catch (error) {
-        console.warn(`[Swap] Token search failed for "${keyword}": ${error.message}`);
+        log.warn(`Token search failed for "${keyword}": ${error.message}`);
     }
 
     return null;

@@ -1,5 +1,7 @@
 const { getBot } = require('../../core/bot');
 
+const logger = require('../../core/logger');
+const log = logger.child('EnforceBan');
 /**
  * Enforces a ban on a user for a given message.
  * Kicks the user and deletes the message.
@@ -8,7 +10,7 @@ const { getBot } = require('../../core/bot');
 async function enforceBanForMessage(msg) {
     const bot = getBot();
     if (!msg || !msg.chat || !msg.from) {
-        console.error('Invalid message object for enforceBanForMessage');
+        log.error('Invalid message object for enforceBanForMessage');
         return;
     }
 

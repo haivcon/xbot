@@ -1,4 +1,6 @@
 const { enforceBanForMessage, enforceOwnerCommandLimit } = require('../features/auth/utils');
+const logger = require('../core/logger');
+const log = logger.child('Start');
 const { resolveLangCode } = require('../../i18n');
 const db = require('../../db.js');
 const { t } = require('../../i18n');
@@ -28,11 +30,11 @@ module.exports = {
                 const messageKey = result?.added ? 'connect_success' : 'register_wallet_exists';
                 const message = t(lang, messageKey, { walletAddress: walletAddress, wallet: shortenAddress(walletAddress) });
                 sendReply(msg, message, { parse_mode: "Markdown" });
-                console.log(`[BOT] Liên kết (DApp): ${walletAddress} -> ${chatId} (lang: ${lang})`);
+                log.child('BOT').info(`Liên kết (DApp): ${walletAddress} -> ${chatId} (lang: ${lang})`);
             } else {
                 const message = t(lang, 'connect_fail_token');
                 sendReply(msg, message, { parse_mode: "Markdown" });
-                console.log(`[BOT] Token không hợp lệ: ${token}`);
+                log.child('BOT').info(`Token không hợp lệ: ${token}`);
             }
         } else {
             await handleStartNoToken(msg);

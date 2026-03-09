@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('TopToken');
+
 async function handleTopTokenCallback({
     bot,
     query,
@@ -64,7 +67,7 @@ async function handleTopTokenCallback({
             const menu = await buildTopTokenChainMenu(callbackLang);
             await renderTopTokenMessage(menu);
         } catch (error) {
-            console.error(`[TopToken] Failed to restart flow: ${error.message}`);
+            log.error(`Failed to restart flow: ${error.message}`);
         }
         await bot.answerCallbackQuery(queryId);
         return true;
@@ -104,7 +107,7 @@ async function handleTopTokenCallback({
             const menu = await buildTopTokenChainMenu(callbackLang, { page });
             await renderTopTokenMessage(menu);
         } catch (error) {
-            console.error(`[TopToken] Failed to paginate chains: ${error.message}`);
+            log.error(`Failed to paginate chains: ${error.message}`);
         }
         await bot.answerCallbackQuery(queryId);
         return true;

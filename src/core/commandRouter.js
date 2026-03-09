@@ -4,6 +4,8 @@
  */
 
 const { commandRegistry } = require('./commandRegistry');
+const logger = require('./logger');
+const log = logger.child('CommandRouter');
 const { t } = require('./i18n');
 
 // Rate limiting state
@@ -235,7 +237,7 @@ function createCommandRouter(deps = {}) {
             await command.handler(msg, { args, argsText, lang, command });
         } catch (error) {
             hasError = true;
-            console.error(`[CommandRouter] Error executing /${command.name}:`, error.message);
+            log.error(`Error executing /${command.name}:`, error.message);
 
             const errorMsg = t(lang, 'command_execution_error') || '❌ Đã xảy ra lỗi khi thực thi lệnh.';
             if (sendReply) {

@@ -1,5 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 
+const logger = require('../core/logger');
+const log = logger.child('OwnerList');
 function createOwnerListFeature({
     t,
     escapeHtml,
@@ -374,7 +376,7 @@ function createOwnerListFeature({
                 contentType: 'text/csv'
             });
         } catch (error) {
-            console.warn(`[Owner] Failed to export list for ${chatId}: ${error.message}`);
+            log.child('Owner').warn(`Failed to export list for ${chatId}: ${error.message}`);
             await bot.sendMessage(chatId, t(lang, 'owner_list_export_failed'), {
                 reply_markup: buildCloseKeyboard(lang)
             });

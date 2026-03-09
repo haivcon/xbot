@@ -1,4 +1,6 @@
 const { GoogleGenAI } = require('@google/genai');
+const logger = require('../../core/logger');
+const log = logger.child('AIClients');
 const OpenAI = require('openai');
 const { sanitizeSecrets } = require('../../utils/format');
 
@@ -45,10 +47,10 @@ function disableGeminiKey(index, reason = 'disabled') {
     }
 
     disabledGeminiKeyIndices.add(safeIndex);
-    console.warn(`[AI] Disabled Gemini key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
+    log.child('AI').warn(`Disabled Gemini key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
 
     if (disabledGeminiKeyIndices.size >= GEMINI_API_KEYS.length) {
-        console.error('[AI] All Gemini API keys are disabled');
+        log.child('AI').error('All Gemini API keys are disabled');
     }
 }
 
@@ -126,10 +128,10 @@ function disableGroqKey(index, reason = 'disabled') {
     }
 
     disabledGroqKeyIndices.add(safeIndex);
-    console.warn(`[AI] Disabled Groq key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
+    log.child('AI').warn(`Disabled Groq key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
 
     if (disabledGroqKeyIndices.size >= GROQ_API_KEYS.length) {
-        console.error('[AI] All Groq API keys are disabled');
+        log.child('AI').error('All Groq API keys are disabled');
     }
 }
 
@@ -211,10 +213,10 @@ function disableOpenAiKey(index, reason = 'disabled') {
     }
 
     disabledOpenAiKeyIndices.add(safeIndex);
-    console.warn(`[AI] Disabled OpenAI key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
+    log.child('AI').warn(`Disabled OpenAI key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
 
     if (disabledOpenAiKeyIndices.size >= OPENAI_API_KEYS.length) {
-        console.error('[AI] All OpenAI API keys are disabled');
+        log.child('AI').error('All OpenAI API keys are disabled');
     }
 }
 

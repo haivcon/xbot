@@ -1,5 +1,7 @@
 const axios = require('axios');
 
+const logger = require('../core/logger');
+const log = logger.child('AIService');
 const OpenAI = require('openai');
 
 const { GoogleGenAI } = require('@google/genai');
@@ -1158,7 +1160,7 @@ Important:
 
     try {
 
-        console.log('[AI Intent] Using model:', modelName);
+        log.child('AIIntent').info('Using model:', modelName);
 
         const response = await Promise.race([
 
@@ -1190,7 +1192,7 @@ Important:
 
         const result = (response?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().toUpperCase();
 
-        console.log('[AI Intent] Raw result:', result);
+        log.child('AIIntent').info('Raw result:', result);
 
 
 
@@ -1204,7 +1206,7 @@ Important:
 
     } catch (error) {
 
-        console.warn('[AI Intent] Classification failed:', error.message);
+        log.child('AIIntent').warn('Classification failed:', error.message);
 
         return null; // Fall back to keyword detection
 
@@ -1458,13 +1460,13 @@ function disableGeminiKey(index, reason = 'disabled') {
 
     disabledGeminiKeyIndices.add(safeIndex);
 
-    console.warn(`[AI] Disabled Gemini key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
+    log.child('AI').warn(`Disabled Gemini key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
 
 
 
     if (disabledGeminiKeyIndices.size >= GEMINI_API_KEYS.length) {
 
-        console.error('[AI] All Gemini API keys are disabled');
+        log.child('AI').error('All Gemini API keys are disabled');
 
     }
 
@@ -1505,7 +1507,7 @@ function disableUserGeminiKey(userId, index, total, reason = 'error', keyName = 
         timestamp: Date.now()
     });
     userExpiredKeyNotices.set(userId, notices);
-    console.log(`[AI] Stored key failure notice for user ${userId}, key index ${safeIndex}: ${reason}`);
+    log.child('AI').info(`Stored key failure notice for user ${userId}, key index ${safeIndex}: ${reason}`);
 
 }
 
@@ -1635,7 +1637,7 @@ async function getUserTtsConfig(userId) {
                 return { voice, language };
             }
         } catch (e) {
-            console.warn('[TTS] Failed to hydrate from DB:', e.message);
+            log.child('TTS').warn('Failed to hydrate from DB:', e.message);
         }
     }
 
@@ -1657,7 +1659,7 @@ async function saveUserTtsVoice(userId, voice) {
     // Persist to DB
     if (db?.saveTtsSettings) {
         db.saveTtsSettings(userId, next.voice, next.language).catch(e => {
-            console.warn('[TTS] Failed to save voice to DB:', e.message);
+            log.child('TTS').warn('Failed to save voice to DB:', e.message);
         });
     }
 
@@ -1676,7 +1678,7 @@ async function saveUserTtsLanguage(userId, language) {
     // Persist to DB
     if (db?.saveTtsSettings) {
         db.saveTtsSettings(userId, next.voice, next.language).catch(e => {
-            console.warn('[TTS] Failed to save language to DB:', e.message);
+            log.child('TTS').warn('Failed to save language to DB:', e.message);
         });
     }
 
@@ -1763,7 +1765,7 @@ function saveUserGeminiModel(userId, modelFamilyId) {
 
         db.saveUserAiModelPreferences(userId, { modelFamily: modelFamilyId, thinkingLevel }).catch((err) => {
 
-            console.error('[AiService] Failed to save model preference:', err.message);
+            log.error('Failed to save model preference:', err.message);
 
         });
 
@@ -1817,7 +1819,7 @@ function saveUserThinkingLevel(userId, level) {
 
         db.saveUserAiModelPreferences(userId, { thinkingLevel: level }).catch((err) => {
 
-            console.error('[AiService] Failed to save thinking level:', err.message);
+            log.error('Failed to save thinking level:', err.message);
 
         });
 
@@ -2095,13 +2097,13 @@ function disableGroqKey(index, reason = 'disabled') {
 
     disabledGroqKeyIndices.add(safeIndex);
 
-    console.warn(`[AI] Disabled Groq key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
+    log.child('AI').warn(`Disabled Groq key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
 
 
 
     if (disabledGroqKeyIndices.size >= GROQ_API_KEYS.length) {
 
-        console.error('[AI] All Groq API keys are disabled');
+        log.child('AI').error('All Groq API keys are disabled');
 
     }
 
@@ -2265,13 +2267,13 @@ function disableOpenAiKey(index, reason = 'disabled') {
 
     disabledOpenAiKeyIndices.add(safeIndex);
 
-    console.warn(`[AI] Disabled OpenAI key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
+    log.child('AI').warn(`Disabled OpenAI key index ${safeIndex}: ${sanitizeSecrets(reason)}`);
 
 
 
     if (disabledOpenAiKeyIndices.size >= OPENAI_API_KEYS.length) {
 
-        console.error('[AI] All OpenAI API keys are disabled');
+        log.child('AI').error('All OpenAI API keys are disabled');
 
     }
 
@@ -2516,7 +2518,7 @@ async function hydrateAiModelPreferences() {
 
     if (!db || !db.listAllAiModelPreferences) {
 
-        console.log('[AiService] Database not available for hydration');
+        log.info('Database not available for hydration');
 
         return { loaded: 0 };
 
@@ -2560,13 +2562,13 @@ async function hydrateAiModelPreferences() {
 
         }
 
-        console.log(`[AiService] Hydrated ${loaded} user AI model preferences from database`);
+        log.info(`Hydrated ${loaded} user AI model preferences from database`);
 
         return { loaded };
 
     } catch (error) {
 
-        console.error('[AiService] Failed to hydrate AI model preferences:', error.message);
+        log.error('Failed to hydrate AI model preferences:', error.message);
 
         return { loaded: 0, error: error.message };
 

@@ -1,4 +1,6 @@
 const { getLang, t } = require('../../i18n');
+const logger = require('../../core/logger');
+const log = logger.child('Gemini');
 const { v4: uuidv4 } = require('uuid');
 const { enforceOwnerCommandLimit } = require('../auth/utils');
 const { ensureDeviceInfo, buildDeviceTargetId } = require('../../utils/device');
@@ -22,7 +24,7 @@ const { initSkills, registry: skillRegistry } = require('../../skills');
 
 // Initialize skill engine on first load
 // ── Initialize Skill Engine ──
-try { initSkills(); } catch (e) { console.warn('[Gemini] Skill engine init skipped:', e.message); }
+try { initSkills(); } catch (e) { log.warn('Skill engine init skipped:', e.message); }
 
 // Merge ONCHAIN_TOOLS (ai-onchain.js) with skill engine tools (scheduler/memory/security)
 // The onchain skill adapter is disabled because ai-onchain.js has relative require() paths
@@ -167,10 +169,10 @@ async function runGeminiCompletion({ msg, lang, parts, keySource, limitNotice, p
                     // Execute all function calls
                     const functionResponses = [];
                     const forcedMessages = [];
-                    console.log(`[DEBUG Gemini] Executing ${functionCalls.length} tool calls...`);
+                    log.child('DEBUGGemini').info(`Executing ${functionCalls.length} tool calls...`);
                     for (const part of functionCalls) {
                         const result = await executeActiveToolCall(part.functionCall, { userId, chatId });
-                        console.log(`[DEBUG Gemini] Tool executed: ${part.functionCall.name}, returned type: ${typeof result}, has_displayMessage: ${!!(result && result.displayMessage)}`);
+                        log.child('DEBUGGemini').info(`Tool executed: ${part.functionCall.name}, returned type: ${typeof result}, has_displayMessage: ${!!(result && result.displayMessage)}`);
                         if (result && result.displayMessage) {
                             forcedMessages.push(result.displayMessage);
                         }
@@ -237,7 +239,7 @@ async function runGeminiCompletion({ msg, lang, parts, keySource, limitNotice, p
                 } else {
                     advanceGeminiKeyIndex();
                 }
-                console.error(`[AI] Failed to generate content with ${pool.type} Gemini key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+                log.child('AI').error(`Failed to generate content with ${pool.type} Gemini key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
             }
         }
 
@@ -414,20 +416,20 @@ async function runGoogleAudioCompletion({ msg, lang, promptText, audioSource, ke
                 } else {
                     advanceGeminiKeyIndex();
                 }
-                console.error(`[AI] Failed to process Gemini audio with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+                log.child('AI').error(`Failed to process Gemini audio with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
             } finally {
                 if (downloadInfo?.filePath) {
                     try {
                         await fs.promises.unlink(downloadInfo.filePath);
                     } catch (cleanupError) {
-                        console.warn(`[AI] Failed to clean audio temp file: ${cleanupError.message}`);
+                        log.child('AI').warn(`Failed to clean audio temp file: ${cleanupError.message}`);
                     }
                 }
                 if (uploadedFile?.name) {
                     try {
                         await clientInfo.client.files.delete({ name: uploadedFile.name });
                     } catch (cleanupError) {
-                        console.warn(`[AI] Failed to delete Gemini file: ${cleanupError.message}`);
+                        log.child('AI').warn(`Failed to delete Gemini file: ${cleanupError.message}`);
                     }
                 }
             }
@@ -584,14 +586,14 @@ async function runGoogleImageRequest({ msg, lang, promptText, action, photos, ke
                     }
                 }
                 if (error?.response?.status === 429) {
-                    console.warn('[AI] Gemini rate limit hit during image request, rotating key');
+                    log.child('AI').warn('Gemini rate limit hit during image request, rotating key');
                 }
                 if (pool.type === 'user') {
                     advanceUserGeminiKeyIndex(userId, pool.keys.length);
                 } else {
                     advanceGeminiKeyIndex();
                 }
-                console.error(`[AI] Failed to generate Gemini image with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+                log.child('AI').error(`Failed to generate Gemini image with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
             }
         }
 
@@ -604,7 +606,7 @@ async function runGoogleImageRequest({ msg, lang, promptText, action, photos, ke
         const errorMessage = lastError?.message || 'Unknown error';
         const quotaHit = isQuotaOrRateLimitError(lastError);
         const expiredKey = isGeminiApiKeyExpired(lastError);
-        console.error(`[AI] Gemini image request failed: ${sanitizeSecrets(errorMessage)}`);
+        log.child('AI').error(`Gemini image request failed: ${sanitizeSecrets(errorMessage)}`);
         const messageKey = expiredKey ? 'ai_provider_gemini_key_expired' : quotaHit ? 'ai_provider_quota' : 'ai_error';
         await sendReply(msg, t(lang, messageKey, { provider: providerMeta.label }), {
             reply_markup: buildCloseKeyboard(lang)
@@ -615,7 +617,7 @@ async function runGoogleImageRequest({ msg, lang, promptText, action, photos, ke
     const imagePart = response?.candidates?.[0]?.content?.parts?.find((part) => part?.inlineData?.data);
     const imageData = imagePart?.inlineData?.data || null;
     if (!imageData) {
-        console.error('[AI] Gemini image response missing payload');
+        log.child('AI').error('Gemini image response missing payload');
         await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
         return;
     }
@@ -641,7 +643,7 @@ async function runGoogleImageRequest({ msg, lang, promptText, action, photos, ke
     try {
         await bot.sendPhoto(msg.chat.id, photoBuffer, options);
     } catch (error) {
-        console.error(`[AI] Failed to send Gemini image response: ${error.message}`);
+        log.child('AI').error(`Failed to send Gemini image response: ${error.message}`);
         await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
     }
 }
@@ -739,14 +741,14 @@ async function runGroqCompletion({ msg, lang, promptText, parts, keySource, limi
                     }
                 }
                 if (error?.response?.status === 429) {
-                    console.warn('[AI] Groq rate limit hit, rotating key');
+                    log.child('AI').warn('Groq rate limit hit, rotating key');
                 }
                 if (pool.type === 'user') {
                     advanceUserGroqKeyIndex(userId, pool.keys.length);
                 } else {
                     advanceGroqKeyIndex();
                 }
-                console.error(`[AI] Failed to generate Groq content with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+                log.child('AI').error(`Failed to generate Groq content with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
             }
         }
 
@@ -867,20 +869,20 @@ async function runOpenAiAudioCompletion({ msg, lang, promptText, audioSource, ke
                     }
                 }
                 if (error?.response?.status === 429) {
-                    console.warn('[AI] OpenAI audio rate limit hit, rotating key');
+                    log.child('AI').warn('OpenAI audio rate limit hit, rotating key');
                 }
                 if (pool.type === 'user') {
                     advanceUserOpenAiKeyIndex(userId, pool.keys.length);
                 } else {
                     advanceOpenAiKeyIndex();
                 }
-                console.error(`[AI] Failed to process OpenAI audio with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+                log.child('AI').error(`Failed to process OpenAI audio with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
             } finally {
                 if (downloadInfo?.filePath) {
                     try {
                         await fs.promises.unlink(downloadInfo.filePath);
                     } catch (cleanupError) {
-                        console.warn(`[AI] Failed to clean audio temp file: ${cleanupError.message}`);
+                        log.child('AI').warn(`Failed to clean audio temp file: ${cleanupError.message}`);
                     }
                 }
             }
@@ -933,7 +935,7 @@ async function runOpenAiAudioCompletion({ msg, lang, promptText, audioSource, ke
         try {
             await bot.sendVoice(msg.chat.id, voiceBuffer, voiceOptions);
         } catch (voiceError) {
-            console.warn(`[AI] Failed to send voice reply: ${voiceError.message}`);
+            log.child('AI').warn(`Failed to send voice reply: ${voiceError.message}`);
         }
     }
 }
@@ -1029,14 +1031,14 @@ async function runOpenAiCompletion({ msg, lang, promptText, parts, keySource, li
                     }
                 }
                 if (error?.response?.status === 429) {
-                    console.warn('[AI] OpenAI rate limit hit, rotating key');
+                    log.child('AI').warn('OpenAI rate limit hit, rotating key');
                 }
                 if (pool.type === 'user') {
                     advanceUserOpenAiKeyIndex(userId, pool.keys.length);
                 } else {
                     advanceOpenAiKeyIndex();
                 }
-                console.error(`[AI] Failed to generate OpenAI content with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+                log.child('AI').error(`Failed to generate OpenAI content with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
             }
         }
 
@@ -1216,14 +1218,14 @@ async function runOpenAiImageRequest({ msg, lang, promptText, action, photos, ke
                     }
                 }
                 if (error?.response?.status === 429) {
-                    console.warn('[AI] OpenAI rate limit hit during image request, rotating key');
+                    log.child('AI').warn('OpenAI rate limit hit during image request, rotating key');
                 }
                 if (pool.type === 'user') {
                     advanceUserOpenAiKeyIndex(userId, pool.keys.length);
                 } else {
                     advanceOpenAiKeyIndex();
                 }
-                console.error(`[AI] Failed to generate OpenAI image with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
+                log.child('AI').error(`Failed to generate OpenAI image with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
             }
         }
 
@@ -1236,7 +1238,7 @@ async function runOpenAiImageRequest({ msg, lang, promptText, action, photos, ke
         const errorMessage = lastError?.message || 'Unknown error';
         const quotaHit = isQuotaOrRateLimitError(lastError);
         const billingLimit = isOpenAiBillingError(lastError);
-        console.error(`[AI] OpenAI image request failed: ${sanitizeSecrets(errorMessage)}`);
+        log.child('AI').error(`OpenAI image request failed: ${sanitizeSecrets(errorMessage)}`);
         const messageKey = billingLimit ? 'ai_provider_billing_limit' : quotaHit ? 'ai_provider_quota' : 'ai_error';
         await sendReply(msg, t(lang, messageKey, { provider: providerMeta.label }), {
             reply_markup: buildCloseKeyboard(lang)
@@ -1246,7 +1248,7 @@ async function runOpenAiImageRequest({ msg, lang, promptText, action, photos, ke
 
     const imageData = response?.data?.[0]?.b64_json || null;
     if (!imageData) {
-        console.error('[AI] OpenAI image response missing payload');
+        log.child('AI').error('OpenAI image response missing payload');
         await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
         return;
     }
@@ -1272,7 +1274,7 @@ async function runOpenAiImageRequest({ msg, lang, promptText, action, photos, ke
     try {
         await bot.sendPhoto(msg.chat.id, photoBuffer, options);
     } catch (error) {
-        console.error(`[AI] Failed to send image response: ${error.message}`);
+        log.child('AI').error(`Failed to send image response: ${error.message}`);
         await sendReply(msg, t(lang, 'ai_error'), { reply_markup: buildCloseKeyboard(lang) });
     }
 }

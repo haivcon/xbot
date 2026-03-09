@@ -1,3 +1,6 @@
+const logger = require('./logger');
+const log = logger.child('InputState');
+
 /**
  * Centralized User Input State Checker
  * 
@@ -107,7 +110,7 @@ function getUserInputState(userId, chatId = null) {
 
     // DEBUG: Check customPersonaPrompts directly
     const cpState = customPersonaPrompts.get(userIdStr);
-    console.log('[getUserInputState] Check:', { userId: userIdStr, customPersonaPromptsSize: customPersonaPrompts.size, hasState: !!cpState });
+    log.child('getUserInputState').info('Check:', { userId: userIdStr, customPersonaPromptsSize: customPersonaPrompts.size, hasState: !!cpState });
 
     const wizardChecks = getWizardChecks();
 
@@ -120,7 +123,7 @@ function getUserInputState(userId, chatId = null) {
         if (state) {
             // Debug log for custom_persona
             if (type === 'custom_persona') {
-                console.log('[UserInputState] Found custom_persona:', {
+                log.child('UserInputState').info('Found custom_persona:', {
                     userId: userIdStr,
                     stateChatId: state.chatId,
                     msgChatId: chatIdStr,
@@ -133,14 +136,14 @@ function getUserInputState(userId, chatId = null) {
             if (isWizardExpired(state)) {
                 // Clean up expired state
                 map.delete(userIdStr);
-                console.log(`[UserInputState] Cleaned up expired ${type} for user ${userIdStr}`);
+                log.child('UserInputState').info(`Cleaned up expired ${type} for user ${userIdStr}`);
                 continue;
             }
 
             // Additional chat match check for chat-specific wizards
             // Some wizards are DM-only, some are chat-specific
             if (state.chatId && chatIdStr && state.chatId !== chatIdStr) {
-                console.log(`[UserInputState] ${type} chat mismatch: state=${state.chatId} msg=${chatIdStr}`);
+                log.child('UserInputState').info(`${type} chat mismatch: state=${state.chatId} msg=${chatIdStr}`);
                 continue; // Different chat, not blocking this message
             }
             return { active: true, type, state };
@@ -184,7 +187,7 @@ function shouldSkipAutoDetection(userId, chatId, msg) {
     const inputState = getUserInputState(userId, chatId);
     // Debug: Log if custom_persona state exists
     if (inputState.type === 'custom_persona') {
-        console.log('[SkipDetection] custom_persona state found:', {
+        log.child('SkipDetection').info('custom_persona state found:', {
             active: inputState.active,
             chatId,
             stateMessageId: inputState.state?.messageId,
@@ -203,14 +206,14 @@ function shouldSkipAutoDetection(userId, chatId, msg) {
     // Skip auto-detection for ALL messages in DM when price_wizard is active (within 5 min window)
     const isPrivateChat = msg?.chat?.type === 'private';
     if (isPrivateChat && inputState.type === 'price_wizard') {
-        console.log('[SkipDetection] ✓ DM + price_wizard active - skipping auto-detection');
+        log.child('SkipDetection').info('✓ DM + price_wizard active - skipping auto-detection');
         return true;
     }
 
     // If wizard has a promptMessageId, only block if message is a REPLY to that prompt
     if (promptMessageId) {
         const replyToId = msg?.reply_to_message?.message_id;
-        console.log('[SkipDetection] Checking reply match:', { promptMessageId, replyToId, match: replyToId === promptMessageId });
+        log.child('SkipDetection').info('Checking reply match:', { promptMessageId, replyToId, match: replyToId === promptMessageId });
         if (replyToId && replyToId === promptMessageId) {
             // This is a reply to the wizard prompt - let wizard handler process it
             return true;
@@ -237,7 +240,7 @@ function clearUserWizardStates(userId) {
     for (const { map, type } of wizardChecks) {
         if (map && typeof map.delete === 'function' && map.has(userIdStr)) {
             map.delete(userIdStr);
-            console.log(`[UserInputState] Cleared ${type} for user ${userIdStr}`);
+            log.child('UserInputState').info(`Cleared ${type} for user ${userIdStr}`);
         }
     }
 }

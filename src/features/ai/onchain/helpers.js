@@ -1,4 +1,6 @@
 const onchainos = require('../../../services/onchainos');
+const logger = require('../../../core/logger');
+const log = logger.child('OnchainHelper');
 const CHAIN_RPC_MAP = {
     '196': 'https://rpc.xlayer.tech',
     '1': 'https://eth.llamarpc.com',
@@ -74,10 +76,10 @@ async function autoResolveToken(symbolOrAddress, chainIndex) {
             const provider = new ethers.JsonRpcProvider(rpcUrl);
             const code = await provider.getCode(resolvedAddress);
             if (!code || code === '0x' || code === '0x0') {
-                console.warn(`[autoResolveToken] ⚠️ Address ${resolvedAddress} has no bytecode on chain ${resolvedChain} — may be EOA or not yet deployed. Continuing anyway.`);
+                log.child('autoResolveToken').warn(`⚠️ Address ${resolvedAddress} has no bytecode on chain ${resolvedChain} — may be EOA or not yet deployed. Continuing anyway.`);
             }
         } catch (verifyErr) {
-            console.warn(`[autoResolveToken] Contract verification skipped:`, verifyErr.message);
+            log.child('autoResolveToken').warn(`Contract verification skipped:`, verifyErr.message);
         }
 
         return {
@@ -111,7 +113,7 @@ async function rpcRetry(fn, maxAttempts = 3, label = 'RPC') {
             const isRetryable = /timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|502|503|504|rate limit|overloaded/i.test(err.message || '');
             if (!isRetryable || attempt === maxAttempts) throw err;
             const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // 1s, 2s, 4s (max 5s)
-            console.warn(`[${label}] Attempt ${attempt}/${maxAttempts} failed: ${err.message}. Retrying in ${delay}ms...`);
+            log.child('label').warn(`Attempt ${attempt}/${maxAttempts} failed: ${err.message}. Retrying in ${delay}ms...`);
             await new Promise(r => setTimeout(r, delay));
         }
     }

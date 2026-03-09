@@ -1,4 +1,6 @@
 const onchainos = require('../../../services/onchainos');
+const logger = require('../../../core/logger');
+const log = logger.child('WalletTools');
 const fs = require('fs');
 const path = require('path');
 const { formatPriceResult, formatSearchResult, formatWalletResult, formatSwapQuoteResult, formatTopTokensResult, formatRecentTradesResult, formatSignalChainsResult, formatSignalListResult, formatProfitRoiResult, formatHolderResult, formatGasResult, formatTokenInfoResult, formatCandlesResult, formatTokenMarketDetail, formatSwapExecutionResult, formatSimulationResult, formatLargeNumber } = require('./formatters');
@@ -23,14 +25,14 @@ module.exports = {
                         tokenContractAddress: b.tokenContractAddress || b.tokenAddress
                     }));
                     const priceInfos = await onchainos.getTokenPriceInfo(tokenReqs).catch(() => []);
-                    console.log(`[AIA Debug Wallet] Real-time prices fetched for ${tokenList.length} tokens. Found:`, priceInfos);
+                    log.child('AIADebugWallet').info(`Real-time prices fetched for ${tokenList.length} tokens. Found:`, priceInfos);
                     let newTotal = 0;
                     if (Array.isArray(priceInfos) && priceInfos.length > 0) {
                         for (const b of tokenList) {
                             const addr = b.tokenContractAddress || b.tokenAddress;
                             const rtPrice = priceInfos.find(p => p.tokenContractAddress?.toLowerCase() === addr?.toLowerCase());
                             if (rtPrice && Number(rtPrice.price) > 0) {
-                                console.log(`[AIA Debug Wallet] Overriding stale price for ${addr}: ${b.tokenPrice} -> ${rtPrice.price}`);
+                                log.child('AIADebugWallet').info(`Overriding stale price for ${addr}: ${b.tokenPrice} -> ${rtPrice.price}`);
                                 b.tokenPrice = String(rtPrice.price);
                             }
                             newTotal += Number(b.tokenPrice || 0) * Number(b.holdingAmount || b.balance || 0);
@@ -107,7 +109,7 @@ module.exports = {
                         setTimeout(() => { context.bot.deleteMessage(userId, sent.message_id).catch(() => { }); }, 30000);
                         dmSent = true;
                     } catch (e) {
-                        console.error('[AUTO-WATCH] Failed to register watch wallet or send DM:', e);
+                        log.child('AUTOWATCH').error('Failed to register watch wallet or send DM:', e);
                     }
 
                     try {
@@ -120,7 +122,7 @@ module.exports = {
                             }
                         };
                         context.bot.processUpdate(syntheticUpdate);
-                    } catch (e) { console.error('[AUTO-POPUP] Failed to trigger /mywallet:', e); }
+                    } catch (e) { log.child('AUTOPOPUP').error('Failed to trigger /mywallet:', e); }
                 }
 
                 if (dmSent) {
@@ -332,18 +334,18 @@ module.exports = {
                     tokenContractAddress: b.tokenAddress
                 }));
                 const priceInfos = await onchainos.getTokenPriceInfo(tokenReqs).catch(() => []);
-                console.log(`[AIA Debug] Real-time prices fetched for ${balances.length} tokens. Found:`, priceInfos);
+                log.child('AIADebug').info(`Real-time prices fetched for ${balances.length} tokens. Found:`, priceInfos);
                 if (Array.isArray(priceInfos) && priceInfos.length > 0) {
                     for (const b of balances) {
                         const rtPrice = priceInfos.find(p => p.tokenContractAddress?.toLowerCase() === b.tokenAddress?.toLowerCase());
                         if (rtPrice && Number(rtPrice.price) > 0) {
-                            console.log(`[AIA Debug] Overriding stale price for ${b.symbol}: ${b.priceUsd} -> ${rtPrice.price}`);
+                            log.child('AIADebug').info(`Overriding stale price for ${b.symbol}: ${b.priceUsd} -> ${rtPrice.price}`);
                             b.priceUsd = Number(rtPrice.price);
                         }
                     }
                 }
             } catch (e) {
-                console.error('[AIA Debug] Failed to fetch real-time prices:', e);
+                log.child('AIADebug').error('Failed to fetch real-time prices:', e);
             }
 
             // Detect user's prompt language
@@ -518,7 +520,7 @@ module.exports = {
             let balBeforeSrc = '0', balBeforeDst = '0', balAfterSrc = '0', balAfterDst = '0';
             const symbol = args.symbol || (isNative ? (chainIndex === '196' ? 'OKB' : 'ETH') : 'Token');
 
-            console.log(`[TRANSFER] Starting: user=${userId}, wallet=${tw.address}, to=${toAddr}, token=${tokenAddr}, amount=${args.amount}`);
+            log.child('TRANSFER').info(`Starting: user=${userId}, wallet=${tw.address}, to=${toAddr}, token=${tokenAddr}, amount=${args.amount}`);
 
             if (isNative) {
                 balBeforeSrc = ethers.formatEther(await provider.getBalance(wallet.address));
@@ -556,7 +558,7 @@ module.exports = {
                 try {
                     decimals = await contract.decimals();
                 } catch (decErr) {
-                    console.error('[TRANSFER] Could not fetch decimals, falling back to 18:', decErr.message);
+                    log.child('TRANSFER').error('Could not fetch decimals, falling back to 18:', decErr.message);
                 }
 
                 try {
@@ -585,10 +587,10 @@ module.exports = {
             try {
                 await dbRun('INSERT INTO wallet_tx_history (userId, walletId, walletAddress, type, chainIndex, fromToken, toToken, fromAmount, toAmount, fromSymbol, toSymbol, txHash, gasUsed, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                     [userId, wId, tw.address, 'transfer_out', chainIndex, tokenAddr, tokenAddr, args.amount, args.amount, symbol, symbol, txHash, gasUsed, Math.floor(Date.now() / 1000)]);
-            } catch (dbErr) { console.error('[TRANSFER] DB log error:', dbErr.message); }
+            } catch (dbErr) { log.child('TRANSFER').error('DB log error:', dbErr.message); }
 
             const explorer = _getExplorerUrl(chainIndex);
-            console.log(`[TRANSFER] Success: tx=${txHash}`);
+            log.child('TRANSFER').info(`Success: tx=${txHash}`);
 
             // Use user's DB-stored language preference (reliable even for short prompts like "ok")
             let lang = context?.lang || 'en';
@@ -646,7 +648,7 @@ module.exports = {
 
             return { success: true, action: true, displayMessage: report };
         } catch (error) {
-            console.error('[TRANSFER] Error:', error.message);
+            log.child('TRANSFER').error('Error:', error.message);
             let errLang = context?.lang || 'en';
             try {
                 const { getLang } = require('../../../app/language');
@@ -772,7 +774,7 @@ module.exports = {
                     try {
                         decimals = await contract.decimals();
                     } catch (decErr) {
-                        console.error('[BATCH_TRANSFER] Could not fetch decimals, falling back to 18:', decErr.message);
+                        log.child('BATCHTRANSFER').error('Could not fetch decimals, falling back to 18:', decErr.message);
                     }
 
                     balBeforeSrc = ethers.formatUnits(await contract.balanceOf(wallet.address), decimals);
@@ -789,7 +791,7 @@ module.exports = {
                 try {
                     await dbRun('INSERT INTO wallet_tx_history (userId, walletId, walletAddress, type, chainIndex, fromToken, fromAmount, fromSymbol, txHash, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
                         [userId, parseInt(t.fromWalletId), tw.address, 'transfer_out', chainIndex, tokenAddr, t.amount, symbol, txHash, Math.floor(Date.now() / 1000)]);
-                } catch (dbErr) { console.error('[BATCH_TRANSFER] DB log error:', dbErr.message); }
+                } catch (dbErr) { log.child('BATCHTRANSFER').error('DB log error:', dbErr.message); }
                 results.push({
                     wallet: `#${t.fromWalletId}`,
                     to: destAddr.slice(0, 8) + '...',
@@ -800,7 +802,7 @@ module.exports = {
                     balAfter: Number(balAfterSrc).toFixed(2)
                 });
             } catch (e) {
-                console.error(`[BATCH_TRANSFER] Error wallet ${t.fromWalletId} → ${t.toAddress}:`, e.message);
+                log.child('BATCHTRANSFER').error(`Error wallet ${t.fromWalletId} → ${t.toAddress}:`, e.message);
                 const destShort = t.toAddress ? (t.toAddress.slice(0, 10) + '...') : '?';
                 results.push({
                     wallet: `#${t.fromWalletId}`,
@@ -1163,7 +1165,7 @@ module.exports = {
                 "function symbol() view returns (string)"
             ];
 
-            console.log(`[MULTI-BALANCE] Omni-chain scan: ${chainIds.length} chains, ${wallets.length} wallets`);
+            log.child('MULTIBALANCE').info(`Omni-chain scan: ${chainIds.length} chains, ${wallets.length} wallets`);
             const allResults = [];
 
             // Scan each chain in parallel
@@ -1202,7 +1204,7 @@ module.exports = {
                     }));
                     return walletResults.filter(Boolean);
                 } catch (e) {
-                    console.error(`[MULTI-BALANCE] Chain ${chainIndex} failed:`, e.message);
+                    log.child('MULTIBALANCE').error(`Chain ${chainIndex} failed:`, e.message);
                     return [];
                 }
             });

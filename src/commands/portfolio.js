@@ -2,6 +2,8 @@
  * /portfolio — View wallet portfolio via OnchainOS Wallet API
  */
 const { enforceBanForMessage, enforceOwnerCommandLimit } = require('../features/auth/utils');
+const logger = require('../core/logger');
+const log = logger.child('Portfolio');
 const { getLang, t } = require('../../i18n');
 const db = require('../../db.js');
 const { sendReply, buildThreadedOptions } = require('../utils/chat');
@@ -32,7 +34,7 @@ module.exports = {
                     address = wallets[0].address || wallets[0].wallet;
                 }
             } catch (error) {
-                console.error(`[Portfolio] Failed to get wallets for ${chatId}: ${error.message}`);
+                log.error(`Failed to get wallets for ${chatId}: ${error.message}`);
             }
         }
 
@@ -124,7 +126,7 @@ module.exports = {
             }
 
         } catch (error) {
-            console.error(`[Portfolio] Error for ${address}: ${error.message || error.msg}`);
+            log.error(`Error for ${address}: ${error.message || error.msg}`);
             try {
                 await bot.editMessageText(t(lang, 'portfolio_error'), {
                     chat_id: msg.chat.id,

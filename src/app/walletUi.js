@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const logger = require('../core/logger');
+const log = logger.child('WalletUi');
 const { buildPaginatedChainKeyboard, sortChainsWithPriority } = require('../features/chainMenu');
 const { getChainIcon } = require('../features/chainIcons');
 
@@ -194,7 +196,7 @@ function createWalletUi({
         try {
             chains = await fetchOkxBalanceSupportedChains();
         } catch (error) {
-            console.warn(`[WalletChains] Failed to load supported chains: ${error.message}`);
+            log.child('WalletChains').warn(`Failed to load supported chains: ${error.message}`);
         }
 
         const xlayerEntry = { chainId: 196, chainIndex: 196, chainShortName: 'xlayer', chainName: 'X Layer', aliases: ['xlayer'] };

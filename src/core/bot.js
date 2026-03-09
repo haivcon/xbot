@@ -1,10 +1,12 @@
 const TelegramBot = require('node-telegram-bot-api');
+const logger = require('./logger');
+const log = logger.child('Bot');
 const { TELEGRAM_TOKEN, BOT_USERNAME } = require('../config/env');
 const { rmchatBotMessages } = require('./state');
 const { sanitizeSecrets } = require('./sanitize');
 
 if (!TELEGRAM_TOKEN) {
-    console.error('LỖI NGHIÊM TRỌNG: Thiếu TELEGRAM_TOKEN trong file .env!');
+    log.error('LỖI NGHIÊM TRỌNG: Thiếu TELEGRAM_TOKEN trong file .env!');
     process.exit(1);
 }
 
@@ -17,11 +19,11 @@ bot.answerCallbackQuery = async (...args) => {
     } catch (error) {
         const description = error?.response?.body?.description || error?.message || '';
         if (error?.code === 'ETELEGRAM' && /query is too old|query ID is invalid/i.test(description)) {
-            console.warn(`[Callback] Ignored stale callback query: ${sanitizeSecrets(description)}`);
+            log.child('Callback').warn(`Ignored stale callback query: ${sanitizeSecrets(description)}`);
             return null;
         }
 
-        console.error(`[Callback] Failed to answer callback query: ${sanitizeSecrets(description || error?.toString())}`);
+        log.child('Callback').error(`Failed to answer callback query: ${sanitizeSecrets(description || error?.toString())}`);
         return null;
     }
 };

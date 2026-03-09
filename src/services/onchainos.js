@@ -4,6 +4,8 @@
  * Wallet Portfolio, DEX Market, DEX Token, DEX Swap, Onchain Gateway
  */
 const crypto = require('crypto');
+const logger = require('../core/logger');
+const log = logger.child('Onchainos');
 const {
     OKX_BASE_URL,
     OKX_API_KEY,
@@ -30,7 +32,7 @@ function getCredentials() {
             passphrase: OKX_API_PASSPHRASE
         };
     }
-    console.warn('[⚠️ OKX WARNING] Using SANDBOX API keys! Set OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE in .env for production.');
+    log.child('OKXWARNING').warn('Using SANDBOX API keys! Set OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE in .env for production.');
     return {
         apiKey: SANDBOX_API_KEY,
         secretKey: SANDBOX_SECRET_KEY,

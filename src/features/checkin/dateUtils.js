@@ -1,3 +1,6 @@
+const logger = require('../../core/logger');
+const log = logger.child('DateUtils');
+
 function createCheckinDateUtils({ CHECKIN_DEFAULT_TIMEZONE }) {
     function formatDateForTimezone(timezone = CHECKIN_DEFAULT_TIMEZONE, date = new Date()) {
         try {
@@ -10,7 +13,7 @@ function createCheckinDateUtils({ CHECKIN_DEFAULT_TIMEZONE }) {
 
             return formatter.format(date);
         } catch (error) {
-            console.warn(`[Checkin] Khong the format ngay cho timezone ${timezone}: ${error.message}`);
+            log.child('Checkin').warn(`Khong the format ngay cho timezone ${timezone}: ${error.message}`);
             const year = date.getUTCFullYear();
             const month = String(date.getUTCMonth() + 1).padStart(2, '0');
             const day = String(date.getUTCDate()).padStart(2, '0');
@@ -29,7 +32,7 @@ function createCheckinDateUtils({ CHECKIN_DEFAULT_TIMEZONE }) {
 
             return formatter.format(date);
         } catch (error) {
-            console.warn(`[Checkin] Khong the format gio cho timezone ${timezone}: ${error.message}`);
+            log.child('Checkin').warn(`Khong the format gio cho timezone ${timezone}: ${error.message}`);
             const hours = String(date.getUTCHours()).padStart(2, '0');
             const minutes = String(date.getUTCMinutes()).padStart(2, '0');
             return `${hours}:${minutes}`;
