@@ -1151,45 +1151,341 @@ module.exports = {
         const { dbGet, dbRun, dbAll } = require('../../../../db/core');
         const userId = context?.userId;
         const chatId = context?.chatId || userId;
-        if (!userId) return '❌ Không xác định được người dùng.';
+        if (!userId) return '❌ User not identified.';
         const action = (args.action || '').toLowerCase();
 
+        // ── i18n (Item #2) ──
+        const lang = context?.lang || 'vi';
+        const DCA_I18N = {
+            vi: {
+                need_params: '❌ Cần cung cấp: walletId, fromTokenAddress, toTokenAddress, amount.',
+                wallet_not_found: '❌ Ví ID {id} không tồn tại hoặc không thuộc bạn.',
+                token_resolve_fail: '❌ Không tìm thấy token: {token}. Hãy thử contract address.',
+                max_limit: '❌ Đã đạt giới hạn {max} lịch DCA. Hãy hủy bớt trước khi tạo mới.',
+                created: '✅ Đã tạo lịch DCA!',
+                task_id: '🆔 ID: {id}',
+                interval: '⏰ Chu kỳ: mỗi {interval}',
+                amount: '💰 Mỗi lần: {amount} {from} → {to}',
+                chain: '🌐 Mạng: {chain}',
+                wallet: '👛 Ví: {wallet}',
+                next_run: '⏭️ Lần tới: {time}',
+                stop_loss: '🛡️ Stop-loss: -{pct}%',
+                take_profit: '🎯 Take-profit: +{pct}%',
+                hint: '💡 Dùng "hủy DCA {id}" để dừng, "tạm dừng DCA {id}" để pause.',
+                no_tasks: '📭 Chưa có lịch DCA nào.',
+                list_header: '📅 Danh sách DCA ({count})',
+                paused: '⏸️ Tạm dừng',
+                active: '▶️ Đang chạy',
+                cancel_need_id: '❌ Cần cung cấp taskId để hủy.',
+                cancel_not_found: '❌ Không tìm thấy task {id}.',
+                cancelled: '✅ Đã hủy lịch DCA: {id}',
+                paused_ok: '⏸️ Đã tạm dừng DCA: {id}',
+                resumed_ok: '▶️ Đã tiếp tục DCA: {id}',
+                dashboard_header: '📊 DCA Dashboard',
+                total_invested: '💸 Tổng đã đầu tư: {amount} {symbol}',
+                total_received: '📈 Tổng nhận: {amount} {symbol}',
+                swaps_done: '🔄 Số lần swap: {count}',
+                avg_price: '📐 Giá TB: ${price}',
+                no_history: '📭 Chưa có lịch sử DCA.',
+                invalid_action: '❌ Action không hợp lệ. Hỗ trợ: create, list, cancel, pause, resume, dashboard.',
+                hours: '{n}h', daily: 'hàng ngày', weekly: 'hàng tuần', monthly: 'hàng tháng', hourly: 'hàng giờ'
+            },
+            en: {
+                need_params: '❌ Required: walletId, fromTokenAddress, toTokenAddress, amount.',
+                wallet_not_found: '❌ Wallet ID {id} not found or not yours.',
+                token_resolve_fail: '❌ Token not found: {token}. Try using contract address.',
+                max_limit: '❌ Reached limit of {max} DCA schedules. Cancel some first.',
+                created: '✅ DCA schedule created!',
+                task_id: '🆔 ID: {id}',
+                interval: '⏰ Interval: every {interval}',
+                amount: '💰 Per swap: {amount} {from} → {to}',
+                chain: '🌐 Chain: {chain}',
+                wallet: '👛 Wallet: {wallet}',
+                next_run: '⏭️ Next: {time}',
+                stop_loss: '🛡️ Stop-loss: -{pct}%',
+                take_profit: '🎯 Take-profit: +{pct}%',
+                hint: '💡 Say "cancel DCA {id}" to stop, "pause DCA {id}" to pause.',
+                no_tasks: '📭 No DCA schedules.',
+                list_header: '📅 DCA Schedules ({count})',
+                paused: '⏸️ Paused',
+                active: '▶️ Active',
+                cancel_need_id: '❌ Please provide taskId to cancel.',
+                cancel_not_found: '❌ Task {id} not found.',
+                cancelled: '✅ DCA cancelled: {id}',
+                paused_ok: '⏸️ DCA paused: {id}',
+                resumed_ok: '▶️ DCA resumed: {id}',
+                dashboard_header: '📊 DCA Dashboard',
+                total_invested: '💸 Total invested: {amount} {symbol}',
+                total_received: '📈 Total received: {amount} {symbol}',
+                swaps_done: '🔄 Swaps done: {count}',
+                avg_price: '📐 Avg price: ${price}',
+                no_history: '📭 No DCA history yet.',
+                invalid_action: '❌ Invalid action. Supported: create, list, cancel, pause, resume, dashboard.',
+                hours: '{n}h', daily: 'daily', weekly: 'weekly', monthly: 'monthly', hourly: 'hourly'
+            },
+            zh: {
+                need_params: '❌ 需要: walletId, fromTokenAddress, toTokenAddress, amount。',
+                wallet_not_found: '❌ 钱包 ID {id} 不存在或不属于您。',
+                token_resolve_fail: '❌ 未找到代币: {token}。请尝试合约地址。',
+                max_limit: '❌ 已达 {max} 个 DCA 上限。请先取消一些。',
+                created: '✅ DCA 计划已创建！',
+                task_id: '🆔 ID: {id}', interval: '⏰ 周期: 每 {interval}',
+                amount: '💰 每次: {amount} {from} → {to}', chain: '🌐 链: {chain}',
+                wallet: '👛 钱包: {wallet}', next_run: '⏭️ 下次: {time}',
+                stop_loss: '🛡️ 止损: -{pct}%', take_profit: '🎯 止盈: +{pct}%',
+                hint: '💡 说 "取消 DCA {id}" 停止, "暂停 DCA {id}" 暂停。',
+                no_tasks: '📭 没有 DCA 计划。', list_header: '📅 DCA 计划 ({count})',
+                paused: '⏸️ 已暂停', active: '▶️ 运行中',
+                cancel_need_id: '❌ 请提供 taskId。', cancel_not_found: '❌ 未找到任务 {id}。',
+                cancelled: '✅ DCA 已取消: {id}', paused_ok: '⏸️ DCA 已暂停: {id}', resumed_ok: '▶️ DCA 已恢复: {id}',
+                dashboard_header: '📊 DCA 报表', total_invested: '💸 总投入: {amount} {symbol}',
+                total_received: '📈 总收到: {amount} {symbol}', swaps_done: '🔄 交易次数: {count}',
+                avg_price: '📐 均价: ${price}', no_history: '📭 暂无 DCA 记录。',
+                invalid_action: '❌ 操作无效。支持: create, list, cancel, pause, resume, dashboard。',
+                hours: '{n}小时', daily: '每天', weekly: '每周', monthly: '每月', hourly: '每小时'
+            },
+            ko: {
+                need_params: '❌ 필수: walletId, fromTokenAddress, toTokenAddress, amount.',
+                wallet_not_found: '❌ 지갑 ID {id}를 찾을 수 없습니다.',
+                token_resolve_fail: '❌ 토큰 미발견: {token}.',
+                max_limit: '❌ DCA 한도 {max}개 도달. 먼저 일부를 취소하세요.',
+                created: '✅ DCA 일정 생성됨!',
+                task_id: '🆔 ID: {id}', interval: '⏰ 주기: {interval}마다',
+                amount: '💰 회당: {amount} {from} → {to}', chain: '🌐 체인: {chain}',
+                wallet: '👛 지갑: {wallet}', next_run: '⏭️ 다음: {time}',
+                stop_loss: '🛡️ 손절: -{pct}%', take_profit: '🎯 익절: +{pct}%',
+                hint: '💡 "DCA 취소 {id}" or "DCA 일시중지 {id}".',
+                no_tasks: '📭 DCA 일정 없음.', list_header: '📅 DCA 일정 ({count})',
+                paused: '⏸️ 일시중지', active: '▶️ 활성',
+                cancel_need_id: '❌ taskId 필요.', cancel_not_found: '❌ 작업 {id} 미발견.',
+                cancelled: '✅ DCA 취소됨: {id}', paused_ok: '⏸️ DCA 일시중지: {id}', resumed_ok: '▶️ DCA 재개: {id}',
+                dashboard_header: '📊 DCA 대시보드', total_invested: '💸 총 투자: {amount} {symbol}',
+                total_received: '📈 총 수령: {amount} {symbol}', swaps_done: '🔄 스왑 횟수: {count}',
+                avg_price: '📐 평균가: ${price}', no_history: '📭 DCA 기록 없음.',
+                invalid_action: '❌ 잘못된 작업. 지원: create, list, cancel, pause, resume, dashboard.',
+                hours: '{n}시간', daily: '매일', weekly: '매주', monthly: '매월', hourly: '매시간'
+            },
+            ru: {
+                need_params: '❌ Требуется: walletId, fromTokenAddress, toTokenAddress, amount.',
+                wallet_not_found: '❌ Кошелёк ID {id} не найден.',
+                token_resolve_fail: '❌ Токен не найден: {token}.',
+                max_limit: '❌ Достигнут лимит {max} DCA. Отмените часть.',
+                created: '✅ DCA расписание создано!',
+                task_id: '🆔 ID: {id}', interval: '⏰ Интервал: каждые {interval}',
+                amount: '💰 За раз: {amount} {from} → {to}', chain: '🌐 Сеть: {chain}',
+                wallet: '👛 Кошелёк: {wallet}', next_run: '⏭️ След.: {time}',
+                stop_loss: '🛡️ Стоп-лосс: -{pct}%', take_profit: '🎯 Тейк-профит: +{pct}%',
+                hint: '💡 «отменить DCA {id}» или «пауза DCA {id}».',
+                no_tasks: '📭 Нет DCA расписаний.', list_header: '📅 DCA расписания ({count})',
+                paused: '⏸️ Пауза', active: '▶️ Активно',
+                cancel_need_id: '❌ Укажите taskId.', cancel_not_found: '❌ Задача {id} не найдена.',
+                cancelled: '✅ DCA отменено: {id}', paused_ok: '⏸️ DCA приостановлено: {id}', resumed_ok: '▶️ DCA возобновлено: {id}',
+                dashboard_header: '📊 DCA Отчёт', total_invested: '💸 Всего вложено: {amount} {symbol}',
+                total_received: '📈 Всего получено: {amount} {symbol}', swaps_done: '🔄 Свопов: {count}',
+                avg_price: '📐 Ср. цена: ${price}', no_history: '📭 История DCA пуста.',
+                invalid_action: '❌ Неверное действие. Поддерживается: create, list, cancel, pause, resume, dashboard.',
+                hours: '{n}ч', daily: 'ежедневно', weekly: 'еженедельно', monthly: 'ежемесячно', hourly: 'ежечасно'
+            },
+            id: {
+                need_params: '❌ Diperlukan: walletId, fromTokenAddress, toTokenAddress, amount.',
+                wallet_not_found: '❌ Dompet ID {id} tidak ditemukan.',
+                token_resolve_fail: '❌ Token tidak ditemukan: {token}.',
+                max_limit: '❌ Batas {max} DCA tercapai. Batalkan beberapa dulu.',
+                created: '✅ Jadwal DCA dibuat!',
+                task_id: '🆔 ID: {id}', interval: '⏰ Siklus: setiap {interval}',
+                amount: '💰 Per swap: {amount} {from} → {to}', chain: '🌐 Chain: {chain}',
+                wallet: '👛 Dompet: {wallet}', next_run: '⏭️ Berikutnya: {time}',
+                stop_loss: '🛡️ Stop-loss: -{pct}%', take_profit: '🎯 Take-profit: +{pct}%',
+                hint: '💡 "batalkan DCA {id}" atau "jeda DCA {id}".',
+                no_tasks: '📭 Tidak ada jadwal DCA.', list_header: '📅 Jadwal DCA ({count})',
+                paused: '⏸️ Dijeda', active: '▶️ Aktif',
+                cancel_need_id: '❌ Berikan taskId.', cancel_not_found: '❌ Tugas {id} tidak ditemukan.',
+                cancelled: '✅ DCA dibatalkan: {id}', paused_ok: '⏸️ DCA dijeda: {id}', resumed_ok: '▶️ DCA dilanjutkan: {id}',
+                dashboard_header: '📊 DCA Dashboard', total_invested: '💸 Total investasi: {amount} {symbol}',
+                total_received: '📈 Total diterima: {amount} {symbol}', swaps_done: '🔄 Jumlah swap: {count}',
+                avg_price: '📐 Harga rata-rata: ${price}', no_history: '📭 Belum ada riwayat DCA.',
+                invalid_action: '❌ Aksi tidak valid. Didukung: create, list, cancel, pause, resume, dashboard.',
+                hours: '{n} jam', daily: 'harian', weekly: 'mingguan', monthly: 'bulanan', hourly: 'per jam'
+            }
+        };
+        const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+        const i = DCA_I18N[lk] || DCA_I18N.en;
+        const fmt = (tpl, params = {}) => { let s = tpl; for (const [k, v] of Object.entries(params)) s = s.replace(new RegExp(`\\{${k}\\}`, 'g'), v); return s; };
+        const MAX_DCA_PER_USER = 5;
+        const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana' };
+
+        // ── Item #11: Flexible interval presets ──
+        const resolveInterval = (args) => {
+            const preset = (args.interval || '').toLowerCase();
+            if (preset === 'hourly') return { ms: 3600000, label: i.hourly };
+            if (preset === 'daily') return { ms: 86400000, label: i.daily };
+            if (preset === 'weekly') return { ms: 604800000, label: i.weekly };
+            if (preset === 'monthly') return { ms: 2592000000, label: i.monthly };
+            const hours = Number(args.intervalHours) || 24;
+            return { ms: hours * 3600000, label: fmt(i.hours, { n: hours }) };
+        };
+
+        // ════════════ CREATE ════════════
         if (action === 'create') {
             if (!args.walletId || !args.fromTokenAddress || !args.toTokenAddress || !args.amount) {
-                return '❌ Cần cung cấp: walletId, fromTokenAddress, toTokenAddress, amount, intervalHours.';
+                return i.need_params;
             }
-            const intervalMs = (args.intervalHours || 24) * 3600 * 1000;
+
+            // Item #4: Validate wallet ownership
+            const wallet = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [args.walletId, userId]);
+            if (!wallet) return fmt(i.wallet_not_found, { id: args.walletId });
+
+            // Item #12: Multi-chain
+            let chainIndex = args.chainIndex || '196';
+
+            // Item #5: Resolve token symbols to contract addresses
+            let fromAddr = args.fromTokenAddress;
+            let toAddr = args.toTokenAddress;
+            let fromSym = fromAddr, toSym = toAddr;
+            if (!fromAddr.startsWith('0x') && fromAddr.length < 20) {
+                const resolved = await autoResolveToken(fromAddr, chainIndex);
+                if (resolved.error) return fmt(i.token_resolve_fail, { token: fromAddr });
+                fromSym = fromAddr; fromAddr = resolved.tokenAddress;
+                chainIndex = resolved.chainIndex || chainIndex;
+            }
+            if (!toAddr.startsWith('0x') && toAddr.length < 20) {
+                const resolved = await autoResolveToken(toAddr, chainIndex);
+                if (resolved.error) return fmt(i.token_resolve_fail, { token: toAddr });
+                toSym = toAddr; toAddr = resolved.tokenAddress;
+            }
+
+            // Fetch token symbols for display
+            try {
+                const info = await onchainos.getTokenBasicInfo([
+                    { chainIndex, tokenContractAddress: fromAddr },
+                    { chainIndex, tokenContractAddress: toAddr }
+                ]);
+                if (info?.length > 0) {
+                    const f = info.find(t => t.tokenContractAddress?.toLowerCase() === fromAddr.toLowerCase());
+                    const t2 = info.find(t => t.tokenContractAddress?.toLowerCase() === toAddr.toLowerCase());
+                    if (f) fromSym = f.tokenSymbol || fromSym;
+                    if (t2) toSym = t2.tokenSymbol || toSym;
+                }
+            } catch (e) { /* use original symbols */ }
+
+            // Item #3: Max DCA tasks limit
+            const existing = await dbAll("SELECT id FROM ai_scheduled_tasks WHERE userId = ? AND type = 'dca_swap' AND enabled = 1", [userId]) || [];
+            if (existing.length >= MAX_DCA_PER_USER) {
+                return fmt(i.max_limit, { max: MAX_DCA_PER_USER });
+            }
+
+            const { ms: intervalMs, label: intervalLabel } = resolveInterval(args);
             const taskId = `dca_${userId}_${Date.now()}`;
             const params = JSON.stringify({
                 walletId: args.walletId,
-                chainIndex: args.chainIndex || '196',
-                fromTokenAddress: args.fromTokenAddress,
-                toTokenAddress: args.toTokenAddress,
-                amount: args.amount
+                chainIndex,
+                fromTokenAddress: fromAddr,
+                toTokenAddress: toAddr,
+                fromSymbol: fromSym,
+                toSymbol: toSym,
+                amount: args.amount,
+                // Item #9: Stop-loss / Take-profit
+                stopLossPct: args.stopLossPct ? Number(args.stopLossPct) : null,
+                takeProfitPct: args.takeProfitPct ? Number(args.takeProfitPct) : null,
+                initialPrice: null, // will be set on first execution
+                consecutiveFailures: 0
             });
             await dbRun('INSERT INTO ai_scheduled_tasks (id, userId, chatId, type, intervalMs, nextRunAt, params, enabled, lang, createdAt) VALUES (?,?,?,?,?,?,?,1,?,?)',
-                [taskId, userId, chatId, 'dca_swap', intervalMs, Date.now() + intervalMs, params, context?.lang || 'vi', Math.floor(Date.now() / 1000)]);
-            const hours = args.intervalHours || 24;
-            return { success: true, action: true, displayMessage: `✅ Đã tạo lịch DCA!\n🆔 ID: ${taskId}\n⏰ Mỗi ${hours}h swap ${args.amount} token\n💡 Dùng "hủy DCA ${taskId}" để dừng.` };
+                [taskId, userId, chatId, 'dca_swap', intervalMs, Date.now() + intervalMs, params, lang, Math.floor(Date.now() / 1000)]);
 
+            const walletShort = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
+            const nextTime = new Date(Date.now() + intervalMs).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh' });
+            const lines = [
+                i.created, '━━━━━━━━━━━━━━━━━━',
+                fmt(i.task_id, { id: taskId }),
+                fmt(i.interval, { interval: intervalLabel }),
+                fmt(i.amount, { amount: args.amount, from: fromSym, to: toSym }),
+                fmt(i.chain, { chain: chainNames[chainIndex] || `#${chainIndex}` }),
+                fmt(i.wallet, { wallet: walletShort }),
+                fmt(i.next_run, { time: nextTime }),
+            ];
+            if (args.stopLossPct) lines.push(fmt(i.stop_loss, { pct: args.stopLossPct }));
+            if (args.takeProfitPct) lines.push(fmt(i.take_profit, { pct: args.takeProfitPct }));
+            lines.push('', fmt(i.hint, { id: taskId }));
+            return { success: true, action: true, displayMessage: lines.join('\n') };
+
+            // ════════════ LIST ════════════
         } else if (action === 'list') {
-            const tasks = await dbAll("SELECT * FROM ai_scheduled_tasks WHERE userId = ? AND type = 'dca_swap' AND enabled = 1", [userId]) || [];
-            if (tasks.length === 0) return '📭 Chưa có lịch DCA nào.';
-            let list = `📅 Danh sách DCA (${tasks.length})\n━━━━━━━━━━━━━━━━━━\n`;
-            tasks.forEach((t, i) => {
+            const tasks = await dbAll("SELECT * FROM ai_scheduled_tasks WHERE userId = ? AND type = 'dca_swap'", [userId]) || [];
+            const activeTasks = tasks.filter(t => t.enabled === 1);
+            const pausedTasks = tasks.filter(t => t.enabled === 2);
+            const allTasks = [...activeTasks, ...pausedTasks];
+            if (allTasks.length === 0) return i.no_tasks;
+
+            let list = fmt(i.list_header, { count: allTasks.length }) + '\n━━━━━━━━━━━━━━━━━━\n';
+            allTasks.forEach((t, idx) => {
                 const p = JSON.parse(t.params || '{}');
                 const hours = Math.round(t.intervalMs / 3600000);
-                const nextRun = new Date(t.nextRunAt).toLocaleString('vi-VN');
-                list += `${i + 1}. 🆔 ${t.id}\n   ⏰ Mỗi ${hours}h | Số lượng: ${p.amount}\n   ⏭️ Lần tới: ${nextRun}\n\n`;
+                const status = t.enabled === 2 ? i.paused : i.active;
+                const nextRun = t.enabled === 1 ? new Date(t.nextRunAt).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
+                list += `${idx + 1}. ${status} 🆔 ${t.id}\n` +
+                    `   💰 ${p.amount} ${p.fromSymbol || '?'} → ${p.toSymbol || '?'}\n` +
+                    `   ⏰ ${fmt(i.hours, { n: hours })} | 🌐 ${chainNames[p.chainIndex] || p.chainIndex}\n` +
+                    `   ⏭️ ${nextRun}\n\n`;
             });
             return list;
 
+            // ════════════ CANCEL ════════════
         } else if (action === 'cancel') {
-            if (!args.taskId) return '❌ Cần cung cấp taskId để hủy.';
-            await dbRun("UPDATE ai_scheduled_tasks SET enabled = 0 WHERE id = ? AND userId = ?", [args.taskId, userId]);
-            return { success: true, action: true, displayMessage: `✅ Đã hủy lịch DCA: ${args.taskId}` };
+            if (!args.taskId) return i.cancel_need_id;
+            const task = await dbGet("SELECT * FROM ai_scheduled_tasks WHERE id = ? AND userId = ?", [args.taskId, userId]);
+            if (!task) return fmt(i.cancel_not_found, { id: args.taskId });
+            await dbRun("DELETE FROM ai_scheduled_tasks WHERE id = ? AND userId = ?", [args.taskId, userId]);
+            return { success: true, action: true, displayMessage: fmt(i.cancelled, { id: args.taskId }) };
+
+            // ════════════ PAUSE (Item #8) ════════════
+        } else if (action === 'pause') {
+            if (!args.taskId) return i.cancel_need_id;
+            const task = await dbGet("SELECT * FROM ai_scheduled_tasks WHERE id = ? AND userId = ? AND type = 'dca_swap'", [args.taskId, userId]);
+            if (!task) return fmt(i.cancel_not_found, { id: args.taskId });
+            await dbRun("UPDATE ai_scheduled_tasks SET enabled = 2 WHERE id = ?", [args.taskId]); // 2 = paused
+            return { success: true, action: true, displayMessage: fmt(i.paused_ok, { id: args.taskId }) };
+
+            // ════════════ RESUME (Item #8) ════════════
+        } else if (action === 'resume') {
+            if (!args.taskId) return i.cancel_need_id;
+            const task = await dbGet("SELECT * FROM ai_scheduled_tasks WHERE id = ? AND userId = ? AND type = 'dca_swap'", [args.taskId, userId]);
+            if (!task) return fmt(i.cancel_not_found, { id: args.taskId });
+            await dbRun("UPDATE ai_scheduled_tasks SET enabled = 1, nextRunAt = ? WHERE id = ?", [Date.now() + task.intervalMs, args.taskId]);
+            return { success: true, action: true, displayMessage: fmt(i.resumed_ok, { id: args.taskId }) };
+
+            // ════════════ DASHBOARD (Item #10) ════════════
+        } else if (action === 'dashboard') {
+            const history = await dbAll(
+                "SELECT * FROM wallet_tx_history WHERE userId = ? AND type = 'dca_swap' ORDER BY createdAt DESC LIMIT 100",
+                [userId]
+            ) || [];
+            if (history.length === 0) return i.no_history;
+
+            // Aggregate stats
+            const stats = {};
+            history.forEach(tx => {
+                const key = `${tx.fromSymbol}→${tx.toSymbol}`;
+                if (!stats[key]) stats[key] = { from: tx.fromSymbol, to: tx.toSymbol, totalFrom: 0, totalTo: 0, count: 0, totalUsd: 0 };
+                stats[key].totalFrom += Number(tx.fromAmount || 0);
+                stats[key].totalTo += Number(tx.toAmount || 0);
+                stats[key].totalUsd += Number(tx.priceUsd || 0) * Number(tx.toAmount || 0);
+                stats[key].count++;
+            });
+
+            let report = i.dashboard_header + '\n━━━━━━━━━━━━━━━━━━\n';
+            for (const [pair, s] of Object.entries(stats)) {
+                const avgPrice = s.totalTo > 0 ? (s.totalUsd / s.totalTo) : 0;
+                report += `\n💱 ${pair}\n`;
+                report += fmt(i.total_invested, { amount: s.totalFrom.toFixed(4), symbol: s.from }) + '\n';
+                report += fmt(i.total_received, { amount: s.totalTo.toFixed(4), symbol: s.to }) + '\n';
+                report += fmt(i.swaps_done, { count: s.count }) + '\n';
+                if (avgPrice > 0) report += fmt(i.avg_price, { price: avgPrice.toFixed(6) }) + '\n';
+            }
+            return report;
         }
-        return '❌ Action không hợp lệ. Hỗ trợ: create, list, cancel.';
+
+        return i.invalid_action;
     },
 
 };

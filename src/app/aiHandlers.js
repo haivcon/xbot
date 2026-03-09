@@ -329,6 +329,7 @@ function createAiHandlers(deps) {
               }
 
 
+
             } else {
               // 2. STATIC REMINDER (Simple text)
               await safeSend(targetChatId,
@@ -339,6 +340,240 @@ function createAiHandlers(deps) {
                 `🕐 ${fmtTime(Date.now())}\n` +
                 `🆔 <code>${task.id}</code>`,
                 { parse_mode: 'HTML', disable_notification: false }); // disable_notification: false ensures it rings!
+            }
+
+            // ════ Item #1: DCA SWAP EXECUTOR (CRITICAL) ════
+          } else if (task.type === 'dca_swap') {
+            const dcaLog = log.child('DCA');
+            const p = task.params || {};
+            try {
+              const { dbGet: dcaDbGet, dbRun: dcaDbRun } = require('../../db/core');
+
+              // Resolve wallet
+              const tw = await dcaDbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [p.walletId, task.userId]);
+              if (!tw) {
+                dcaLog.error(`Wallet ${p.walletId} not found for user ${task.userId}. Disabling DCA ${task.id}.`);
+                await dcaDbRun(`UPDATE ai_scheduled_tasks SET enabled = 0 WHERE id = ?`, [task.id]);
+                await safeSend(targetChatId, `❌ DCA ${task.id}: Wallet not found. DCA disabled.`, { parse_mode: 'HTML' });
+                return;
+              }
+
+              if (!global._decryptTradingKey) {
+                dcaLog.error('Encryption not ready, skipping DCA');
+                return;
+              }
+
+              const ethers = require('ethers');
+              const onchainos = require('../services/onchainos');
+              const { _getChainRpc, _getExplorerUrl } = require('../features/ai/onchain/helpers');
+              const chainIndex = p.chainIndex || '196';
+              const rpcUrl = _getChainRpc(chainIndex);
+              const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+              // Item #9: Stop-loss / Take-profit price check
+              if (p.stopLossPct || p.takeProfitPct) {
+                try {
+                  const priceData = await onchainos.getMarketPrice([{ chainIndex, tokenContractAddress: p.toTokenAddress }]);
+                  const currentPrice = Number(priceData?.[0]?.lastPrice || 0);
+                  if (currentPrice > 0) {
+                    if (!p.initialPrice) {
+                      // Save initial price on first run
+                      p.initialPrice = currentPrice;
+                      await dcaDbRun(`UPDATE ai_scheduled_tasks SET params = ? WHERE id = ?`, [JSON.stringify(p), task.id]);
+                      dcaLog.info(`DCA ${task.id}: Initial price saved: $${currentPrice}`);
+                    } else {
+                      const changePct = ((currentPrice - p.initialPrice) / p.initialPrice) * 100;
+                      if (p.stopLossPct && changePct <= -p.stopLossPct) {
+                        dcaLog.warn(`DCA ${task.id}: Stop-loss triggered (${changePct.toFixed(1)}% < -${p.stopLossPct}%). Disabling.`);
+                        await dcaDbRun(`UPDATE ai_scheduled_tasks SET enabled = 0 WHERE id = ?`, [task.id]);
+                        await safeSend(targetChatId,
+                          `🛑 <b>DCA STOP-LOSS</b>\n━━━━━━━━━━━━━━━━━━\n` +
+                          `🆔 <code>${task.id}</code>\n` +
+                          `📉 Price: $${currentPrice.toFixed(6)} (${changePct.toFixed(1)}%)\n` +
+                          `🛡️ Threshold: -${p.stopLossPct}%\n` +
+                          `⛔ DCA auto-disabled.`,
+                          { parse_mode: 'HTML' });
+                        return;
+                      }
+                      if (p.takeProfitPct && changePct >= p.takeProfitPct) {
+                        dcaLog.info(`DCA ${task.id}: Take-profit triggered (${changePct.toFixed(1)}% >= +${p.takeProfitPct}%). Disabling.`);
+                        await dcaDbRun(`UPDATE ai_scheduled_tasks SET enabled = 0 WHERE id = ?`, [task.id]);
+                        await safeSend(targetChatId,
+                          `🎯 <b>DCA TAKE-PROFIT</b>\n━━━━━━━━━━━━━━━━━━\n` +
+                          `🆔 <code>${task.id}</code>\n` +
+                          `📈 Price: $${currentPrice.toFixed(6)} (+${changePct.toFixed(1)}%)\n` +
+                          `🎯 Threshold: +${p.takeProfitPct}%\n` +
+                          `✅ DCA auto-disabled. Target reached!`,
+                          { parse_mode: 'HTML' });
+                        return;
+                      }
+                    }
+                  }
+                } catch (priceErr) {
+                  dcaLog.warn(`DCA ${task.id}: Price check failed:`, priceErr.message);
+                }
+              }
+
+              // Execute the swap
+              const privateKey = global._decryptTradingKey(tw.encryptedKey);
+              const wallet = new ethers.Wallet(privateKey, provider);
+
+              // Resolve decimals + amount to wei
+              let fromDec = 18, toDec = 18, fromSym = p.fromSymbol || '?', toSym = p.toSymbol || '?';
+              try {
+                const basicInfo = await onchainos.getTokenBasicInfo([
+                  { chainIndex, tokenContractAddress: p.fromTokenAddress },
+                  { chainIndex, tokenContractAddress: p.toTokenAddress }
+                ]);
+                if (basicInfo?.length > 0) {
+                  const f = basicInfo.find(t2 => t2.tokenContractAddress?.toLowerCase() === p.fromTokenAddress.toLowerCase());
+                  const t3 = basicInfo.find(t2 => t2.tokenContractAddress?.toLowerCase() === p.toTokenAddress.toLowerCase());
+                  if (f) { fromDec = Number(f.decimal || 18); fromSym = f.tokenSymbol || fromSym; }
+                  if (t3) { toDec = Number(t3.decimal || 18); toSym = t3.tokenSymbol || toSym; }
+                }
+              } catch (e) { /* use defaults */ }
+
+              const amountWei = ethers.parseUnits(String(p.amount), fromDec).toString();
+
+              // Check balance first
+              const isNative = p.fromTokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+              let hasBalance = false;
+              try {
+                if (isNative) {
+                  const bal = await provider.getBalance(tw.address);
+                  hasBalance = bal > BigInt(amountWei);
+                } else {
+                  const erc20 = new ethers.Contract(p.fromTokenAddress, ["function balanceOf(address) view returns (uint256)"], provider);
+                  const bal = await erc20.balanceOf(tw.address);
+                  hasBalance = bal >= BigInt(amountWei);
+                }
+              } catch (e) { hasBalance = true; /* attempt swap anyway */ }
+
+              if (!hasBalance) {
+                dcaLog.warn(`DCA ${task.id}: Insufficient balance. Skipping.`);
+                p.consecutiveFailures = (p.consecutiveFailures || 0) + 1;
+                if (p.consecutiveFailures >= 3) {
+                  await dcaDbRun(`UPDATE ai_scheduled_tasks SET enabled = 0, params = ? WHERE id = ?`, [JSON.stringify(p), task.id]);
+                  await safeSend(targetChatId, `⚠️ DCA <code>${task.id}</code>: 3 consecutive failures (insufficient balance). DCA disabled.`, { parse_mode: 'HTML' });
+                } else {
+                  await dcaDbRun(`UPDATE ai_scheduled_tasks SET params = ? WHERE id = ?`, [JSON.stringify(p), task.id]);
+                }
+                return;
+              }
+
+              // Approve if ERC-20
+              if (!isNative) {
+                try {
+                  const approveData = await onchainos.getApproveTransaction(chainIndex, p.fromTokenAddress, amountWei);
+                  if (approveData?.[0]?.dexContractAddress) {
+                    const spender = approveData[0].dexContractAddress;
+                    const erc20Check = new ethers.Contract(p.fromTokenAddress, ["function allowance(address,address) view returns (uint256)"], provider);
+                    const allowance = await erc20Check.allowance(tw.address, spender);
+                    if (allowance < BigInt(amountWei)) {
+                      const iface = new ethers.Interface(["function approve(address spender, uint256 amount) public returns (bool)"]);
+                      const approveCalldata = iface.encodeFunctionData("approve", [spender, ethers.MaxUint256]);
+                      const approveTx = await wallet.signTransaction({
+                        to: p.fromTokenAddress, data: approveCalldata, value: 0n,
+                        gasLimit: BigInt(approveData[0].gasLimit || '100000'), gasPrice: BigInt(approveData[0].gasPrice || '1000000000'),
+                        nonce: await provider.getTransactionCount(wallet.address), chainId: parseInt(chainIndex)
+                      });
+                      await onchainos.broadcastTransaction(approveTx, chainIndex, tw.address);
+                      dcaLog.info(`DCA ${task.id}: Approve sent, waiting 3s...`);
+                      await new Promise(r => setTimeout(r, 3000));
+                    }
+                  }
+                } catch (approveErr) {
+                  dcaLog.warn(`DCA ${task.id}: Approve failed:`, approveErr.message);
+                }
+              }
+
+              // Get swap TX and execute
+              const txData = await onchainos.getSwapTransaction({
+                chainIndex, fromTokenAddress: p.fromTokenAddress, toTokenAddress: p.toTokenAddress,
+                amount: amountWei, userWalletAddress: tw.address, slippagePercent: '3'
+              });
+              const txRaw = Array.isArray(txData) ? txData[0] : txData;
+              if (!txRaw?.tx) throw new Error('No swap tx data returned');
+
+              const signedTx = await wallet.signTransaction({
+                to: txRaw.tx.to, data: txRaw.tx.data, value: BigInt(txRaw.tx.value || '0'),
+                gasLimit: BigInt(txRaw.tx.gas || txRaw.tx.gasLimit || '300000'),
+                gasPrice: BigInt(txRaw.tx.gasPrice || '1000000000'),
+                nonce: await provider.getTransactionCount(wallet.address),
+                chainId: parseInt(chainIndex)
+              });
+
+              const broadcastResult = await onchainos.broadcastTransaction(signedTx, chainIndex, tw.address);
+              const br = Array.isArray(broadcastResult) ? broadcastResult[0] : broadcastResult;
+              const txHash = br?.txHash || br?.orderId || 'pending';
+
+              // Parse swap amounts
+              const router = txRaw.routerResult || {};
+              const swapFromAmt = Number(router.fromTokenAmount || amountWei) / Math.pow(10, fromDec);
+              const swapToAmt = Number(router.toTokenAmount || 0) / Math.pow(10, toDec);
+
+              // Item #7: Log DCA history to wallet_tx_history
+              try {
+                let priceUsd = 0;
+                try {
+                  const pd = await onchainos.getMarketPrice([{ chainIndex, tokenContractAddress: p.toTokenAddress }]);
+                  priceUsd = Number(pd?.[0]?.lastPrice || 0);
+                } catch (e) { /* no price */ }
+
+                await dcaDbRun(
+                  `INSERT INTO wallet_tx_history (userId, walletId, walletAddress, type, chainIndex, fromToken, toToken, fromAmount, toAmount, fromSymbol, toSymbol, priceUsd, txHash, createdAt)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                  [task.userId, parseInt(p.walletId), tw.address, 'dca_swap', chainIndex,
+                  p.fromTokenAddress, p.toTokenAddress, String(swapFromAmt), String(swapToAmt),
+                    fromSym, toSym, priceUsd, txHash, Math.floor(Date.now() / 1000)]
+                );
+              } catch (histErr) {
+                dcaLog.warn(`DCA ${task.id}: History log failed:`, histErr.message);
+              }
+
+              // Reset consecutive failures on success
+              p.consecutiveFailures = 0;
+              await dcaDbRun(`UPDATE ai_scheduled_tasks SET params = ? WHERE id = ?`, [JSON.stringify(p), task.id]);
+
+              // Item #6: Send DCA result notification via DM
+              const explorerBase = _getExplorerUrl(chainIndex);
+              await safeSend(targetChatId,
+                `🔄 <b>DCA SWAP</b> ✅\n` +
+                `━━━━━━━━━━━━━━━━━━\n` +
+                `🆔 <code>${task.id}</code>\n` +
+                `💱 <code>${swapFromAmt.toFixed(4)}</code> ${escapeHtml(fromSym)} ➔ <code>${swapToAmt.toFixed(4)}</code> ${escapeHtml(toSym)}\n` +
+                `👛 <code>${tw.address.slice(0, 8)}...${tw.address.slice(-4)}</code>\n` +
+                `🔗 <a href="${explorerBase}/tx/${txHash}">View TX</a>\n` +
+                `━━━━━━━━━━━━━━━━━━\n` +
+                `🕐 ${fmtTime(Date.now())}`,
+                { parse_mode: 'HTML' });
+
+              dcaLog.info(`✅ DCA ${task.id} executed: ${swapFromAmt} ${fromSym} → ${swapToAmt} ${toSym}, txHash=${txHash}`);
+
+            } catch (dcaErr) {
+              dcaLog.error(`❌ DCA ${task.id} failed:`, dcaErr.message || dcaErr);
+              // Track failures
+              p.consecutiveFailures = (p.consecutiveFailures || 0) + 1;
+              try {
+                const { dbRun: dcaDbRun2 } = require('../../db/core');
+                if (p.consecutiveFailures >= 3) {
+                  await dcaDbRun2(`UPDATE ai_scheduled_tasks SET enabled = 0, params = ? WHERE id = ?`, [JSON.stringify(p), task.id]);
+                  await safeSend(targetChatId,
+                    `❌ <b>DCA FAILED</b>\n━━━━━━━━━━━━━━━━━━\n` +
+                    `🆔 <code>${task.id}</code>\n` +
+                    `⚠️ 3 consecutive failures. DCA disabled.\n` +
+                    `📋 Error: ${escapeHtml((dcaErr.message || '').slice(0, 100))}`,
+                    { parse_mode: 'HTML' });
+                } else {
+                  await dcaDbRun2(`UPDATE ai_scheduled_tasks SET params = ? WHERE id = ?`, [JSON.stringify(p), task.id]);
+                  await safeSend(targetChatId,
+                    `⚠️ <b>DCA SWAP FAILED</b>\n━━━━━━━━━━━━━━━━━━\n` +
+                    `🆔 <code>${task.id}</code>\n` +
+                    `📋 ${escapeHtml((dcaErr.message || '').slice(0, 100))}\n` +
+                    `🔄 Will retry next cycle (${p.consecutiveFailures}/3 failures).`,
+                    { parse_mode: 'HTML' });
+                }
+              } catch (e2) { dcaLog.error('Failed to update DCA failure state:', e2.message); }
             }
           }
         } catch (execErr) {

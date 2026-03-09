@@ -392,18 +392,21 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'schedule_dca',
-                description: 'Schedule a recurring DCA (Dollar-Cost Averaging) swap. Vietnamese: "mua tự động mỗi ngày", "DCA hàng tuần", "đặt lịch swap".',
+                description: 'Schedule a recurring DCA (Dollar-Cost Averaging) swap. Vietnamese: "mua tự động mỗi ngày", "DCA hàng tuần", "đặt lịch swap". Supports create, list, cancel, pause, resume, dashboard actions.',
                 parameters: {
                     type: 'object',
                     properties: {
-                        action: { type: 'string', description: '"create", "list", "cancel"' },
+                        action: { type: 'string', description: '"create", "list", "cancel", "pause", "resume", "dashboard"' },
                         walletId: { type: 'string', description: 'Wallet ID for DCA' },
-                        chainIndex: { type: 'string', description: 'Chain ID. Default "196"' },
-                        fromTokenAddress: { type: 'string', description: 'Source token contract' },
-                        toTokenAddress: { type: 'string', description: 'Target token contract' },
+                        chainIndex: { type: 'string', description: 'Chain ID. Default "196". Supports any chain.' },
+                        fromTokenAddress: { type: 'string', description: 'Source token contract OR symbol (e.g. "USDT", "OKB")' },
+                        toTokenAddress: { type: 'string', description: 'Target token contract OR symbol (e.g. "banmao", "ETH")' },
                         amount: { type: 'string', description: 'Amount per swap in human units' },
-                        intervalHours: { type: 'number', description: 'Interval in hours (e.g. 24 = daily, 168 = weekly)' },
-                        taskId: { type: 'string', description: 'Task ID for cancel action' }
+                        interval: { type: 'string', description: 'Preset interval: "hourly", "daily", "weekly", "monthly". Overrides intervalHours.' },
+                        intervalHours: { type: 'number', description: 'Custom interval in hours (e.g. 24 = daily, 168 = weekly). Used if interval preset not set.' },
+                        stopLossPct: { type: 'number', description: 'Auto-cancel DCA if token price drops by this % from initial price (e.g. 20 = -20%)' },
+                        takeProfitPct: { type: 'number', description: 'Auto-cancel DCA if token price rises by this % from initial price (e.g. 50 = +50%)' },
+                        taskId: { type: 'string', description: 'Task ID for cancel/pause/resume actions' }
                     },
                     required: ['action']
                 }
