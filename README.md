@@ -53,6 +53,18 @@
 ![Wallet Creation](docs/assets/demo6.png)
 *Create a new Web3 wallet in a split second using a simple command.*
 
+7. **On-Chain Smart Money Signals**
+![Smart Money Signals](docs/assets/demo7.png)
+*Track real-time on-chain buy signals from Smart Money, Whales, and KOL wallets — see which tokens they're buying, on which chain, with total invested amount and price ranges, complete with one-click "Analyze" and "Swap" action buttons.*
+
+8. **Web Dashboard — User Trading Panel**
+![Dashboard User](docs/assets/demo8.png)
+*A sleek web-based trading panel with Quick Swap Quote, Gas Price monitor, Top Tokens ranking (sortable by Price, Volume, Market Cap across timeframes), and full transaction history — all accessible from your browser.*
+
+9. **Web Dashboard — Owner Admin Panel**
+![Dashboard Owner](docs/assets/demo9.png)
+*The Owner view of the Web Dashboard features a complete admin sidebar (Dashboard, Users, Groups, Price Alerts, Scheduled Posts, Analytics, Bot Config) alongside an AI Trading Assistant chat interface powered by Gemini + OnchainOS.*
+
 ### 🎮 Command Reference
 #### 🤖 AI Chat (Natural Language)
 Just chat naturally with the bot! It understands context and uses **40+ tools automatically**.
@@ -206,12 +218,70 @@ npm install -g pm2
 pm2 start index.js --name xbot
 ```
 
+### 🌐 Web Dashboard
+
+XBot includes a **professional Web Dashboard** built with React 19 + Vite 6, offering a complete visual management interface with glassmorphism design, dark/light mode, and full multi-language support (6 languages).
+
+#### ⚡ Quick Start
+```bash
+cd dashboard && npm install     # Install dependencies
+npm run build                    # Build for production
+cd .. && pm2 restart xbot        # Dashboard served automatically
+# Open: http://localhost:3001/dashboard/
+# Or type /dashboard in Telegram for an auto-login link
+```
+
+#### 🔐 Authentication Methods
+| Method | Description |
+|---|---|
+| **`/dashboard` command** | Type `/dashboard` in Telegram → click the auto-login link (recommended) |
+| **Dev mode buttons** | Click "Login as Owner" or "Login as User" on the login page |
+| **Telegram Widget** | Requires HTTPS domain + BotFather `/setdomain` configuration |
+
+#### 👑 Owner Pages (Admin Panel — 7 pages)
+| Page | Features |
+|---|---|
+| 📊 **Dashboard** | Real-time bot health, uptime, memory usage, event loop lag, database status, queue stats, Telegram API latency |
+| 👥 **Users** | Full user list with search, ban/unban management, activity tracking |
+| 💬 **Groups** | Manage all connected Telegram groups |
+| 📈 **Analytics** | Usage charts, command statistics, and trend data with Recharts |
+| 🔔 **Alerts** | Full CRUD management for scheduled price alerts across chains |
+| 📅 **Posts** | Scheduled broadcast post management with CRUD operations |
+| ⚙️ **Config** | Runtime bot configuration, API key management (keys are masked for security) |
+
+#### 👤 User Pages (All Users — 7 pages)
+| Page | Features |
+|---|---|
+| 🤖 **AI Chat** | Chat with the AI engine directly from the browser with real-time streaming |
+| 👤 **Profile** | View your Telegram profile and bot interaction statistics |
+| 👛 **Wallets** | Create, delete, and manage trading wallets; view token balances; set default wallet; explorer links |
+| 📊 **Trading** | Swap quote widget, gas price tracker, top tokens list (sortable by price/volume/market cap), transaction history |
+| 💹 **OKX Trading** | Advanced OKX DeFi trading tools and integration |
+| 🏆 **Leaderboard** | Game leaderboards and ranking system |
+| ⚙️ **Settings** | User preferences and display settings |
+
+#### 🎨 Customization
+- **Branding**: Override via `VITE_*` environment variables in `dashboard/.env` (app name, tagline, explorer URL, chain name)
+- **Languages**: Edit `dashboard/src/i18n/index.js` to add or modify translations
+- **Theme**: Customize colors in `dashboard/tailwind.config.js`, design tokens in `dashboard/src/index.css`
+- **Pages**: Add new pages in `dashboard/src/pages/`, register routes in `dashboard/src/App.jsx`
+
+#### 🔒 Security
+- **Telegram-only authentication** — No password-based login
+- **JWT with 7-day expiry** — Automatic refresh
+- **Private keys never exposed** — Wallet keys are stripped from all API responses
+- **API keys masked** — Displayed as `abc1...xyz9` in Config page
+- **Rate limiting** — 5 login attempts per minute per IP
+- Set `DASHBOARD_DISABLE_DEV_LOGIN=true` in production
+
+> 📘 **Full setup guide**: See [`DASHBOARD_SETUP.md`](DASHBOARD_SETUP.md) for detailed instructions including Nginx + SSL production deployment.
+
 ### 🛣️ Project Roadmap
 - [x] Integrate X Layer network optimization natively.
 - [x] Support multiple AI engines (Gemini, Groq, OpenAI).
 - [x] Release structural framework for Open Source community.
+- [x] Build a sleek Web Dashboard for visual bot and portfolio management.
 - [ ] Auto-sniper features and automated Onchain trading signals.
-- [ ] Build a sleek Telegram Mini App (Web-App) for visual portfolio management.
 
 ### 🤝 Contributing
 We welcome all Pull Requests! 
@@ -268,6 +338,18 @@ If this bot has helped you launch your project or trade faster on X Layer, pleas
 6. **秒级钱包创建**
 ![Wallet Creation](docs/assets/demo6.png)
 *只需一句简单的指令，眨眼间即可极速创建安全的 Web3 钱包。*
+
+7. **链上聪明钱资金流信号**
+![Smart Money Signals](docs/assets/demo7.png)
+*实时追踪聪明钱 (Smart Money)、巨鲸 (Whale) 和 KOL 钱包的链上买入信号 — 查看他们正在买入哪些代币、在哪条链上、总投入金额及价格区间，一键「分析」和「兑换」操作按钮直达。*
+
+8. **Web 管理仪表盘 — 用户交易面板**
+![Dashboard User](docs/assets/demo8.png)
+*精美的网页端交易面板，集成快速闪兑报价、Gas 费用实时监控、热门代币排行榜（支持按价格变动、交易量、市值多维度排序）以及完整的历史交易记录，尽在浏览器中即可轻松操控。*
+
+9. **Web 管理仪表盘 — 管理员控制台**
+![Dashboard Owner](docs/assets/demo9.png)
+*Owner 管理员专属视图，侧边栏涵盖完整的管理功能（总览、用户管理、群组管理、价格警报、定时推送、数据分析、Bot 配置），同时集成由 Gemini + OnchainOS 驱动的 AI 交易助手聊天界面。*
 
 ### 🎮 指令参考
 #### 🤖 AI 对话 (自然语言交互)
@@ -421,12 +503,70 @@ npm install -g pm2
 pm2 start index.js --name xbot
 ```
 
+### 🌐 Web 管理仪表盘 (Dashboard)
+
+XBot 内置一套专业级的 **Web 可视化管理仪表盘**，基于 React 19 + Vite 6 构建，提供毓玻璃型怎少 (Glassmorphism) 精美界面、深色/浅色主题切换，以及完整的6种语言支持。
+
+#### ⚡ 快速启动
+```bash
+cd dashboard && npm install     # 安装依赖
+npm run build                    # 编译生产版本
+cd .. && pm2 restart xbot        # 仪表盘自动随 Bot 服务启动
+# 浏览器访问: http://localhost:3001/dashboard/
+# 或在 Telegram 中输入 /dashboard 获取自动登录链接
+```
+
+#### 🔐 登录认证方式
+| 方式 | 说明 |
+|---|---|
+| **`/dashboard` 指令** | 在 Telegram 中发送 `/dashboard` → 点击自动登录链接（推荐） |
+| **开发模式按钮** | 在登录页点击“以 Owner 登录”或“以 User 登录” |
+| **Telegram 小组件** | 需要 HTTPS 域名 + BotFather `/setdomain` 配置 |
+
+#### 👑 Owner 管理员页面（7 个页面）
+| 页面 | 功能详情 |
+|---|---|
+| 📊 **总览面板** | 实时 Bot 健康状态、运行时长、内存占用、事件循环延迟、数据库状态、队列统计、Telegram API 延迟 |
+| 👥 **用户管理** | 完整用户列表、搜索、封禁/解封、活动跟踪 |
+| 💬 **群组管理** | 管理所有已连接的 Telegram 群组 |
+| 📈 **数据分析** | 使用统计图表、指令调用次数、趋势数据 (Recharts) |
+| 🔔 **价格警报** | 跨链定时价格警报的完整 CRUD 管理 |
+| 📅 **定时推送** | 定时广播消息管理，支持增删改查 |
+| ⚙️ **配置中心** | 运行时配置、API 密钥管理（密钥脱敏显示） |
+
+#### 👤 User 普通用户页面（7 个页面）
+| 页面 | 功能详情 |
+|---|---|
+| 🤖 **AI 对话** | 直接在浏览器中与 AI 引擎实时对话 |
+| 👤 **个人资料** | 查看 Telegram 个人信息和机器人交互统计 |
+| 👛 **钱包管理** | 创建、删除、管理交易钱包；查看代币余额；设置默认钱包；区块浏览器链接 |
+| 📊 **交易中心** | 闪兑报价小工具、Gas 费用监控、热门代币榜单（可按价格/交易量/市值排序）、交易历史 |
+| 💹 **OKX 交易** | 高级 OKX DeFi 交易工具集成 |
+| 🏆 **排行榜** | 游戏排行榜与积分系统 |
+| ⚙️ **设置** | 用户偏好与显示设置 |
+
+#### 🎨 自定义配置
+- **品牌化**: 通过 `dashboard/.env` 中的 `VITE_*` 环境变量自定义（应用名称、标语、浏览器 URL、链名称）
+- **多语言**: 编辑 `dashboard/src/i18n/index.js` 添加或修改翻译
+- **主题**: 在 `dashboard/tailwind.config.js` 中自定义颜色，在 `dashboard/src/index.css` 中修改设计令牌
+- **页面**: 在 `dashboard/src/pages/` 添加新页面，在 `dashboard/src/App.jsx` 中注册路由
+
+#### 🔒 安全机制
+- **仅 Telegram 认证** — 无密码登录
+- **JWT 7天过期** — 自动刷新
+- **私钥绝不暴露** — 钱包私钥从 API 响应中完全剔除
+- **密钥脱敏** — 配置页中显示为 `abc1...xyz9`
+- **速率限制** — 每 IP 每分钟最多 5 次登录尝试
+- 生产环境建议设置 `DASHBOARD_DISABLE_DEV_LOGIN=true`
+
+> 📘 **完整安装指南**: 请查看 [`DASHBOARD_SETUP.md`](DASHBOARD_SETUP.md) 获取详细的部署说明，包括 Nginx + SSL 生产环境配置。
+
 ### 🛣️ 项目发展蓝图 (Roadmap)
 - [x] 原生深度集成 X Layer 网络底层支持
 - [x] 对接多模态大语言模型 (Gemini, Groq, OpenAI)
 - [x] 向开源社区重构并释放标准框架代码
+- [x] 搭建专业级 Web 管理仪表盘，可视化管理 Bot 与资产组合
 - [ ] 开发自动打狗狙击 (Auto-sniper) 与链上信号自动播报系统
-- [ ] 搭建直观优雅的 Telegram Web-App 资产管理端
 
 ### 🤝 参与开源贡献
 我们热烈欢迎任何人发起 Pull Request！
@@ -483,6 +623,18 @@ XBot 的核心代码基于高内聚低耦合的架构打造。无论您是想添
 6. **Tạo Ví Trong Chớp Mắt**
 ![Wallet Creation](docs/assets/demo6.png)
 *Tạo ví Web3 an toàn trong một giọt nước rơi chỉ bằng một câu lệnh đơn giản.*
+
+7. **Tín Hiệu Dòng Tiền Thông Minh On-Chain**
+![Smart Money Signals](docs/assets/demo7.png)
+*Theo dõi thời gian thực tín hiệu mua on-chain từ các ví Smart Money, Cá Mập (Whale) và KOL — xem họ đang mua token gì, trên chain nào, tổng vốn đầu tư và khung giá, kèm nút bấm "Phân tích" và "Swap" chớp nhoáng.*
+
+8. **Bảng Điều Khiển Web — Giao Diện Giao Dịch Người Dùng**
+![Dashboard User](docs/assets/demo8.png)
+*Bảng giao dịch web cực đỉnh với Báo giá Swap nhanh, theo dõi Gas, Bảng xếp hạng token hot nhất (sắp xếp theo Giá, Volume, Vốn hoá theo khung thời gian), và lịch sử giao dịch đầy đủ — tất cả ngay trên trình duyệt.*
+
+9. **Bảng Điều Khiển Web — Giao Diện Quản Trị Viên**
+![Dashboard Owner](docs/assets/demo9.png)
+*Giao diện Owner với sidebar quản trị toàn diện (Tổng quan, Người dùng, Nhóm, Cảnh báo giá, Bài đăng định kỳ, Phân tích, Cấu hình Bot), kèm giao diện chat AI Trading Assistant được hỗ trợ bởi Gemini + OnchainOS.*
 
 ### 🎮 Danh Sách Lệnh
 #### 🤖 Trò Chuyện AI (Tự Nhiên)
@@ -636,12 +788,70 @@ npm install -g pm2
 pm2 start index.js --name xbot
 ```
 
+### 🌐 Bảng Điều Khiển Web (Dashboard)
+
+XBot được tích hợp sẵn một **Bảng điều khiển Web chuyên nghiệp** được xây dựng trên React 19 + Vite 6, mang đến giao diện quản lý trực quan với thiết kế Glassmorphism siêu đẹp, chế độ Sáng/Tối, và hỗ trợ đầy đủ 6 ngôn ngữ.
+
+#### ⚡ Cài Đặt Nhanh
+```bash
+cd dashboard && npm install     # Cài thư viện
+npm run build                    # Build bản production
+cd .. && pm2 restart xbot        # Dashboard tự động chạy cùng Bot
+# Mở trình duyệt: http://localhost:3001/dashboard/
+# Hoặc nhắn lệnh /dashboard trong Telegram để lấy link đăng nhập tự động
+```
+
+#### 🔐 Phương Thức Đăng Nhập
+| Phương thức | Mô tả |
+|---|---|
+| **Lệnh `/dashboard`** | Gõ `/dashboard` trong Telegram → bấm vào link đăng nhập tự động (Khuyến nghị) |
+| **Nút Dev mode** | Bấm “Đăng nhập với tư cách Owner” hoặc “User” trên trang Login |
+| **Telegram Widget** | Yêu cầu HTTPS domain + cấu hình `/setdomain` trong BotFather |
+
+#### 👑 Trang Quản Trị Viên (Owner — 7 trang)
+| Trang | Chức năng |
+|---|---|
+| 📊 **Tổng Quan** | Trạng thái sức khỏe Bot real-time, uptime, RAM, độ trễ event loop, database, hàng đợi, độ trễ Telegram API |
+| 👥 **Người Dùng** | Danh sách người dùng, tìm kiếm, cấm/bỏ cấm, theo dõi hoạt động |
+| 💬 **Nhóm** | Quản lý tất cả nhóm Telegram đã kết nối |
+| 📈 **Phân Tích** | Biểu đồ thống kê sử dụng, lượt gọi lệnh, dữ liệu xu hướng (Recharts) |
+| 🔔 **Cảnh Báo Giá** | Quản lý CRUD đầy đủ cảnh báo giá định kỳ xuyên chuỗi |
+| 📅 **Bài Đăng** | Quản lý bài đăng định kỳ, hỗ trợ thêm/sửa/xóa |
+| ⚙️ **Cấu Hình** | Cấu hình runtime, quản lý API key (key được ẩn bảo mật) |
+
+#### 👤 Trang Người Dùng (User — 7 trang)
+| Trang | Chức năng |
+|---|---|
+| 🤖 **Chat AI** | Trò chuyện với AI trực tiếp từ trình duyệt với streaming thời gian thực |
+| 👤 **Hồ Sơ** | Xem thông tin Telegram và thống kê tương tác với bot |
+| 👛 **Ví** | Tạo, xóa, quản lý ví giao dịch; xem số dư token; đặt ví mặc định; link block explorer |
+| 📊 **Giao Dịch** | Widget báo giá Swap nhanh, theo dõi Gas, bảng xếp hạng token (sắp xếp theo giá/volume/vốn hóa), lịch sử giao dịch |
+| 💹 **OKX Trading** | Công cụ giao dịch DeFi OKX nâng cao |
+| 🏆 **Bảng Xếp Hạng** | Bảng xếp hạng game và hệ thống điểm |
+| ⚙️ **Cài Đặt** | Tuỳ chỉnh sở thích và giao diện |
+
+#### 🎨 Tuỳ Chỉnh
+- **Thương hiệu**: Tùy chỉnh qua biến môi trường `VITE_*` trong `dashboard/.env` (tên app, khẩu hiệu, URL explorer, tên chain)
+- **Ngôn ngữ**: Sửa file `dashboard/src/i18n/index.js` để thêm hoặc chỉnh sửa bản dịch
+- **Giao diện**: Tùy chỉnh màu sắc trong `dashboard/tailwind.config.js`, design tokens trong `dashboard/src/index.css`
+- **Thêm trang**: Tạo trang mới trong `dashboard/src/pages/`, đăng ký route trong `dashboard/src/App.jsx`
+
+#### 🔒 Bảo Mật
+- **Chỉ xác thực qua Telegram** — Không đăng nhập bằng mật khẩu
+- **JWT hết hạn sau 7 ngày** — Tự động làm mới
+- **Private Key không bao giờ lộ** — Khóa ví bị lọc ra khỏi mọi API response
+- **Key được ẩn** — Hiển thị dạng `abc1...xyz9` trong trang Config
+- **Giới hạn tốc độ** — Mỗi IP tối đa 5 lần đăng nhập/phút
+- Môi trường production nên bật `DASHBOARD_DISABLE_DEV_LOGIN=true`
+
+> 📘 **Hướng dẫn đầy đủ**: Xem [`DASHBOARD_SETUP.md`](DASHBOARD_SETUP.md) để biết chi tiết cách triển khai, bao gồm cả cấu hình Nginx + SSL cho production.
+
 ### 🛣️ Lộ Trình Phát Triển (Roadmap)
 - [x] Tích hợp siêu tối ưu mạng lưới độc quyền X Layer.
 - [x] Nối ống đa dạng hóa các siêu trí tuệ nhân tạo thế giới (Gemini, Groq, OpenAI).
 - [x] Định hình cấu trúc khung (Framework) cực chuẩn cho cộng đồng Mã nguồn mở.
+- [x] Xây dựng Bảng điều khiển Web chuyên nghiệp để quản lý Bot và tài sản trực quan.
 - [ ] Phát triển hệ thống săn mồi tự động (Sniper Bot) và Báo kèo tín hiệu Auto.
-- [ ] Xây dựng bảng giao diện đồ họa Web-App (Telegram Mini App) để dễ quản lý kho.
 
 ### 🤝 Đóng Góp Hệ Sinh Thái Mã Nguồn Mở
 Chúng tôi luôn luôn hoan nghênh tất cả các Pull Request! 
@@ -698,6 +908,18 @@ Nếu cỗ máy AI này đã giúp bạn bắt gọn các siêu phầm X100, hay
 6. **초고속 지갑 생성**
 ![Wallet Creation](docs/assets/demo6.png)
 *간단한 명령어로 눈 깜짝할 사이에 새로운 Web3 지갑을 생성하세요.*
+
+7. **온체인 스마트머니 매수 신호**
+![Smart Money Signals](docs/assets/demo7.png)
+*스마트머니, 고래(Whale), KOL 지갑의 실시간 온체인 매수 신호를 추적하세요 — 어떤 토큰을 어떤 체인에서 매수하는지, 총 투자 금액과 가격 범위를 확인하고, 원클릭 "분석" 및 "스왑" 버튼으로 즉시 행동할 수 있습니다.*
+
+8. **웹 대시보드 — 사용자 트레이딩 패널**
+![Dashboard User](docs/assets/demo8.png)
+*세련된 웹 기반 트레이딩 패널로 빠른 스왑 견적, 가스 가격 모니터, 톱 토큰 순위(가격/거래량/시가총액별 정렬), 전체 거래 내역을 브라우저에서 바로 확인하세요.*
+
+9. **웹 대시보드 — 관리자 어드민 패널**
+![Dashboard Owner](docs/assets/demo9.png)
+*Owner 전용 뷰로 완전한 관리자 사이드바(대시보드, 사용자, 그룹, 가격 알림, 예약 게시, 분석, 봇 설정)와 함께 Gemini + OnchainOS 기반의 AI 트레이딩 어시스턴트 채팅 인터페이스를 제공합니다.*
 
 ### 🎮 명령어 안내
 #### 🤖 AI 채팅 (자연어 처리)
@@ -851,12 +1073,70 @@ npm install -g pm2
 pm2 start index.js --name xbot
 ```
 
+### 🌐 웹 대시보드 (Dashboard)
+
+XBot에는 React 19 + Vite 6 기반의 **전문적인 웹 대시보드**가 내장되어 있으며, 글래스모피즘 (Glassmorphism) 디자인, 다크/라이트 모드, 6개 언어 지원을 제공합니다.
+
+#### ⚡ 빠른 설정
+```bash
+cd dashboard && npm install     # 의존성 설치
+npm run build                    # 프로덕션 빌드
+cd .. && pm2 restart xbot        # 대시보드가 봇과 함께 자동 시작
+# 브라우저: http://localhost:3001/dashboard/
+# 또는 Telegram에서 /dashboard 명령어를 입력하여 자동 로그인 링크 받기
+```
+
+#### 🔐 로그인 방법
+| 방법 | 설명 |
+|---|---|
+| **`/dashboard` 명령어** | Telegram에서 `/dashboard` 입력 → 자동 로그인 링크 클릭 (권장) |
+| **개발 모드 버튼** | 로그인 페이지에서 "Owner로 로그인" 또는 "User로 로그인" 클릭 |
+| **Telegram 위젯** | HTTPS 도메인 + BotFather `/setdomain` 설정 필요 |
+
+#### 👑 Owner 관리자 페이지 (7개 페이지)
+| 페이지 | 기능 |
+|---|---|
+| 📊 **대시보드** | 실시간 봇 상태, 업타임, 메모리 사용량, 이벤트 루프 레이턴시, DB 상태, 큐 통계, Telegram API 레이턴시 |
+| 👥 **사용자 관리** | 전체 사용자 리스트, 검색, 차단/차단 해제, 활동 추적 |
+| 💬 **그룹 관리** | 연결된 모든 Telegram 그룹 관리 |
+| 📈 **분석** | 사용 통계 차트, 명령어 호출 수, 트렌드 데이터 (Recharts) |
+| 🔔 **가격 알림** | 크로스체인 예약 가격 알림 CRUD 관리 |
+| 📅 **예약 게시** | 예약 브로드캐스트 게시물 CRUD 관리 |
+| ⚙️ **설정** | 런타임 구성, API 키 관리 (키 마스킹 처리) |
+
+#### 👤 User 사용자 페이지 (7개 페이지)
+| 페이지 | 기능 |
+|---|---|
+| 🤖 **AI 채팅** | 브라우저에서 직접 AI 엔진과 실시간 대화 |
+| 👤 **프로필** | Telegram 프로필 정보 및 봇 상호작용 통계 |
+| 👛 **지갑 관리** | 트레이딩 지갑 생성/삭제/관리; 토큰 잔액 조회; 기본 지갑 설정; 씽스플로러 링크 |
+| 📊 **트레이딩** | 스왕 견적 위젯, 가스가격 모니터, 톱 토큰 리스트(가격/거래량/시가총액 정렬), 거래 내역 |
+| 💹 **OKX 트레이딩** | 고급 OKX DeFi 트레이딩 도구 통합 |
+| 🏆 **리더보드** | 게임 순위표 및 랭킹 시스템 |
+| ⚙️ **설정** | 사용자 선호도 및 디스플레이 설정 |
+
+#### 🎨 커스터마이징
+- **브랜딩**: `dashboard/.env`의 `VITE_*` 환경 변수로 설정 (앱 이름, 태그라인, 익스플로러 URL, 체인명)
+- **언어**: `dashboard/src/i18n/index.js`를 편집하여 번역 추가 또는 수정
+- **테마**: `dashboard/tailwind.config.js`에서 색상 커스터마이징, `dashboard/src/index.css`에서 디자인 토큰 수정
+- **페이지 추가**: `dashboard/src/pages/`에 새 페이지 추가, `dashboard/src/App.jsx`에서 라우트 등록
+
+#### 🔒 보안
+- **Telegram 전용 인증** — 비밀번호 로그인 없음
+- **JWT 7일 만료** — 자동 갱신
+- **프라이빗 키 비노출** — 지갑 키는 모든 API 응답에서 제거
+- **API 키 마스킹** — Config 페이지에서 `abc1...xyz9` 형태로 표시
+- **속도 제한** — IP당 분당 5회 로그인 시도 제한
+- 프로덕션 환경에서는 `DASHBOARD_DISABLE_DEV_LOGIN=true` 설정 권장
+
+> 📘 **전체 설치 가이드**: Nginx + SSL 프로덕션 배포를 포함한 상세한 설치 방법은 [`DASHBOARD_SETUP.md`](DASHBOARD_SETUP.md)를 참조하세요.
+
 ### 🛣️ 프로젝트 로드맵 (Roadmap)
 - [x] X Layer 네트워크 최적화 네이티브 통합.
 - [x] 다중 대형 언어 모델 (Gemini, Groq, OpenAI) 지원.
 - [x] 오픈소스 생태계를 위한 표준 프레임워크 릴리즈.
+- [x] 전문적인 웹 대시보드 구축으로 봇 및 포트폴리오 시각적 관리.
 - [ ] 오토 스나이퍼 백그라운드 기능 및 온체인 신호 알림 시스템 구축.
-- [ ] 시각적 포트폴리오 관리를 위한 Telegram Mini App(웹 앱) 인터페이스 개발.
 
 ### 🤝 오픈소스 기여 참여
 우리는 모든 분들의 Pull Request를 환영합니다!
@@ -913,6 +1193,18 @@ XBot은 극도로 모듈화된 아키텍처로 설계되었습니다. 새로운 
 6. **Мгновенное Создание Кошелька**
 ![Wallet Creation](docs/assets/demo6.png)
 *Создайте новый и безопасный Web3-кошелек в одно касание с помощью простой команды.*
+
+7. **Сигналы Умных Денег (On-Chain)**
+![Smart Money Signals](docs/assets/demo7.png)
+*Отслеживайте в реальном времени сигналы покупок от кошельков Smart Money, Китов (Whale) и KOL — какие токены они покупают, на какой сети, с общей суммой инвестиций и диапазоном цен, а также кнопки «Анализ» и «Обмен» для мгновенного действия.*
+
+8. **Веб-Панель — Торговый Интерфейс (User)**
+![Dashboard User](docs/assets/demo8.png)
+*Элегантная веб-панель трейдинга с быстрыми котировками свапов, мониторингом газа, рейтингом топ-токенов (сортировка по цене, объему, капитализации за разные временные рамки) и полной историей транзакций — всё прямо в браузере.*
+
+9. **Веб-Панель — Админ-Панель (Owner)**
+![Dashboard Owner](docs/assets/demo9.png)
+*Панель владельца с полным админ-сайдбаром (Дашборд, Пользователи, Группы, Ценовые алерты, Отложенные публикации, Аналитика, Конфигурация бота) и встроенным чат-интерфейсом AI-ассистента на базе Gemini + OnchainOS.*
 
 ### 🎮 Справочник по Командам
 #### 🤖 Чат с ИИ (Естественный Язык)
@@ -1066,12 +1358,70 @@ npm install -g pm2
 pm2 start index.js --name xbot
 ```
 
+### 🌐 Веб-Панель Управления (Dashboard)
+
+XBot включает **профессиональную веб-панель**, построенную на React 19 + Vite 6, с дизайном Glassmorphism, тёмной/светлой темой и полной поддержкой 6 языков.
+
+#### ⚡ Быстрый Старт
+```bash
+cd dashboard && npm install     # Установка зависимостей
+npm run build                    # Сборка продакшен-версии
+cd .. && pm2 restart xbot        # Панель запускается автоматически с ботом
+# Браузер: http://localhost:3001/dashboard/
+# Или введите /dashboard в Telegram для автоматического входа
+```
+
+#### 🔐 Способы Авторизации
+| Способ | Описание |
+|---|---|
+| **Команда `/dashboard`** | Введите `/dashboard` в Telegram → нажмите на ссылку авто-входа (рекомендуется) |
+| **Кнопки режима разработки** | Нажмите "Войти как Owner" или "Войти как User" на странице входа |
+| **Telegram виджет** | Требуется HTTPS-домен + настройка `/setdomain` в BotFather |
+
+#### 👑 Страницы Владельца (Owner — 7 страниц)
+| Страница | Функционал |
+|---|---|
+| 📊 **Панель** | Здоровье бота в реальном времени, аптайм, исп. памяти, латентность event loop, статус БД, очередь, латентность Telegram API |
+| 👥 **Пользователи** | Список всех пользователей, поиск, бан/разбан, трекинг активности |
+| 💬 **Группы** | Управление всеми подключенными Telegram-группами |
+| 📈 **Аналитика** | Графики статистики, кол-во вызовов команд, тренды (Recharts) |
+| 🔔 **Алерты** | Полное CRUD-управление ценовыми алертами по расписанию |
+| 📅 **Публикации** | Управление отложенными рассылками с полным CRUD |
+| ⚙️ **Конфигурация** | Настройки времени выполнения, управление API-ключами (ключи маскируются) |
+
+#### 👤 Страницы Пользователя (User — 7 страниц)
+| Страница | Функционал |
+|---|---|
+| 🤖 **Чат с ИИ** | Общение с ИИ прямо в браузере в реальном времени |
+| 👤 **Профиль** | Профиль Telegram и статистика взаимодействия с ботом |
+| 👛 **Кошельки** | Создание/удаление/управление торговыми кошельками; баланс токенов; кошелёк по умолчанию; ссылки на эксплорер |
+| 📊 **Торговля** | Виджет котировок свапов, монитор газа, топ токенов (сортировка по цене/объёму/капитализации), история сделок |
+| 💹 **OKX Трейдинг** | Продвинутые инструменты DeFi-торговли OKX |
+| 🏆 **Рейтинг** | Таблицы лидеров и система ранжирования |
+| ⚙️ **Настройки** | Предпочтения пользователя и настройки отображения |
+
+#### 🎨 Кастомизация
+- **Брендинг**: Настройка через переменные `VITE_*` в `dashboard/.env` (название, слоган, URL эксплорера, название сети)
+- **Языки**: Редактируйте `dashboard/src/i18n/index.js` для добавления или изменения переводов
+- **Тема**: Настройка цветов в `dashboard/tailwind.config.js`, токены дизайна в `dashboard/src/index.css`
+- **Страницы**: Добавляйте новые страницы в `dashboard/src/pages/`, маршруты в `dashboard/src/App.jsx`
+
+#### 🔒 Безопасность
+- **Только Telegram-авторизация** — Нет парольного входа
+- **JWT с истечением через 7 дней** — Автообновление
+- **Приватные ключи скрыты** — Ключи кошельков удаляются из всех API-ответов
+- **API-ключи маскируются** — Отображаются как `abc1...xyz9` на странице конфигурации
+- **Ограничение частоты** — 5 попыток входа в минуту на IP
+- В продакшене установите `DASHBOARD_DISABLE_DEV_LOGIN=true`
+
+> 📘 **Полное руководство**: См. [`DASHBOARD_SETUP.md`](DASHBOARD_SETUP.md) для подробных инструкций, включая развертывание с Nginx + SSL.
+
 ### 🛣️ Дорожная карта проекта (Roadmap)
 - [x] Глубокая оптимизация ядра для сети X Layer.
 - [x] Интеграция нескольких мультимодальных ИИ (Gemini, Groq, OpenAI).
 - [x] Выпуск стандартизированного фреймворка для Open Source сообщества.
+- [x] Запуск профессиональной веб-панели управления для визуального управления ботом и портфелем.
 - [ ] Разработка системы автоматического снайпера и трансляции торговых сигналов Onchain.
-- [ ] Запуск графического интерфейса Web-App(Mini App) внутри Telegram для управления кошельком.
 
 ### 🤝 Участие в разработке
 Мы горячо приветствуем ваши Pull Request!
@@ -1128,6 +1478,18 @@ pm2 start index.js --name xbot
 6. **Pembuatan Dompet Instan**
 ![Wallet Creation](docs/assets/demo6.png)
 *Buat dompet Web3 baru yang aman dalam hitungan detik hanya menggunakan perintah sederhana.*
+
+7. **Sinyal Smart Money On-Chain**
+![Smart Money Signals](docs/assets/demo7.png)
+*Lacak secara real-time sinyal pembelian on-chain dari dompet Smart Money, Whale, dan KOL — lihat token apa yang mereka beli, di chain mana, total investasi dan rentang harga, lengkap dengan tombol "Analisis" dan "Swap" satu klik.*
+
+8. **Dashboard Web — Panel Trading Pengguna**
+![Dashboard User](docs/assets/demo8.png)
+*Panel trading berbasis web yang elegan dengan Kutipan Swap Cepat, pemantau Harga Gas, Peringkat Token Teratas (sortir berdasarkan Harga, Volume, Market Cap dalam berbagai kerangka waktu), dan riwayat transaksi lengkap — semua dapat diakses langsung dari browser.*
+
+9. **Dashboard Web — Panel Admin Owner**
+![Dashboard Owner](docs/assets/demo9.png)
+*Tampilan Owner dengan sidebar admin lengkap (Dashboard, Pengguna, Grup, Peringatan Harga, Postingan Terjadwal, Analitik, Konfigurasi Bot) beserta antarmuka chat AI Trading Assistant yang didukung oleh Gemini + OnchainOS.*
 
 ### 🎮 Referensi Perintah
 #### 🤖 Obrolan AI (Bahasa Alami)
@@ -1281,12 +1643,70 @@ npm install -g pm2
 pm2 start index.js --name xbot
 ```
 
+### 🌐 Dashboard Web (Panel Kontrol)
+
+XBot dilengkapi **Dashboard Web profesional** yang dibangun dengan React 19 + Vite 6, menghadirkan antarmuka manajemen visual dengan desain Glassmorphism yang elegan, mode Gelap/Terang, dan dukungan penuh untuk 6 bahasa.
+
+#### ⚡ Instalasi Cepat
+```bash
+cd dashboard && npm install     # Instal dependensi
+npm run build                    # Build versi produksi
+cd .. && pm2 restart xbot        # Dashboard otomatis berjalan bersama Bot
+# Buka browser: http://localhost:3001/dashboard/
+# Atau ketik /dashboard di Telegram untuk mendapat link login otomatis
+```
+
+#### 🔐 Metode Login
+| Metode | Deskripsi |
+|---|---|
+| **Perintah `/dashboard`** | Ketik `/dashboard` di Telegram → klik link login otomatis (Disarankan) |
+| **Tombol Dev mode** | Klik "Login sebagai Owner" atau "Login sebagai User" di halaman Login |
+| **Telegram Widget** | Memerlukan domain HTTPS + konfigurasi `/setdomain` di BotFather |
+
+#### 👑 Halaman Owner (Admin — 7 halaman)
+| Halaman | Fitur |
+|---|---|
+| 📊 **Dashboard** | Status kesehatan Bot real-time, uptime, penggunaan memori, latensi event loop, status database, antrian, latensi Telegram API |
+| 👥 **Pengguna** | Daftar lengkap pengguna, pencarian, ban/unban, pelacakan aktivitas |
+| 💬 **Grup** | Kelola semua grup Telegram yang terhubung |
+| 📈 **Analitik** | Grafik statistik penggunaan, jumlah panggilan perintah, data tren (Recharts) |
+| 🔔 **Peringatan Harga** | Manajemen CRUD lengkap untuk peringatan harga terjadwal lintas chain |
+| 📅 **Postingan** | Manajemen postingan broadcast terjadwal dengan CRUD |
+| ⚙️ **Konfigurasi** | Konfigurasi runtime, manajemen API key (key disamarkan untuk keamanan) |
+
+#### 👤 Halaman Pengguna (User — 7 halaman)
+| Halaman | Fitur |
+|---|---|
+| 🤖 **Chat AI** | Mengobrol dengan AI langsung dari browser secara real-time |
+| 👤 **Profil** | Lihat informasi profil Telegram dan statistik interaksi bot |
+| 👛 **Dompet** | Buat, hapus, kelola dompet trading; lihat saldo token; atur dompet default; link explorer |
+| 📊 **Trading** | Widget kutipan Swap cepat, pemantau Gas, daftar top token (sortir berdasarkan harga/volume/market cap), riwayat transaksi |
+| 💹 **OKX Trading** | Alat perdagangan DeFi OKX tingkat lanjut |
+| 🏆 **Papan Peringkat** | Papan peringkat game dan sistem ranking |
+| ⚙️ **Pengaturan** | Preferensi pengguna dan pengaturan tampilan |
+
+#### 🎨 Kustomisasi
+- **Branding**: Atur melalui variabel lingkungan `VITE_*` di `dashboard/.env` (nama app, tagline, URL explorer, nama chain)
+- **Bahasa**: Edit `dashboard/src/i18n/index.js` untuk menambah atau mengubah terjemahan
+- **Tema**: Kustomisasi warna di `dashboard/tailwind.config.js`, token desain di `dashboard/src/index.css`
+- **Halaman**: Tambahkan halaman baru di `dashboard/src/pages/`, daftarkan route di `dashboard/src/App.jsx`
+
+#### 🔒 Keamanan
+- **Hanya autentikasi Telegram** — Tidak ada login berbasis kata sandi
+- **JWT kedaluwarsa 7 hari** — Pembaruan otomatis
+- **Private Key tidak pernah terekspos** — Kunci dompet dihapus dari semua respons API
+- **API key disamarkan** — Ditampilkan sebagai `abc1...xyz9` di halaman Konfigurasi
+- **Pembatasan kecepatan** — 5 percobaan login per menit per IP
+- Di lingkungan produksi, aktifkan `DASHBOARD_DISABLE_DEV_LOGIN=true`
+
+> 📘 **Panduan lengkap**: Lihat [`DASHBOARD_SETUP.md`](DASHBOARD_SETUP.md) untuk instruksi detail termasuk deployment Nginx + SSL untuk produksi.
+
 ### 🛣️ Peta Jalan Proyek (Roadmap)
 - [x] Optimalisasi kode secara mendalam (Native) untuk jaringan X Layer.
 - [x] Mendukung banyak AI pintar dunia (Gemini, Groq, OpenAI).
 - [x] Merilis kerangka dasar untuk komunitas Open Source global.
+- [x] Membangun Dashboard Web profesional untuk manajemen Bot dan aset secara visual.
 - [ ] Membangun fitur Auto-Sniper Token dan Sinyal Onchain Otomatis.
-- [ ] Membentuk tampilan antar-muka interaktif melalui Telegram Mini Web-App.
 
 ### 🤝 Berkontribusi Mengembangkan Bot (Open Source)
 Kami sangat menyambut siapa pun yang mengirimkan fitur lewat Pull Request!

@@ -6,6 +6,7 @@ import useThemeStore from '@/stores/themeStore';
 import Layout from '@/components/layout/Layout';
 import LoginModal from '@/components/LoginModal';
 import ToastContainer from '@/components/ToastContainer';
+import ChatWidget from '@/components/ChatWidget';
 import { PageSkeleton } from '@/components/Skeleton';
 
 // Lazy-loaded pages for code splitting
@@ -98,6 +99,7 @@ export default function App() {
                 </Route>
             </Routes>
             <ToastContainer />
+            <ChatWidget />
         </>
     );
 }
