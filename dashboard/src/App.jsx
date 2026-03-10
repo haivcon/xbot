@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from '@/stores/authStore';
 import useThemeStore from '@/stores/themeStore';
 import Layout from '@/components/layout/Layout';
-import LoginPage from '@/pages/LoginPage';
+import LoginModal from '@/components/LoginModal';
 import NotFoundPage from '@/pages/NotFoundPage';
 // Owner pages
 import DashboardPage from '@/pages/owner/DashboardPage';
@@ -19,17 +19,13 @@ import SettingsPage from '@/pages/user/SettingsPage';
 import WalletsPage from '@/pages/user/WalletsPage';
 import TradingPage from '@/pages/user/TradingPage';
 import LeaderboardPage from '@/pages/user/LeaderboardPage';
-
-function ProtectedRoute({ children, ownerOnly = false }) {
-    const { isAuthenticated, isOwner } = useAuthStore();
-    if (!isAuthenticated()) return <Navigate to="/login" replace />;
-    if (ownerOnly && !isOwner()) return <Navigate to="/profile" replace />;
-    return children;
-}
+// Landing
+import LandingPage from '@/pages/LandingPage';
 
 export default function App() {
-    const { init, loading } = useAuthStore();
+    const { init, loading, isAuthenticated, isOwner } = useAuthStore();
     const { initTheme } = useThemeStore();
+    const [showLogin, setShowLogin] = useState(false);
 
     useEffect(() => {
         init();
@@ -47,28 +43,43 @@ export default function App() {
         );
     }
 
+    // Not authenticated → show landing page with login modal
+    if (!isAuthenticated()) {
+        return (
+            <>
+                <LandingPage onLogin={() => setShowLogin(true)} />
+                <LoginModal open={showLogin} onClose={() => setShowLogin(false)} />
+            </>
+        );
+    }
+
+    // Authenticated → full dashboard
     return (
-        <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                {/* Owner Routes */}
-                <Route index element={<ProtectedRoute ownerOnly><DashboardPage /></ProtectedRoute>} />
-                <Route path="users" element={<ProtectedRoute ownerOnly><UsersPage /></ProtectedRoute>} />
-                <Route path="groups" element={<ProtectedRoute ownerOnly><GroupsPage /></ProtectedRoute>} />
-                <Route path="analytics" element={<ProtectedRoute ownerOnly><AnalyticsPage /></ProtectedRoute>} />
-                <Route path="alerts" element={<ProtectedRoute ownerOnly><AlertsPage /></ProtectedRoute>} />
-                <Route path="posts" element={<ProtectedRoute ownerOnly><PostsPage /></ProtectedRoute>} />
-                <Route path="config" element={<ProtectedRoute ownerOnly><ConfigPage /></ProtectedRoute>} />
-                {/* User Routes */}
-                <Route path="profile" element={<ProfilePage />} />
-                <Route path="settings" element={<SettingsPage />} />
-                <Route path="wallets" element={<WalletsPage />} />
-                <Route path="trading" element={<TradingPage />} />
-                <Route path="leaderboard" element={<LeaderboardPage />} />
-                {/* 404 */}
-                <Route path="*" element={<NotFoundPage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <>
+            <Routes>
+                <Route path="/" element={<Layout />}>
+                    {/* Owner Routes */}
+                    {isOwner() ? (
+                        <Route index element={<DashboardPage />} />
+                    ) : (
+                        <Route index element={<ProfilePage />} />
+                    )}
+                    <Route path="users" element={isOwner() ? <UsersPage /> : <Navigate to="/" />} />
+                    <Route path="groups" element={isOwner() ? <GroupsPage /> : <Navigate to="/" />} />
+                    <Route path="analytics" element={isOwner() ? <AnalyticsPage /> : <Navigate to="/" />} />
+                    <Route path="alerts" element={isOwner() ? <AlertsPage /> : <Navigate to="/" />} />
+                    <Route path="posts" element={isOwner() ? <PostsPage /> : <Navigate to="/" />} />
+                    <Route path="config" element={isOwner() ? <ConfigPage /> : <Navigate to="/" />} />
+                    {/* User Routes */}
+                    <Route path="profile" element={<ProfilePage />} />
+                    <Route path="settings" element={<SettingsPage />} />
+                    <Route path="wallets" element={<WalletsPage />} />
+                    <Route path="trading" element={<TradingPage />} />
+                    <Route path="leaderboard" element={<LeaderboardPage />} />
+                    {/* 404 */}
+                    <Route path="*" element={<NotFoundPage />} />
+                </Route>
+            </Routes>
+        </>
     );
 }

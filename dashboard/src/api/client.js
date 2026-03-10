@@ -17,7 +17,7 @@ class ApiClient {
 
         if (res.status === 401) {
             useAuthStore.getState().logout();
-            window.location.href = '/login';
+            window.location.href = '/';
             throw new Error('Unauthorized');
         }
 

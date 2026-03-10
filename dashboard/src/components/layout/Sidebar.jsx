@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
@@ -15,34 +16,73 @@ import {
     Bot,
     Trophy,
     Crown,
+    Globe,
+    LogOut,
+    ChevronDown,
+    Check,
 } from 'lucide-react';
 
-const LANG_FLAGS = {
-    en: '🇺🇸',
-    vi: '🇻🇳',
-    zh: '🇨🇳',
-    ko: '🇰🇷',
-    ru: '🇷🇺',
-    id: '🇮🇩',
-};
+const LANGUAGES = [
+    { code: 'en', flag: '🇺🇸', label: 'English' },
+    { code: 'vi', flag: '🇻🇳', label: 'Tiếng Việt' },
+    { code: 'zh', flag: '🇨🇳', label: '中文' },
+    { code: 'ko', flag: '🇰🇷', label: '한국어' },
+    { code: 'ru', flag: '🇷🇺', label: 'Русский' },
+    { code: 'id', flag: '🇮🇩', label: 'Indonesia' },
+];
 
-const LANG_LABELS = {
-    en: 'English',
-    vi: 'Tiếng Việt',
-    zh: '中文',
-    ko: '한국어',
-    ru: 'Русский',
-    id: 'Indonesia',
-};
+function LanguageDropdown() {
+    const { i18n } = useTranslation();
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+    const currentLang = i18n.language?.substring(0, 2) || 'en';
+    const current = LANGUAGES.find(l => l.code === currentLang) || LANGUAGES[0];
+
+    useEffect(() => {
+        const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, []);
+
+    return (
+        <div ref={ref} className="relative">
+            <button
+                onClick={() => setOpen(!open)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white/[0.03] border border-white/5 rounded-xl text-sm text-surface-200 hover:bg-white/[0.06] hover:border-white/10 transition-all"
+            >
+                <Globe size={15} className="text-surface-200/50" />
+                <span className="text-base">{current.flag}</span>
+                <span className="flex-1 text-left text-sm">{current.label}</span>
+                <ChevronDown size={14} className={`text-surface-200/40 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+
+            {open && (
+                <div className="absolute bottom-full left-0 right-0 mb-1 bg-surface-800 border border-white/10 rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50 animate-[fadeIn_0.15s_ease]">
+                    {LANGUAGES.map((lang) => (
+                        <button
+                            key={lang.code}
+                            onClick={() => { i18n.changeLanguage(lang.code); setOpen(false); }}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm transition-colors
+                                ${lang.code === currentLang
+                                    ? 'bg-brand-500/10 text-brand-400'
+                                    : 'text-surface-200 hover:bg-white/5'
+                                }`}
+                        >
+                            <span className="text-base">{lang.flag}</span>
+                            <span className="flex-1 text-left">{lang.label}</span>
+                            {lang.code === currentLang && <Check size={14} className="text-brand-400" />}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default function Sidebar({ open, onClose }) {
-    const { t, i18n } = useTranslation();
-    const { isOwner, user, role } = useAuthStore();
+    const { t } = useTranslation();
+    const { isOwner, user, logout } = useAuthStore();
     const location = useLocation();
-
-    const handleLangChange = (e) => {
-        i18n.changeLanguage(e.target.value);
-    };
 
     const ownerLinks = [
         { to: '/', icon: LayoutDashboard, label: t('dashboard.sidebar.home') },
@@ -67,11 +107,11 @@ export default function Sidebar({ open, onClose }) {
     return (
         <aside
             className={`
-        fixed lg:static inset-y-0 left-0 z-50
-        w-72 border-r flex flex-col transition-all duration-300
-        ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        bg-surface-850 dark:bg-surface-850 border-white/5 dark:border-white/5
-      `}
+                fixed lg:static inset-y-0 left-0 z-50
+                w-72 border-r flex flex-col transition-all duration-300
+                ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+                bg-surface-850 dark:bg-surface-850 border-white/5 dark:border-white/5
+            `}
             style={document.documentElement.classList.contains('dark') ? {} : { background: '#fff', borderColor: 'rgba(226,232,240,0.6)' }}
         >
             {/* Logo area */}
@@ -103,6 +143,9 @@ export default function Sidebar({ open, onClose }) {
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-surface-100 truncate">{user?.first_name || 'User'}</p>
                         <div className="flex items-center gap-1.5 mt-0.5">
+                            {user?.username && (
+                                <span className="text-[10px] text-surface-200/40">@{user.username}</span>
+                            )}
                             {isOwner() ? (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-md">
                                     <Crown size={10} /> {t('dashboard.auth.ownerBadge')}
@@ -139,21 +182,16 @@ export default function Sidebar({ open, onClose }) {
                 })}
             </nav>
 
-            {/* Language selector */}
-            <div className="px-4 py-3 border-t border-white/5">
-                <select
-                    value={i18n.language?.substring(0, 2) || 'en'}
-                    onChange={handleLangChange}
-                    className="w-full px-3 py-2 bg-surface-800/80 border border-white/5 rounded-xl text-sm text-surface-200
-                     focus:outline-none focus:border-brand-500/30 cursor-pointer appearance-none"
-                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'right 0.5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.5em 1.5em' }}
+            {/* Bottom section: Language + Logout */}
+            <div className="px-4 py-3 border-t border-white/5 space-y-2">
+                <LanguageDropdown />
+                <button
+                    onClick={logout}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-red-400/70 hover:text-red-400 hover:bg-red-500/5 rounded-xl transition-colors"
                 >
-                    {Object.entries(LANG_FLAGS).map(([code, flag]) => (
-                        <option key={code} value={code}>
-                            {flag} {LANG_LABELS[code]}
-                        </option>
-                    ))}
-                </select>
+                    <LogOut size={15} />
+                    <span>{t('dashboard.common.logout') || 'Logout'}</span>
+                </button>
             </div>
         </aside>
     );
