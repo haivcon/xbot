@@ -159,6 +159,77 @@ class ApiClient {
     refreshToken() {
         return this.post('/auth/refresh');
     }
+
+    // === AI Chat APIs ===
+    sendChatMessage(message, conversationId = null) {
+        return this.post('/ai/chat', { message, conversationId });
+    }
+
+    getChatHistory() {
+        return this.get('/ai/history');
+    }
+
+    getChatMessages(conversationId) {
+        return this.get(`/ai/history/${conversationId}`);
+    }
+
+    clearChat(conversationId) {
+        return this.delete(`/ai/history/${conversationId}`);
+    }
+
+    clearAllChats() {
+        return this.delete('/ai/history');
+    }
+
+    // === Market APIs ===
+    getTokenPrice(tokens) { return this.post('/market/token/price', { tokens }); }
+    searchToken(keyword, chains = '196') { return this.get(`/market/token/search?keyword=${encodeURIComponent(keyword)}&chains=${chains}`); }
+    getTopTokens(chains = '196', sortBy = '2', timeFrame = '4') { return this.get(`/market/token/top?chains=${chains}&sortBy=${sortBy}&timeFrame=${timeFrame}`); }
+    getTokenInfo(tokens) { return this.post('/market/token/info', { tokens }); }
+    getTokenHolders(chainIndex, tokenContractAddress) { return this.get(`/market/token/holders?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}`); }
+    getGasPrice(chainIndex = '196') { return this.get(`/market/gas?chainIndex=${chainIndex}`); }
+    getCandles(chainIndex, tokenContractAddress, bar = '1H', limit = 24) { return this.get(`/market/candles?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}&bar=${bar}&limit=${limit}`); }
+    getSignals(chainIndex = '196', walletType, minAmountUsd) { return this.post('/market/signals', { chainIndex, walletType, minAmountUsd }); }
+    getSignalChains() { return this.get('/market/signals/chains'); }
+
+    // === Wallet APIs ===
+    getWallets() { return this.get('/market/wallets'); }
+    createWallet(name) { return this.post('/market/wallets/create', { name }); }
+    getWalletBalance(id) { return this.get(`/market/wallets/${id}/balance`); }
+    deleteWallet(id) { return this.delete(`/market/wallets/${id}`); }
+    setDefaultWallet(id) { return this.post(`/market/wallets/${id}/set-default`); }
+
+    // === Swap APIs ===
+    getSwapQuote(params) { return this.post('/market/swap/quote', params); }
+
+    // === TX History ===
+    getTxHistory(page = 1, limit = 20) { return this.get(`/market/tx-history?page=${page}&limit=${limit}`); }
+
+    // === OKX CEX APIs ===
+    getOkxKeyStatus() { return this.get('/okx/keys/status'); }
+    saveOkxKeys(keys) { return this.post('/okx/keys', keys); }
+    deleteOkxKeys() { return this.delete('/okx/keys'); }
+
+    getOkxTicker(instId) { return this.get(`/okx/market/ticker?instId=${instId}`); }
+    getOkxTickers(instType = 'SPOT') { return this.get(`/okx/market/tickers?instType=${instType}`); }
+    getOkxOrderbook(instId, sz = '20') { return this.get(`/okx/market/orderbook?instId=${instId}&sz=${sz}`); }
+    getOkxCandles(instId, bar = '1H', limit = '100') { return this.get(`/okx/market/candles?instId=${instId}&bar=${bar}&limit=${limit}`); }
+    getOkxFundingRate(instId) { return this.get(`/okx/market/funding-rate?instId=${instId}`); }
+    getOkxInstruments(instType = 'SPOT') { return this.get(`/okx/market/instruments?instType=${instType}`); }
+
+    getOkxBalance(ccy) { return this.get(`/okx/account/balance${ccy ? '?ccy=' + ccy : ''}`); }
+    getOkxAssetBalance(ccy) { return this.get(`/okx/account/asset-balance${ccy ? '?ccy=' + ccy : ''}`); }
+    getOkxPositions(instType) { return this.get(`/okx/account/positions${instType ? '?instType=' + instType : ''}`); }
+
+    placeOkxOrder(params) { return this.post('/okx/spot/order', params); }
+    cancelOkxOrder(instId, ordId) { return this.delete('/okx/spot/order', { instId, ordId }); }
+    getOkxOpenOrders(instType) { return this.get(`/okx/spot/orders-open${instType ? '?instType=' + instType : ''}`); }
+    getOkxOrderHistory(instType) { return this.get(`/okx/spot/orders-history${instType ? '?instType=' + instType : ''}`); }
+
+    createOkxGridBot(params) { return this.post('/okx/bot/grid', params); }
+    stopOkxGridBot(algoId, instId) { return this.delete('/okx/bot/grid', { algoId, instId }); }
+    getOkxActiveGridBots() { return this.get('/okx/bot/grid/active'); }
+    getOkxGridBotHistory() { return this.get('/okx/bot/grid/history'); }
 }
 
 const api = new ApiClient();

@@ -584,6 +584,19 @@ async function init() {
         await dbRun(`ALTER TABLE user_trading_wallets ADD COLUMN tags TEXT DEFAULT ''`);
     } catch (e) { /* Column likely exists already */ }
 
+    // User OKX CEX API keys (encrypted per user)
+    await dbRun(`CREATE TABLE IF NOT EXISTS user_okx_keys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT UNIQUE NOT NULL,
+        encApiKey TEXT NOT NULL,
+        encSecretKey TEXT NOT NULL,
+        encPassphrase TEXT NOT NULL,
+        demo INTEGER DEFAULT 1,
+        site TEXT DEFAULT 'global',
+        createdAt INTEGER,
+        updatedAt INTEGER
+    )`);
+
     console.log("Khởi tạo cấu trúc bảng SQLite hoàn tất.");
 }
 

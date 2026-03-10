@@ -97,9 +97,11 @@ export default function Sidebar({ open, onClose }) {
     ];
 
     const userLinks = [
+        { to: '/chat', icon: Bot, label: t('dashboard.sidebar.aiChat') || 'AI Chat', highlight: true },
         { to: '/profile', icon: User, label: t('dashboard.sidebar.profile') },
         { to: '/wallets', icon: Wallet, label: t('dashboard.sidebar.wallets') },
         { to: '/trading', icon: BarChart3, label: t('dashboard.sidebar.trading') },
+        { to: '/okx-trading', icon: BarChart3, label: t('dashboard.sidebar.okxTrading') || 'OKX Trading' },
         { to: '/leaderboard', icon: Trophy, label: t('dashboard.sidebar.leaderboard') },
         { to: '/settings', icon: Settings, label: t('dashboard.sidebar.settings') },
     ];

@@ -21,6 +21,8 @@ const SettingsPage = lazy(() => import('@/pages/user/SettingsPage'));
 const WalletsPage = lazy(() => import('@/pages/user/WalletsPage'));
 const TradingPage = lazy(() => import('@/pages/user/TradingPage'));
 const LeaderboardPage = lazy(() => import('@/pages/user/LeaderboardPage'));
+const ChatPage = lazy(() => import('@/pages/user/ChatPage'));
+const OKXTradingPage = lazy(() => import('@/pages/user/OKXTradingPage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
@@ -84,11 +86,13 @@ export default function App() {
                     <Route path="posts" element={isOwnerView() ? <SuspenseWrapper><PostsPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     <Route path="config" element={isOwnerView() ? <SuspenseWrapper><ConfigPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     {/* User Routes */}
+                    <Route path="chat" element={<SuspenseWrapper><ChatPage /></SuspenseWrapper>} />
                     <Route path="profile" element={<SuspenseWrapper><ProfilePage /></SuspenseWrapper>} />
                     <Route path="settings" element={<SuspenseWrapper><SettingsPage /></SuspenseWrapper>} />
                     <Route path="wallets" element={<SuspenseWrapper><WalletsPage /></SuspenseWrapper>} />
                     <Route path="trading" element={<SuspenseWrapper><TradingPage /></SuspenseWrapper>} />
                     <Route path="leaderboard" element={<SuspenseWrapper><LeaderboardPage /></SuspenseWrapper>} />
+                    <Route path="okx-trading" element={<SuspenseWrapper><OKXTradingPage /></SuspenseWrapper>} />
                     {/* 404 */}
                     <Route path="*" element={<SuspenseWrapper><NotFoundPage /></SuspenseWrapper>} />
                 </Route>

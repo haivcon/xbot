@@ -356,6 +356,18 @@ function createDashboardRoutes() {
     // ==================
     router.use(authMiddleware);
 
+    // --- AI Chat Routes (Web AI Chat) ---
+    const { createChatRoutes } = require('./chatRoutes');
+    router.use('/ai', createChatRoutes());
+
+    // --- Market & Onchain Routes ---
+    const { createMarketRoutes } = require('./marketRoutes');
+    router.use('/market', createMarketRoutes());
+
+    // --- OKX CEX Trading Routes ---
+    const { createOkxRoutes } = require('./okxRoutes');
+    router.use('/okx', createOkxRoutes());
+
     // --- Owner Routes ---
     router.get('/owner/users', ownerGuard, async (req, res) => {
         try {
