@@ -418,18 +418,18 @@ function registerCoreCommands(deps = {}) {
             const isHttps = loginUrl.startsWith('https://');
 
             if (isHttps) {
-                await bot.sendMessage(msg.chat.id, `🌐 *XBot Dashboard*\n\n✅ Click the button below to login\n⏳ Link expires in 5 minutes`, {
+                await bot.sendMessage(msg.chat.id, `${t(lang, 'dashboard_title')}\n\n${t(lang, 'dashboard_login_msg')}`, {
                     parse_mode: 'Markdown',
                     disable_web_page_preview: true,
                     reply_markup: {
                         inline_keyboard: [
-                            [{ text: '🔓 Open Dashboard', url: loginUrl }],
-                            [{ text: '🏠 Dashboard Home', url: dashboardHome }]
+                            [{ text: t(lang, 'dashboard_btn_open'), url: loginUrl }],
+                            [{ text: t(lang, 'dashboard_btn_home'), url: dashboardHome }]
                         ]
                     }
                 });
             } else {
-                await bot.sendMessage(msg.chat.id, `🌐 XBot Dashboard\n\n🔗 ${loginUrl}\n\n⏳ Link expires in 5 minutes`, {
+                await bot.sendMessage(msg.chat.id, `${t(lang, 'dashboard_title')}\n\n🔗 ${loginUrl}\n\n${t(lang, 'dashboard_link_expire')}`, {
                     disable_web_page_preview: true,
                 });
             }

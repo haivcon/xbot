@@ -2227,5 +2227,11 @@
   "ai_quote_confirm": "⚡ Xác nhận swap? Trả lời \"ok\" hoặc \"có\" để tiếp tục.",
   "ai_wallet_error": "❌ Lỗi kiểm tra ví",
   "ai_wallet_header": "Chi tiết tài sản ví:",
-  "ai_wallet_wallet": "Ví"
+  "ai_wallet_wallet": "Ví",
+  "dashboard_title": "🌐 Bảng Điều Khiển XBot",
+  "dashboard_login_msg": "✅ Nhấn nút bên dưới để đăng nhập\n⏳ Liên kết hết hạn sau 5 phút",
+  "dashboard_btn_open": "🔓 Mở Bảng Điều Khiển",
+  "dashboard_btn_home": "🏠 Trang Chủ Dashboard",
+  "dashboard_link_expire": "⏳ Liên kết hết hạn sau 5 phút",
+  "dashboard_start_hint": "🌐 Quản lý bot qua bảng điều khiển web"
 }

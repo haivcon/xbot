@@ -13,11 +13,17 @@ function createStartHandlers({
     sendAiIntroMedia
 }) {
     function buildStartHelpKeyboard(lang) {
-        return {
-            inline_keyboard: [
-                [{ text: `🆘🆘🆘   👉👉👉    ${t(lang, 'help_command_help')} (/help)  👈👈👈   🆘🆘🆘`, callback_data: 'start_help' }]
-            ]
-        };
+        const keyboard = [
+            [{ text: `🆘🆘🆘   👉👉👉    ${t(lang, 'help_command_help')} (/help)  👈👈👈   🆘🆘🆘`, callback_data: 'start_help' }]
+        ];
+
+        // Add dashboard web button if PUBLIC_BASE_URL is set and is HTTPS
+        const baseUrl = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+        if (baseUrl && baseUrl.startsWith('https://')) {
+            keyboard.push([{ text: t(lang, 'dashboard_btn_home'), url: baseUrl + '/' }]);
+        }
+
+        return { inline_keyboard: keyboard };
     }
 
     async function handleStartNoToken(msg) {
@@ -25,7 +31,14 @@ function createStartHandlers({
             return;
         }
         const lang = await getLang(msg);
-        const message = t(lang, 'welcome_generic');
+        let message = t(lang, 'welcome_generic');
+
+        // Append dashboard hint if web dashboard is available
+        const baseUrl = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+        if (baseUrl && baseUrl.startsWith('https://')) {
+            message += `\n\n${t(lang, 'dashboard_start_hint')}`;
+        }
+
         const reply_markup = buildStartHelpKeyboard(lang);
         const videoOptions = buildThreadedOptions(msg, { caption: message, parse_mode: 'Markdown', reply_markup });
 

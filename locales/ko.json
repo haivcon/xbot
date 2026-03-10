@@ -2092,5 +2092,11 @@
   "wh_btn_short_balance": "💰 지갑 {idx}",
   "wh_btn_short_export": "🔑 키 {idx}",
   "wh_btn_short_default": "⭐ 선택 {idx}",
-  "wh_btn_short_delete": "🗑️ 삭제 {idx}"
+  "wh_btn_short_delete": "🗑️ 삭제 {idx}",
+  "dashboard_title": "🌐 XBot 대시보드",
+  "dashboard_login_msg": "✅ 아래 버튼을 클릭하여 로그인하세요\n⏳ 링크는 5분 후 만료됩니다",
+  "dashboard_btn_open": "🔓 대시보드 열기",
+  "dashboard_btn_home": "🏠 대시보드 홈",
+  "dashboard_link_expire": "⏳ 링크는 5분 후 만료됩니다",
+  "dashboard_start_hint": "🌐 웹 대시보드로 봇을 관리하세요"
 }

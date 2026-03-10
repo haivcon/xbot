@@ -2180,5 +2180,11 @@
   "ai_holder_quantity": "数量:",
   "ai_holder_contract": "🔗 **代币合约:**",
   "ai_holder_header": "🐋 **主要代币持有者列表 (Holders):**",
-  "ai_holder_warning": "⚠️ *注意：如果排名前列的钱包是智能合约，它们可能是流动性池或销毁钱包。如果普通用户钱包持有巨大比例，请高度警惕巨鲸抛售风险。*"
+  "ai_holder_warning": "⚠️ *注意：如果排名前列的钱包是智能合约，它们可能是流动性池或销毁钱包。如果普通用户钱包持有巨大比例，请高度警惕巨鲸抛售风险。*",
+  "dashboard_title": "🌐 XBot 管理面板",
+  "dashboard_login_msg": "✅ 点击下方按钮登录\n⏳ 链接将在5分钟后过期",
+  "dashboard_btn_open": "🔓 打开管理面板",
+  "dashboard_btn_home": "🏠 面板首页",
+  "dashboard_link_expire": "⏳ 链接将在5分钟后过期",
+  "dashboard_start_hint": "🌐 通过网页管理面板管理您的机器人"
 }

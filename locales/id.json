@@ -2092,5 +2092,11 @@
   "wh_btn_short_balance": "💰 Dompet {idx}",
   "wh_btn_short_export": "🔑 Kunci {idx}",
   "wh_btn_short_default": "⭐ Pilih {idx}",
-  "wh_btn_short_delete": "🗑️ Hapus {idx}"
+  "wh_btn_short_delete": "🗑️ Hapus {idx}",
+  "dashboard_title": "🌐 Dasbor XBot",
+  "dashboard_login_msg": "✅ Klik tombol di bawah untuk masuk\n⏳ Tautan kedaluwarsa dalam 5 menit",
+  "dashboard_btn_open": "🔓 Buka Dasbor",
+  "dashboard_btn_home": "🏠 Beranda Dasbor",
+  "dashboard_link_expire": "⏳ Tautan kedaluwarsa dalam 5 menit",
+  "dashboard_start_hint": "🌐 Kelola bot melalui dasbor web"
 }

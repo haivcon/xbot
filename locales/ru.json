@@ -2092,5 +2092,11 @@
   "wh_btn_short_balance": "💰 Кошелёк {idx}",
   "wh_btn_short_export": "🔑 Ключ {idx}",
   "wh_btn_short_default": "⭐ Выбрать {idx}",
-  "wh_btn_short_delete": "🗑️ Удалить {idx}"
+  "wh_btn_short_delete": "🗑️ Удалить {idx}",
+  "dashboard_title": "🌐 Панель управления XBot",
+  "dashboard_login_msg": "✅ Нажмите кнопку ниже для входа\n⏳ Ссылка истекает через 5 минут",
+  "dashboard_btn_open": "🔓 Открыть панель",
+  "dashboard_btn_home": "🏠 Главная панели",
+  "dashboard_link_expire": "⏳ Ссылка истекает через 5 минут",
+  "dashboard_start_hint": "🌐 Управляйте ботом через веб-панель"
 }

@@ -2212,5 +2212,11 @@
   "ai_sim_success_desc": "[AI] Sim Success Desc",
   "ai_sim_failed": "[AI] Sim Failed",
   "ai_sim_reason": "[AI] Sim Reason",
-  "ai_sim_fail_desc": "[AI] Sim Fail Desc"
+  "ai_sim_fail_desc": "[AI] Sim Fail Desc",
+  "dashboard_title": "🌐 XBot Dashboard",
+  "dashboard_login_msg": "✅ Click the button below to login\n⏳ Link expires in 5 minutes",
+  "dashboard_btn_open": "🔓 Open Dashboard",
+  "dashboard_btn_home": "🏠 Dashboard Home",
+  "dashboard_link_expire": "⏳ Link expires in 5 minutes",
+  "dashboard_start_hint": "🌐 Manage your bot via the web dashboard"
 }
