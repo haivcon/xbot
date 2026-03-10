@@ -1602,6 +1602,20 @@ function startTelegramBot() {
         }
         await bot.answerCallbackQuery(ctx.queryId, { text: '✅' });
     });
+
+    // Language selection: lang_vi, lang_en, lang_zh, lang_ko, lang_ru, lang_id
+    const LANG_CODES = ['vi', 'en', 'zh', 'ko', 'ru', 'id'];
+    for (const code of LANG_CODES) {
+        cbRouter.on(`lang_${code}`, async (query, _params, ctx) => {
+            await handleLanguageSelection(query, code, ctx.callbackLang);
+        });
+    }
+
+    // Topic language selection: langtopic_vi, langtopic_en, etc.
+    cbRouter.onPrefix('langtopic_', async (query, params, ctx) => {
+        const code = params; // params = everything after 'langtopic_'
+        await handleTopicLanguageSelection(query, code, ctx.callbackLang);
+    });
     cbRouter.on('help_separator', async (_query, _params, ctx) => {
         await bot.answerCallbackQuery(ctx.queryId);
     });
@@ -1610,6 +1624,71 @@ function startTelegramBot() {
     });
     cbRouter.on('checkin_admin_noop', async (_query, _params, ctx) => {
         await bot.answerCallbackQuery(ctx.queryId, { text: t(ctx.callbackLang, 'checkin_admin_menu_board_hint') });
+    });
+
+    // ── Missing callback handlers (found by audit) ──────────
+    // 'close' — standalone close button used by gas.js, portfolio.js, swap.js
+    cbRouter.on('close', closeHandler);
+
+    // 'noop' — page indicator buttons (priceAlerts, ownerList, etc.)
+    cbRouter.on('noop', async (_query, _params, ctx) => {
+        await bot.answerCallbackQuery(ctx.queryId);
+    });
+
+    // 'gas_refresh' — refresh button in /gas command
+    cbRouter.on('gas_refresh', async (query, _params, ctx) => {
+        try {
+            const gasCmd = require('./src/commands/gas');
+            const syntheticMsg = {
+                chat: query.message?.chat,
+                from: query.from,
+                message_id: query.message?.message_id,
+                text: '/gas'
+            };
+            // Delete old message and re-run
+            if (query.message?.chat?.id && query.message?.message_id) {
+                bot.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => {});
+            }
+            await gasCmd.handler(syntheticMsg, ['/gas', '']);
+            await bot.answerCallbackQuery(ctx.queryId);
+        } catch (err) {
+            log.child('GasRefresh').error(`Error: ${err.message}`);
+            await bot.answerCallbackQuery(ctx.queryId, { text: '❌ Error', show_alert: false });
+        }
+    });
+
+    // 'portfolio_refresh:*' — refresh button in /portfolio command
+    cbRouter.onPrefix('portfolio_refresh:', async (query, params, ctx) => {
+        try {
+            const portfolioCmd = require('./src/commands/portfolio');
+            const address = params; // params = address after 'portfolio_refresh:'
+            const syntheticMsg = {
+                chat: query.message?.chat,
+                from: query.from,
+                message_id: query.message?.message_id,
+                text: `/portfolio ${address}`
+            };
+            if (query.message?.chat?.id && query.message?.message_id) {
+                bot.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => {});
+            }
+            await portfolioCmd.handler(syntheticMsg, [`/portfolio ${address}`, address]);
+            await bot.answerCallbackQuery(ctx.queryId);
+        } catch (err) {
+            log.child('PortfolioRefresh').error(`Error: ${err.message}`);
+            await bot.answerCallbackQuery(ctx.queryId, { text: '❌ Error', show_alert: false });
+        }
+    });
+
+    // 'donatecm_clear' — clear community donation
+    cbRouter.on('donatecm_clear', async (query, _params, ctx) => {
+        try {
+            if (query.message?.chat?.id && query.message?.message_id) {
+                await bot.deleteMessage(query.message.chat.id, query.message.message_id);
+            }
+            await bot.answerCallbackQuery(ctx.queryId, { text: '✅' });
+        } catch (err) {
+            await bot.answerCallbackQuery(ctx.queryId).catch(() => {});
+        }
     });
 
     log.child('Router').info(`Callback router initialized (${cbRouter.stats().total} routes)`);
