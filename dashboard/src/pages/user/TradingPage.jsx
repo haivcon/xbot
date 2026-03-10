@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
+import config from '@/config';
 import { ArrowUpDown, TrendingUp, TrendingDown, RefreshCw, ExternalLink } from 'lucide-react';
 
 export default function TradingPage() {
@@ -108,7 +109,7 @@ export default function TradingPage() {
                                         <td className="px-5 py-3 text-right">
                                             {tx.txHash ? (
                                                 <a
-                                                    href={`https://www.okx.com/web3/explorer/xlayer/tx/${tx.txHash}`}
+                                                    href={`${config.explorerBaseUrl}/tx/${tx.txHash}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="p-1 inline-flex rounded hover:bg-white/5 text-brand-400 hover:text-brand-300 transition-colors"

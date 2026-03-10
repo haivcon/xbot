@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from '@/stores/authStore';
+import config from '@/config';
 import useThemeStore from '@/stores/themeStore';
 import Layout from '@/components/layout/Layout';
 import LoginModal from '@/components/LoginModal';
@@ -37,7 +38,7 @@ export default function App() {
             <div className="min-h-screen bg-surface-900 flex items-center justify-center">
                 <div className="text-center space-y-3">
                     <div className="w-10 h-10 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-sm text-surface-200/50">Loading XBot Dashboard...</p>
+                    <p className="text-sm text-surface-200/50">Loading {config.appName} {config.appTagline}...</p>
                 </div>
             </div>
         );

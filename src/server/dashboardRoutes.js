@@ -198,25 +198,51 @@ function createDashboardRoutes() {
                 return res.status(401).json({ error: 'Telegram authentication failed' });
             }
 
-            const role = await getUserRole(data.id);
+            // For dev_mode login: use real owner/user data from DB
+            let userId = String(data.id);
+            let firstName = data.first_name;
+            let lastName = data.last_name || '';
+            let username = data.username;
+            let photoUrl = data.photo_url;
+
+            if (data.hash === 'dev_mode') {
+                const realOwnerId = process.env.BOT_OWNER_ID;
+                if (data._devRole === 'owner' && realOwnerId) {
+                    userId = String(realOwnerId);
+                } else if (data._devRole === 'user') {
+                    // For user dev login, try to find any real user in DB
+                    userId = String(data.id);
+                }
+                // Look up real user data from DB
+                try {
+                    const dbUser = await db.getUser?.(userId);
+                    if (dbUser) {
+                        firstName = dbUser.firstName || dbUser.first_name || firstName;
+                        lastName = dbUser.lastName || dbUser.last_name || lastName;
+                        username = dbUser.username || username;
+                    }
+                } catch { /* use mock data as fallback */ }
+            }
+
+            const role = await getUserRole(userId);
             const token = createJWT({
-                userId: String(data.id),
-                username: data.username,
-                firstName: data.first_name,
+                userId,
+                username,
+                firstName,
                 role,
             });
 
-            log.info(`Dashboard login: ${data.first_name} (${data.id}) as ${role}`);
+            log.info(`Dashboard login: ${firstName} (${userId}) as ${role}`);
 
             res.json({
                 token,
                 role,
                 user: {
-                    id: data.id,
-                    first_name: data.first_name,
-                    last_name: data.last_name,
-                    username: data.username,
-                    photo_url: data.photo_url,
+                    id: Number(userId) || userId,
+                    first_name: firstName,
+                    last_name: lastName,
+                    username,
+                    photo_url: photoUrl,
                 },
             });
         } catch (err) {

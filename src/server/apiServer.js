@@ -395,9 +395,69 @@ function startApiServer() {
         return;
     }
     app.locals.apiServerStarted = true;
+
+    // === Telegram Webhook endpoint ===
+    const { bot, getConnectionMode } = require('../core/bot');
+    const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').trim();
+    const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || require('crypto').randomBytes(32).toString('hex');
+
+    if (getConnectionMode() === 'webhook') {
+        app.post('/webhook/telegram', express.json({ limit: '1mb' }), (req, res) => {
+            // Validate secret token
+            const headerSecret = req.headers['x-telegram-bot-api-secret-token'];
+            if (headerSecret && headerSecret !== WEBHOOK_SECRET) {
+                return res.status(401).json({ error: 'Invalid secret' });
+            }
+            bot.processUpdate(req.body);
+            res.sendStatus(200);
+        });
+        log.child('Webhook').info('Telegram webhook endpoint mounted at /webhook/telegram');
+    }
+
     const tryListen = (port, attemptsLeft = 5) => {
-        const server = app.listen(port, '0.0.0.0', () => {
+        const server = app.listen(port, '0.0.0.0', async () => {
             log.child('APIServer').info(`Dang chay tai http://0.0.0.0:${port}`);
+
+            // === WebSocket server for real-time dashboard ===
+            try {
+                const { WebSocketServer } = require('ws');
+                const wss = new WebSocketServer({ server, path: '/ws' });
+                app.locals.wss = wss;
+
+                wss.on('connection', (ws) => {
+                    ws.isAlive = true;
+                    ws.on('pong', () => { ws.isAlive = true; });
+                    // Send initial status
+                    ws.send(JSON.stringify({
+                        type: 'status',
+                        data: { mode: getConnectionMode(), uptime: process.uptime() }
+                    }));
+                });
+
+                // Heartbeat to clean dead connections
+                setInterval(() => {
+                    wss.clients.forEach(ws => {
+                        if (!ws.isAlive) return ws.terminate();
+                        ws.isAlive = false;
+                        ws.ping();
+                    });
+                }, 30000);
+
+                log.child('WebSocket').info('WebSocket server ready at /ws');
+            } catch (e) {
+                log.child('WebSocket').warn(`WebSocket disabled (install ws package): ${e.message}`);
+            }
+
+            // === Set webhook URL on Telegram ===
+            if (getConnectionMode() === 'webhook' && PUBLIC_BASE_URL) {
+                try {
+                    const webhookUrl = `${PUBLIC_BASE_URL}/webhook/telegram`;
+                    await bot.setWebHook(webhookUrl, { secret_token: WEBHOOK_SECRET });
+                    log.child('Webhook').info(`Webhook registered: ${webhookUrl}`);
+                } catch (e) {
+                    log.child('Webhook').error(`Failed to set webhook: ${e.message}`);
+                }
+            }
         });
         server.on('error', (err) => {
             if (err?.code === 'EADDRINUSE' && attemptsLeft > 0) {
@@ -415,7 +475,18 @@ function startApiServer() {
     tryListen(API_PORT);
 }
 
+// Broadcast event to all connected WebSocket clients
+function broadcastWsEvent(type, data) {
+    const wss = app.locals.wss;
+    if (!wss) return;
+    const msg = JSON.stringify({ type, data, ts: Date.now() });
+    wss.clients.forEach(ws => {
+        if (ws.readyState === 1) ws.send(msg);
+    });
+}
+
 module.exports = {
     app,
-    startApiServer
+    startApiServer,
+    broadcastWsEvent
 };

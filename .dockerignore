@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log*
+.env
+*.db
+dashboard/node_modules
+dashboard/dist
+.git
+.github
+.vscode
+*.md
+!README.md
+!DASHBOARD_SETUP.md
+openclaw-main
+test
+.DS_Store
+Thumbs.db
+*.log

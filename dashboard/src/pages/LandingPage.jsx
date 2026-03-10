@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Bot, Globe, Shield, Sparkles, BarChart3, Wallet, LogIn, ChevronRight } from 'lucide-react';
+import config from '@/config';
 
 export default function LandingPage({ onLogin }) {
     const { t, i18n } = useTranslation();
@@ -40,7 +41,7 @@ export default function LandingPage({ onLogin }) {
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-brand-500/25">
                         <Bot size={20} className="text-white" />
                     </div>
-                    <span className="text-lg font-bold text-white tracking-tight">XBot</span>
+                    <span className="text-lg font-bold text-white tracking-tight">{config.appName}</span>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -74,7 +75,7 @@ export default function LandingPage({ onLogin }) {
                         Telegram Bot Dashboard
                     </div>
                     <h1 className="text-4xl md:text-5xl font-extrabold text-white leading-tight mb-4">
-                        {t('dashboard.auth.title') || 'XBot Dashboard'}
+                        {t('dashboard.auth.title') || `${config.appName} ${config.appTagline}`}
                     </h1>
                     <p className="text-lg text-surface-200/60 mb-8">
                         {t('dashboard.auth.subtitle') || 'Manage your bot with a powerful web interface'}
@@ -160,7 +161,7 @@ export default function LandingPage({ onLogin }) {
 
             {/* Footer */}
             <footer className="relative z-10 text-center py-8 border-t border-white/5">
-                <p className="text-xs text-surface-200/25">XBot Dashboard v1.0 • Powered by Telegram</p>
+                <p className="text-xs text-surface-200/25">{config.appName} {config.appTagline} v{config.appVersion} • {config.footerText}</p>
             </footer>
         </div>
     );

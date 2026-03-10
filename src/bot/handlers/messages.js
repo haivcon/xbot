@@ -141,10 +141,25 @@ function registerMessageHandlers(context) {
                 const { handleAiaCommand } = context;
 
                 if (handleAiaCommand) {
-                    // Create synthetic /aib message
+                    // Check if the text looks like a wallet/contract address
+                    const walletAddressPattern = /^(0x[a-fA-F0-9]{40,})$|^(XKO[a-fA-F0-9]{38,})$/i;
+                    const solanaPattern = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+                    const trimmedText = extractedText.trim();
+                    const looksLikeAddress = walletAddressPattern.test(trimmedText) ||
+                        /0x[a-fA-F0-9]{40}/.test(trimmedText) ||
+                        /XKO[a-fA-F0-9]{38}/.test(trimmedText) ||
+                        solanaPattern.test(trimmedText);
+
+                    let promptText = extractedText;
+                    if (looksLikeAddress) {
+                        const addressOnly = trimmedText.match(/(?:0x[a-fA-F0-9]{40,}|XKO[a-fA-F0-9]{38,}|[1-9A-HJ-NP-Za-km-z]{32,44})/)?.[0] || trimmedText;
+                        promptText = `check wallet balance and assets of address ${addressOnly}`;
+                        log.child('AutoAIB').info('✓ Wallet address detected, adding lookup hint');
+                    }
+
                     const syntheticMsg = {
                         ...msg,
-                        text: `/aib ${extractedText}`,
+                        text: `/aib ${promptText}`,
                         caption: undefined
                     };
                     await handleAiaCommand(syntheticMsg);

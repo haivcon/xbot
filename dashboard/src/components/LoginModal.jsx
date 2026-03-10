@@ -14,10 +14,11 @@ export default function LoginModal({ open, onClose }) {
         setLocalError(null);
         const mockUser = {
             id: role === 'owner' ? 123456789 : 987654321,
-            first_name: role === 'owner' ? 'Admin' : 'User',
-            username: role === 'owner' ? 'xbot_admin' : 'xbot_user',
+            first_name: role === 'owner' ? 'Owner' : 'User',
+            username: role === 'owner' ? 'bot_owner' : 'bot_user',
             auth_date: Math.floor(Date.now() / 1000),
             hash: 'dev_mode',
+            _devRole: role,
         };
         try {
             await login(mockUser);

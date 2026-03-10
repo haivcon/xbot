@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
+import config from '@/config';
 import {
     LayoutDashboard,
     Users,
@@ -121,8 +122,8 @@ export default function Sidebar({ open, onClose }) {
                         <Bot size={20} className="text-white" />
                     </div>
                     <div>
-                        <h1 className="text-sm font-bold text-surface-100">XBot</h1>
-                        <span className="text-[10px] font-medium text-surface-200/50 uppercase tracking-wider">Dashboard</span>
+                        <h1 className="text-sm font-bold text-surface-100">{config.appName}</h1>
+                        <span className="text-[10px] font-medium text-surface-200/50 uppercase tracking-wider">{config.appTagline}</span>
                     </div>
                 </div>
                 <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg hover:bg-white/5 text-surface-200/50">

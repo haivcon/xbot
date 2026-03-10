@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
+import config from '@/config';
 import { Wallet, Copy, Check, ExternalLink, RefreshCw, Star } from 'lucide-react';
 
 export default function WalletsPage() {
@@ -66,7 +67,7 @@ export default function WalletsPage() {
                                     {copied === w.address ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
                                 </button>
                                 <a
-                                    href={`https://www.okx.com/web3/explorer/xlayer/address/${w.address}`}
+                                    href={`${config.explorerBaseUrl}/address/${w.address}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="p-1 rounded hover:bg-white/5 text-surface-200/40 hover:text-brand-400 transition-colors"

@@ -1,6 +1,7 @@
 import useAuthStore from '@/stores/authStore';
+import config from '@/config';
 
-const API_BASE = '/api/dashboard';
+const API_BASE = config.apiBase;
 
 class ApiClient {
     async request(path, options = {}) {

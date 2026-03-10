@@ -10,7 +10,26 @@ if (!TELEGRAM_TOKEN) {
     process.exit(1);
 }
 
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+// Auto-detect connection mode: webhook (VPS) or polling (localhost)
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').trim();
+const USE_WEBHOOK = PUBLIC_BASE_URL
+    && process.env.USE_WEBHOOK !== 'false'
+    && !PUBLIC_BASE_URL.includes('localhost');
+
+const bot = new TelegramBot(TELEGRAM_TOKEN, {
+    polling: !USE_WEBHOOK,
+    webHook: USE_WEBHOOK ? false : undefined, // webhook set up separately via Express
+});
+
+if (USE_WEBHOOK) {
+    log.info(`🌐 Webhook mode enabled (${PUBLIC_BASE_URL})`);
+} else {
+    log.info('📡 Polling mode enabled (localhost)');
+}
+
+function getConnectionMode() {
+    return USE_WEBHOOK ? 'webhook' : 'polling';
+}
 
 const originalAnswerCallbackQuery = bot.answerCallbackQuery.bind(bot);
 bot.answerCallbackQuery = async (...args) => {
@@ -107,5 +126,6 @@ module.exports = {
     scheduleMessageDeletion,
     sendEphemeralMessage,
     rememberRmchatMessage,
-    purgeRmchatMessages
+    purgeRmchatMessages,
+    getConnectionMode
 };

@@ -259,9 +259,10 @@ function registerAutoDetection(context) {
 
                 if (looksLikeAddress) {
                     log.child('AutoDetection').info('✓ Wallet address detected, routing to AI');
+                    const addressOnly = extractedText.trim().match(/(?:0x[a-fA-F0-9]{40,}|XKO[a-fA-F0-9]{38,}|[1-9A-HJ-NP-Za-km-z]{32,44})/)?.[0] || extractedText.trim();
                     const syntheticMsg = {
                         ...msg,
-                        text: `/aib ${extractedText}`,
+                        text: `/aib check wallet balance and assets of address ${addressOnly}`,
                         caption: undefined
                     };
                     await handleAiaCommand(syntheticMsg);
