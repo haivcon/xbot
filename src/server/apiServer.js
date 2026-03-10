@@ -452,12 +452,23 @@ function startApiServer() {
 
             // === Set webhook URL on Telegram ===
             if (getConnectionMode() === 'webhook' && PUBLIC_BASE_URL) {
-                try {
-                    const webhookUrl = `${PUBLIC_BASE_URL}/webhook/telegram`;
-                    await bot.setWebHook(webhookUrl, { secret_token: WEBHOOK_SECRET });
-                    log.child('Webhook').info(`Webhook registered: ${webhookUrl}`);
-                } catch (e) {
-                    log.child('Webhook').error(`Failed to set webhook: ${e.message}`);
+                const webhookUrl = `${PUBLIC_BASE_URL}/webhook/telegram`;
+                const maxRetries = 3;
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    try {
+                        await bot.setWebHook(webhookUrl, { secret_token: WEBHOOK_SECRET });
+                        log.child('Webhook').info(`Webhook registered: ${webhookUrl}`);
+                        break;
+                    } catch (e) {
+                        const isTransient = e.message?.includes('AggregateError') || e.message?.includes('EFATAL') || e.message?.includes('ECONNRESET') || e.message?.includes('ETIMEDOUT');
+                        if (isTransient && attempt < maxRetries - 1) {
+                            const wait = 2000 * Math.pow(2, attempt);
+                            log.child('Webhook').warn(`Webhook retry ${attempt + 1}/${maxRetries} in ${wait}ms: ${e.message}`);
+                            await new Promise(r => setTimeout(r, wait));
+                            continue;
+                        }
+                        log.child('Webhook').error(`Failed to set webhook: ${e.message}`);
+                    }
                 }
             }
         });

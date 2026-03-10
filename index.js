@@ -1746,11 +1746,22 @@ function startTelegramBot() {
             }
 
             for (const scope of scopes) {
-                try {
-                    await bot.setMyCommands(commands, { scope, language_code: langCode });
-                } catch (error) {
-                    const body = error?.response?.body ? ` | body=${JSON.stringify(error.response.body)}` : ''; // eslint-disable-line no-await-in-loop
-                    log.error(`Failed to register commands for scope ${scope?.type} lang=${langCode}: ${error.message}${body}`);
+                const maxRetries = 3;
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    try {
+                        await bot.setMyCommands(commands, { scope, language_code: langCode });
+                        break; // success
+                    } catch (error) {
+                        const isTransient = error.message?.includes('AggregateError') || error.message?.includes('EFATAL') || error.message?.includes('ECONNRESET') || error.message?.includes('ETIMEDOUT');
+                        if (isTransient && attempt < maxRetries - 1) {
+                            const wait = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
+                            log.warn(`Command registration retry ${attempt + 1}/${maxRetries} for scope=${scope?.type} lang=${langCode} in ${wait}ms`);
+                            await delay(wait);
+                            continue;
+                        }
+                        const body = error?.response?.body ? ` | body=${JSON.stringify(error.response.body)}` : '';
+                        log.error(`Failed to register commands for scope ${scope?.type} lang=${langCode}: ${error.message}${body}`);
+                    }
                 }
                 await delay(500);
             }
