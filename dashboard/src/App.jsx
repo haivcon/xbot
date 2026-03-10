@@ -1,30 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from '@/stores/authStore';
 import config from '@/config';
 import useThemeStore from '@/stores/themeStore';
 import Layout from '@/components/layout/Layout';
 import LoginModal from '@/components/LoginModal';
-import NotFoundPage from '@/pages/NotFoundPage';
-// Owner pages
-import DashboardPage from '@/pages/owner/DashboardPage';
-import UsersPage from '@/pages/owner/UsersPage';
-import GroupsPage from '@/pages/owner/GroupsPage';
-import AnalyticsPage from '@/pages/owner/AnalyticsPage';
-import AlertsPage from '@/pages/owner/AlertsPage';
-import PostsPage from '@/pages/owner/PostsPage';
-import ConfigPage from '@/pages/owner/ConfigPage';
-// User pages
-import ProfilePage from '@/pages/user/ProfilePage';
-import SettingsPage from '@/pages/user/SettingsPage';
-import WalletsPage from '@/pages/user/WalletsPage';
-import TradingPage from '@/pages/user/TradingPage';
-import LeaderboardPage from '@/pages/user/LeaderboardPage';
-// Landing
-import LandingPage from '@/pages/LandingPage';
+import ToastContainer from '@/components/ToastContainer';
+import { PageSkeleton } from '@/components/Skeleton';
+
+// Lazy-loaded pages for code splitting
+const DashboardPage = lazy(() => import('@/pages/owner/DashboardPage'));
+const UsersPage = lazy(() => import('@/pages/owner/UsersPage'));
+const GroupsPage = lazy(() => import('@/pages/owner/GroupsPage'));
+const AnalyticsPage = lazy(() => import('@/pages/owner/AnalyticsPage'));
+const AlertsPage = lazy(() => import('@/pages/owner/AlertsPage'));
+const PostsPage = lazy(() => import('@/pages/owner/PostsPage'));
+const ConfigPage = lazy(() => import('@/pages/owner/ConfigPage'));
+const ProfilePage = lazy(() => import('@/pages/user/ProfilePage'));
+const SettingsPage = lazy(() => import('@/pages/user/SettingsPage'));
+const WalletsPage = lazy(() => import('@/pages/user/WalletsPage'));
+const TradingPage = lazy(() => import('@/pages/user/TradingPage'));
+const LeaderboardPage = lazy(() => import('@/pages/user/LeaderboardPage'));
+const LandingPage = lazy(() => import('@/pages/LandingPage'));
+const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+
+function SuspenseWrapper({ children }) {
+    return (
+        <Suspense fallback={<PageSkeleton />}>
+            {children}
+        </Suspense>
+    );
+}
 
 export default function App() {
-    const { init, loading, isAuthenticated, isOwner } = useAuthStore();
+    const { init, loading, isAuthenticated, isOwner, isOwnerView } = useAuthStore();
     const { initTheme } = useThemeStore();
     const [showLogin, setShowLogin] = useState(false);
 
@@ -48,8 +57,11 @@ export default function App() {
     if (!isAuthenticated()) {
         return (
             <>
-                <LandingPage onLogin={() => setShowLogin(true)} />
+                <Suspense fallback={null}>
+                    <LandingPage onLogin={() => setShowLogin(true)} />
+                </Suspense>
                 <LoginModal open={showLogin} onClose={() => setShowLogin(false)} />
+                <ToastContainer />
             </>
         );
     }
@@ -60,27 +72,28 @@ export default function App() {
             <Routes>
                 <Route path="/" element={<Layout />}>
                     {/* Owner Routes */}
-                    {isOwner() ? (
-                        <Route index element={<DashboardPage />} />
+                    {isOwnerView() ? (
+                        <Route index element={<SuspenseWrapper><DashboardPage /></SuspenseWrapper>} />
                     ) : (
-                        <Route index element={<ProfilePage />} />
+                        <Route index element={<SuspenseWrapper><ProfilePage /></SuspenseWrapper>} />
                     )}
-                    <Route path="users" element={isOwner() ? <UsersPage /> : <Navigate to="/" />} />
-                    <Route path="groups" element={isOwner() ? <GroupsPage /> : <Navigate to="/" />} />
-                    <Route path="analytics" element={isOwner() ? <AnalyticsPage /> : <Navigate to="/" />} />
-                    <Route path="alerts" element={isOwner() ? <AlertsPage /> : <Navigate to="/" />} />
-                    <Route path="posts" element={isOwner() ? <PostsPage /> : <Navigate to="/" />} />
-                    <Route path="config" element={isOwner() ? <ConfigPage /> : <Navigate to="/" />} />
+                    <Route path="users" element={isOwnerView() ? <SuspenseWrapper><UsersPage /></SuspenseWrapper> : <Navigate to="/" />} />
+                    <Route path="groups" element={isOwnerView() ? <SuspenseWrapper><GroupsPage /></SuspenseWrapper> : <Navigate to="/" />} />
+                    <Route path="analytics" element={isOwnerView() ? <SuspenseWrapper><AnalyticsPage /></SuspenseWrapper> : <Navigate to="/" />} />
+                    <Route path="alerts" element={isOwnerView() ? <SuspenseWrapper><AlertsPage /></SuspenseWrapper> : <Navigate to="/" />} />
+                    <Route path="posts" element={isOwnerView() ? <SuspenseWrapper><PostsPage /></SuspenseWrapper> : <Navigate to="/" />} />
+                    <Route path="config" element={isOwnerView() ? <SuspenseWrapper><ConfigPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     {/* User Routes */}
-                    <Route path="profile" element={<ProfilePage />} />
-                    <Route path="settings" element={<SettingsPage />} />
-                    <Route path="wallets" element={<WalletsPage />} />
-                    <Route path="trading" element={<TradingPage />} />
-                    <Route path="leaderboard" element={<LeaderboardPage />} />
+                    <Route path="profile" element={<SuspenseWrapper><ProfilePage /></SuspenseWrapper>} />
+                    <Route path="settings" element={<SuspenseWrapper><SettingsPage /></SuspenseWrapper>} />
+                    <Route path="wallets" element={<SuspenseWrapper><WalletsPage /></SuspenseWrapper>} />
+                    <Route path="trading" element={<SuspenseWrapper><TradingPage /></SuspenseWrapper>} />
+                    <Route path="leaderboard" element={<SuspenseWrapper><LeaderboardPage /></SuspenseWrapper>} />
                     {/* 404 */}
-                    <Route path="*" element={<NotFoundPage />} />
+                    <Route path="*" element={<SuspenseWrapper><NotFoundPage /></SuspenseWrapper>} />
                 </Route>
             </Routes>
+            <ToastContainer />
         </>
     );
 }

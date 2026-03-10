@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
+import { SkeletonStatCards, SkeletonCard } from '@/components/Skeleton';
 import {
     Activity,
     Database,
     HardDrive,
     Cpu,
     Clock,
-    ArrowUpCircle,
     RefreshCw,
     Layers,
-    Server,
+    Users,
+    MessageSquare,
+    Wifi,
+    Zap,
 } from 'lucide-react';
 
 function StatCard({ icon: Icon, label, value, sub, color = 'brand' }) {
@@ -20,6 +23,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'brand' }) {
         amber: 'text-amber-400 bg-amber-500/10',
         rose: 'text-rose-400 bg-rose-500/10',
         cyan: 'text-cyan-400 bg-cyan-500/10',
+        purple: 'text-purple-400 bg-purple-500/10',
     };
     return (
         <div className="stat-card">
@@ -49,14 +53,19 @@ function formatUptime(seconds) {
 export default function DashboardPage() {
     const { t } = useTranslation();
     const [health, setHealth] = useState(null);
+    const [overview, setOverview] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const fetchHealth = async () => {
+    const fetchAll = async () => {
         try {
             setLoading(true);
-            const data = await api.getHealth();
-            setHealth(data);
+            const [h, o] = await Promise.allSettled([
+                api.getHealth(),
+                api.getOverview(),
+            ]);
+            if (h.status === 'fulfilled') setHealth(h.value);
+            if (o.status === 'fulfilled') setOverview(o.value);
             setError(null);
         } catch (e) {
             setError(e.message);
@@ -66,15 +75,19 @@ export default function DashboardPage() {
     };
 
     useEffect(() => {
-        fetchHealth();
-        const interval = setInterval(fetchHealth, 15000);
+        fetchAll();
+        const interval = setInterval(fetchAll, 15000);
         return () => clearInterval(interval);
     }, []);
 
     if (loading && !health) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+            <div className="space-y-6">
+                <SkeletonStatCards count={4} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <SkeletonCard lines={3} />
+                    <SkeletonCard lines={3} />
+                </div>
             </div>
         );
     }
@@ -89,7 +102,7 @@ export default function DashboardPage() {
                         {health?.now ? new Date(health.now).toLocaleString() : ''}
                     </p>
                 </div>
-                <button onClick={fetchHealth} className="btn-secondary flex items-center gap-2 !py-2 !px-3.5 !text-sm">
+                <button onClick={fetchAll} className="btn-secondary flex items-center gap-2 !py-2 !px-3.5 !text-sm">
                     <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                     {t('dashboard.common.refresh')}
                 </button>
@@ -97,6 +110,38 @@ export default function DashboardPage() {
 
             {error && (
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">{error}</div>
+            )}
+
+            {/* Overview Stats (from /owner/overview) */}
+            {overview && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <StatCard
+                        icon={Users}
+                        label={t('dashboard.users.total')}
+                        value={overview.totalUsers}
+                        sub={`${overview.activeUsers} ${t('dashboard.users.active').toLowerCase()}`}
+                        color="brand"
+                    />
+                    <StatCard
+                        icon={MessageSquare}
+                        label={t('dashboard.groups.total')}
+                        value={overview.totalGroups}
+                        color="purple"
+                    />
+                    <StatCard
+                        icon={Wifi}
+                        label="Telegram API"
+                        value={overview.telegramLatencyMs >= 0 ? `${overview.telegramLatencyMs}ms` : '—'}
+                        color={overview.telegramLatencyMs > 500 ? 'rose' : 'emerald'}
+                    />
+                    <StatCard
+                        icon={Zap}
+                        label={t('dashboard.status.memory')}
+                        value={`${overview.memory?.heapUsed || '?'} MB`}
+                        sub={`/ ${overview.memory?.heapTotal || '?'} MB`}
+                        color="amber"
+                    />
+                </div>
             )}
 
             {health && (
@@ -110,12 +155,12 @@ export default function DashboardPage() {
                         <span className="badge-info ml-auto">v{health.version || '?'}</span>
                     </div>
 
-                    {/* Stats grid */}
+                    {/* System stats grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <StatCard
                             icon={Clock}
                             label={t('dashboard.status.uptime')}
-                            value={formatUptime(health.uptimeSeconds)}
+                            value={formatUptime(overview?.uptimeSeconds || health.uptimeSeconds)}
                             color="emerald"
                         />
                         <StatCard
@@ -153,7 +198,7 @@ export default function DashboardPage() {
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between text-surface-200/60">
                                     <span>{t('dashboard.status.node')}</span>
-                                    <span className="font-mono text-surface-200">{health.node}</span>
+                                    <span className="font-mono text-surface-200">{overview?.nodeVersion || health.node}</span>
                                 </div>
                             </div>
                         </div>

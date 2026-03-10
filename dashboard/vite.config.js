@@ -22,5 +22,16 @@ export default defineConfig(({ mode }) => ({
     build: {
         outDir: 'dist',
         emptyOutDir: true,
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    // Separate vendor chunks for better caching
+                    'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+                    'vendor-i18n': ['react-i18next', 'i18next', 'i18next-browser-languagedetector'],
+                    'vendor-icons': ['lucide-react'],
+                    'vendor-state': ['zustand'],
+                },
+            },
+        },
     },
 }));

@@ -47,14 +47,15 @@ function verifyJWT(token) {
 function verifyTelegramAuth(data) {
     if (!BOT_TOKEN) return false;
 
-    // Dev/Quick login: accept mock auth unless explicitly disabled
-    // Set DASHBOARD_DISABLE_DEV_LOGIN=true in .env to disable on production VPS
+    // Dev/Quick login: DISABLED by default for security
+    // Set DASHBOARD_ENABLE_DEV_LOGIN=true in .env to enable (LOCAL DEV ONLY)
     if (data.hash === 'dev_mode') {
-        if (process.env.DASHBOARD_DISABLE_DEV_LOGIN === 'true') {
-            return false;
+        if (process.env.DASHBOARD_ENABLE_DEV_LOGIN === 'true') {
+            log.warn('Dashboard: Dev mode login accepted (DASHBOARD_ENABLE_DEV_LOGIN=true)');
+            return true;
         }
-        log.info('Dashboard: Dev mode login accepted');
-        return true;
+        log.warn('Dashboard: Dev mode login REJECTED (set DASHBOARD_ENABLE_DEV_LOGIN=true to enable)');
+        return false;
     }
 
     const secret = crypto.createHash('sha256').update(BOT_TOKEN).digest();
@@ -91,11 +92,41 @@ function ownerGuard(req, res, next) {
 }
 
 // ============================
+// Login Rate Limiter (stricter: 5 attempts/min per IP)
+// ============================
+const loginBuckets = new Map();
+const LOGIN_RATE_LIMIT = 5;
+const LOGIN_RATE_WINDOW = 60_000;
+
+function loginRateLimit(req, res, next) {
+    const ip = (req.ip || req.connection?.remoteAddress || 'unknown').toString();
+    const now = Date.now();
+    let bucket = loginBuckets.get(ip);
+    if (!bucket || now > bucket.resetAt) {
+        bucket = { count: 0, resetAt: now + LOGIN_RATE_WINDOW };
+    }
+    bucket.count++;
+    loginBuckets.set(ip, bucket);
+    if (bucket.count > LOGIN_RATE_LIMIT) {
+        const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+        res.setHeader('Retry-After', retryAfter);
+        return res.status(429).json({ error: 'Too many login attempts. Try again later.' });
+    }
+    // Cleanup old buckets periodically
+    if (loginBuckets.size > 500 && Math.random() < 0.1) {
+        for (const [k, v] of loginBuckets) { if (v.resetAt < now) loginBuckets.delete(k); }
+    }
+    next();
+}
+
+// ============================
 // Determine user role
 // ============================
-async function getUserRole(userId) {
+async function getUserRole(userId, username) {
     const uid = String(userId);
     if (OWNER_IDS.includes(uid)) return 'owner';
+    // Also check by username (BOT_OWNER_ID may be set to a username)
+    if (username && OWNER_IDS.some(id => id.toLowerCase() === username.toLowerCase())) return 'owner';
     try {
         const coOwners = await db.getCoOwners?.();
         if (coOwners?.some(co => String(co.userId) === uid)) return 'owner';
@@ -110,8 +141,21 @@ function createDashboardRoutes() {
     const router = Router();
 
     // --- Public Info (no auth required) ---
-    router.get('/bot-info', (req, res) => {
-        const botUsername = (process.env.BOT_USERNAME || '').replace(/^@+/, '');
+    router.get('/bot-info', async (req, res) => {
+        let botUsername = (process.env.BOT_USERNAME || global._botUsername || '').replace(/^@+/, '');
+        // Dynamically fetch from Telegram API if not cached
+        if (!botUsername) {
+            try {
+                const { bot } = require('../core/bot');
+                const me = await bot.getMe();
+                if (me?.username) {
+                    botUsername = me.username;
+                    global._botUsername = me.username;
+                }
+            } catch (e) {
+                log.warn('bot-info: Failed to fetch bot username via getMe:', e.message);
+            }
+        }
         res.json({
             botUsername: botUsername || null,
             dashboardUrl: `${req.protocol}://${req.get('host')}/dashboard/`,
@@ -119,7 +163,7 @@ function createDashboardRoutes() {
     });
 
     // --- Auth: One-time token auto-login (from /dashboard bot command) ---
-    router.get('/auth/auto-login', async (req, res) => {
+    router.get('/auth/auto-login', loginRateLimit, async (req, res) => {
         try {
             const { token } = req.query;
             if (!token) {
@@ -149,7 +193,7 @@ function createDashboardRoutes() {
                 `);
             }
 
-            const role = await getUserRole(tokenData.userId);
+            const role = await getUserRole(tokenData.userId, tokenData.username);
             const jwt = createJWT({
                 userId: tokenData.userId,
                 username: tokenData.username,
@@ -224,7 +268,7 @@ function createDashboardRoutes() {
                 } catch { /* use mock data as fallback */ }
             }
 
-            const role = await getUserRole(userId);
+            const role = await getUserRole(userId, username);
             const token = createJWT({
                 userId,
                 username,
@@ -287,6 +331,23 @@ function createDashboardRoutes() {
             });
         } catch (err) {
             res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- JWT Refresh (protected, returns a fresh token) ---
+    router.post('/auth/refresh', authMiddleware, async (req, res) => {
+        try {
+            const user = req.dashboardUser;
+            const role = await getUserRole(user.userId, user.username);
+            const token = createJWT({
+                userId: user.userId,
+                username: user.username,
+                firstName: user.firstName,
+                role,
+            });
+            res.json({ token, role });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to refresh token' });
         }
     });
 
@@ -373,6 +434,73 @@ function createDashboardRoutes() {
                 checkins: userStats.totalCheckins || 0,
                 dailyUsage: commandStats.daily || [],
                 topCommands: commandStats.topCommands || [],
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Owner: Dashboard Overview Stats ---
+    router.get('/owner/overview', ownerGuard, async (req, res) => {
+        try {
+            const [users, groups, health] = await Promise.allSettled([
+                db.listUsersDetailed?.(),
+                db.listGroupProfiles?.(),
+                Promise.resolve(process.memoryUsage()),
+            ]);
+
+            const userList = users.status === 'fulfilled' ? (users.value || []) : [];
+            const groupList = groups.status === 'fulfilled' ? (groups.value || []) : [];
+            const mem = health.status === 'fulfilled' ? health.value : process.memoryUsage();
+
+            // Calculate active users (seen in last 7 days)
+            const weekAgo = Date.now() - 7 * 86400000;
+            const activeUsers = userList.filter(u => u.lastSeen && u.lastSeen > weekAgo).length;
+
+            // Telegram API latency test
+            let telegramLatencyMs = -1;
+            try {
+                const { bot } = require('../core/bot');
+                const start = Date.now();
+                await bot.getMe();
+                telegramLatencyMs = Date.now() - start;
+            } catch { /* ignore */ }
+
+            res.json({
+                totalUsers: userList.length,
+                activeUsers,
+                totalGroups: groupList.length,
+                memory: {
+                    rss: Math.round(mem.rss / 1024 / 1024),
+                    heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+                    heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+                },
+                uptimeSeconds: Math.round(process.uptime()),
+                telegramLatencyMs,
+                nodeVersion: process.version,
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Owner: Bot Config (read/write runtime settings) ---
+    router.get('/owner/config/runtime', ownerGuard, async (req, res) => {
+        try {
+            res.json({
+                botUsername: process.env.BOT_USERNAME || global._botUsername || '',
+                defaultLanguage: process.env.DEFAULT_LANGUAGE || 'en',
+                aiProvider: process.env.DEFAULT_AI_PROVIDER || 'google',
+                apiPort: process.env.API_PORT || 3000,
+                publicBaseUrl: process.env.PUBLIC_BASE_URL || '',
+                rateLimitMax: Number(process.env.API_RATE_LIMIT_MAX || 120),
+                webhookMode: process.env.TELEGRAM_WEBHOOK_URL ? true : false,
+                features: {
+                    games: process.env.DISABLE_GAMES !== 'true',
+                    ai: process.env.DISABLE_AI !== 'true',
+                    trading: process.env.DISABLE_TRADING !== 'true',
+                    priceAlerts: process.env.DISABLE_PRICE_ALERTS !== 'true',
+                },
             });
         } catch (err) {
             res.status(500).json({ error: err.message });

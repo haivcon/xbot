@@ -50,17 +50,7 @@ export default function LoginPage() {
         telegramWidgetRef.current.appendChild(script);
     }, [botUsername]);
 
-    // Dev mode: simulate login
-    const handleDevLogin = (role) => {
-        const mockUser = {
-            id: role === 'owner' ? 123456789 : 987654321,
-            first_name: role === 'owner' ? 'Admin' : 'User',
-            username: role === 'owner' ? 'xbot_admin' : 'xbot_user',
-            auth_date: Math.floor(Date.now() / 1000),
-            hash: 'dev_mode',
-        };
-        login(mockUser);
-    };
+    // Dev mode: removed — use Telegram Login Widget or /dashboard command only
 
     const features = [
         { icon: Shield, title: 'Role-Based Access', desc: 'Owner & User dashboards' },
@@ -158,31 +148,15 @@ export default function LoginPage() {
                                 </a>
                             )}
 
-                            {/* Divider */}
-                            <div className="flex items-center gap-3">
-                                <div className="flex-1 h-px bg-white/5" />
-                                <span className="text-[10px] text-surface-200/30 uppercase tracking-wider">or</span>
-                                <div className="flex-1 h-px bg-white/5" />
-                            </div>
 
-                            {/* Dev mode buttons — always show for now */}
-                            <div className="space-y-2">
-                                <p className="text-xs text-surface-200/30 text-center uppercase tracking-wider">Quick Login (Dev)</p>
-                                <button
-                                    onClick={() => handleDevLogin('owner')}
-                                    disabled={loading}
-                                    className="btn-primary w-full flex items-center justify-center gap-2 !text-sm"
-                                >
-                                    <Shield size={14} />
-                                    Login as Owner
-                                </button>
-                                <button
-                                    onClick={() => handleDevLogin('user')}
-                                    disabled={loading}
-                                    className="btn-secondary w-full flex items-center justify-center gap-2 !text-sm"
-                                >
-                                    Login as User
-                                </button>
+                            {/* Security hint */}
+                            <div className="mt-2">
+                                <p className="text-[11px] text-surface-200/30 text-center">
+                                    🔒 Your role (Owner/User) is verified via Telegram
+                                </p>
+                                <p className="text-[11px] text-surface-200/30 text-center mt-1">
+                                    💡 Type <code className="px-1 py-0.5 bg-white/5 rounded text-surface-200/50">/dashboard</code> in Telegram for auto-login
+                                </p>
                             </div>
                         </div>
 

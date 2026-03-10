@@ -210,10 +210,59 @@ function registerCoreCommands(deps = {}) {
         await handleOkx402StatusCommand(msg);
     });
 
-    bot.onText(/^\/start(?:@[\w_]+)?(?:\s|$)/, async (msg) => {
+    bot.onText(/^\/start(?:@[\w_]+)?(?:\s(.+))?$/, async (msg, match) => {
         if (await enforceBanForMessage(msg)) {
             return;
         }
+        const payload = (match && match[1]) ? match[1].trim() : '';
+
+        // Handle deep link: /start dashboard_login
+        if (payload === 'dashboard_login') {
+            const userId = msg.from?.id?.toString();
+            try {
+                const crypto = require('crypto');
+                const { dashboardLoginTokens } = require('../core/state');
+                const token = crypto.randomBytes(32).toString('hex');
+                dashboardLoginTokens.set(token, {
+                    userId,
+                    firstName: msg.from?.first_name || '',
+                    username: msg.from?.username || '',
+                    createdAt: Date.now(),
+                });
+                setTimeout(() => dashboardLoginTokens.delete(token), 5 * 60 * 1000);
+
+                const port = process.env.API_PORT || 3001;
+                const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${port}`;
+                const loginUrl = `${baseUrl}/api/dashboard/auth/auto-login?token=${token}`;
+
+                const lang = await getLang(msg);
+                const isHttps = loginUrl.startsWith('https://');
+
+                if (isHttps) {
+                    // HTTPS: use inline button (Telegram requires HTTPS for URL buttons)
+                    await bot.sendMessage(msg.chat.id, `🌐 *XBot Dashboard*\n\n✅ Click the button below to login\n⏳ Link expires in 5 minutes`, {
+                        parse_mode: 'Markdown',
+                        disable_web_page_preview: true,
+                        reply_markup: {
+                            inline_keyboard: [[
+                                { text: '🔓 Open Dashboard', url: loginUrl }
+                            ]]
+                        }
+                    });
+                } else {
+                    // HTTP/localhost: send as text link
+                    await bot.sendMessage(msg.chat.id, `🌐 XBot Dashboard\n\n🔗 ${loginUrl}\n\n⏳ Link expires in 5 minutes`, {
+                        disable_web_page_preview: true,
+                    });
+                }
+            } catch (err) {
+                const logger = require('../core/logger');
+                logger.child('Dashboard').error('Error generating dashboard link:', err);
+                await bot.sendMessage(msg.chat.id, '❌ Error generating dashboard link').catch(() => { });
+            }
+            return;
+        }
+
         await handleStartNoToken(msg);
     });
 

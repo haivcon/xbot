@@ -21,6 +21,7 @@ import {
     LogOut,
     ChevronDown,
     Check,
+    ArrowLeftRight,
 } from 'lucide-react';
 
 const LANGUAGES = [
@@ -82,7 +83,7 @@ function LanguageDropdown() {
 
 export default function Sidebar({ open, onClose }) {
     const { t } = useTranslation();
-    const { isOwner, user, logout } = useAuthStore();
+    const { isOwner, isOwnerView, user, logout, toggleViewMode, viewMode } = useAuthStore();
     const location = useLocation();
 
     const ownerLinks = [
@@ -103,7 +104,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/settings', icon: Settings, label: t('dashboard.sidebar.settings') },
     ];
 
-    const navItems = isOwner() ? [...ownerLinks, { divider: true }, ...userLinks] : userLinks;
+    const navItems = isOwnerView() ? [...ownerLinks, { divider: true }, ...userLinks] : userLinks;
 
     return (
         <aside
@@ -143,20 +144,32 @@ export default function Sidebar({ open, onClose }) {
                     )}
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-surface-100 truncate">{user?.first_name || 'User'}</p>
+                    {isOwner() && (
                         <div className="flex items-center gap-1.5 mt-0.5">
                             {user?.username && (
                                 <span className="text-[10px] text-surface-200/40">@{user.username}</span>
                             )}
-                            {isOwner() ? (
+                            {isOwnerView() ? (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-md">
-                                    <Crown size={10} /> {t('dashboard.auth.ownerBadge')}
+                                    <Crown size={10} /> {t('dashboard.auth.ownerBadge') || 'Owner'}
                                 </span>
                             ) : (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-400 bg-brand-400/10 px-1.5 py-0.5 rounded-md">
-                                    {t('dashboard.auth.userBadge')}
+                                    {t('dashboard.auth.userBadge') || 'User'}
                                 </span>
                             )}
                         </div>
+                    )}
+                    {!isOwner() && (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                            {user?.username && (
+                                <span className="text-[10px] text-surface-200/40">@{user.username}</span>
+                            )}
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-400 bg-brand-400/10 px-1.5 py-0.5 rounded-md">
+                                {t('dashboard.auth.userBadge') || 'User'}
+                            </span>
+                        </div>
+                    )}
                     </div>
                 </div>
             </div>
@@ -183,8 +196,29 @@ export default function Sidebar({ open, onClose }) {
                 })}
             </nav>
 
-            {/* Bottom section: Language + Logout */}
+            {/* Bottom section: View Toggle + Language + Logout */}
             <div className="px-4 py-3 border-t border-white/5 space-y-2">
+                {/* View Mode Toggle — only for owners */}
+                {isOwner() && (
+                    <button
+                        onClick={toggleViewMode}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white/[0.03] border border-white/5 rounded-xl text-sm hover:bg-white/[0.06] hover:border-white/10 transition-all group"
+                    >
+                        <ArrowLeftRight size={15} className="text-surface-200/50 group-hover:text-brand-400 transition-colors" />
+                        <span className="flex-1 text-left text-sm text-surface-200">
+                            {isOwnerView()
+                                ? (t('dashboard.common.switchToUser') || 'Switch to User')
+                                : (t('dashboard.common.switchToOwner') || 'Switch to Owner')}
+                        </span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                            isOwnerView()
+                                ? 'text-amber-400 bg-amber-400/10'
+                                : 'text-brand-400 bg-brand-400/10'
+                        }`}>
+                            {isOwnerView() ? '👑' : '👤'}
+                        </span>
+                    </button>
+                )}
                 <LanguageDropdown />
                 <button
                     onClick={logout}

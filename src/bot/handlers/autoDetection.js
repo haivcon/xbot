@@ -216,6 +216,10 @@ function registerAutoDetection(context) {
                 shouldTrigger = true;
             } else if (isGroup) {
                 const botInfo = await bot.getMe();
+                // Cache for dashboard bot-info endpoint
+                if (botInfo.username && !global._botUsername) {
+                    global._botUsername = botInfo.username;
+                }
                 const mention = extractBotMention(textOrCaption, botInfo.username);
 
                 // Enhanced logging for voice reply debugging

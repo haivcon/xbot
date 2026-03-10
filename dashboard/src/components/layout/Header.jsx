@@ -1,12 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
 import useThemeStore from '@/stores/themeStore';
-import { Menu, LogOut, Bell, Sun, Moon } from 'lucide-react';
+import useWsStore from '@/stores/wsStore';
+import { Menu, LogOut, Bell, Sun, Moon, Wifi, WifiOff } from 'lucide-react';
 
 export default function Header({ onMenuClick }) {
     const { t } = useTranslation();
     const { user, logout } = useAuthStore();
     const { theme, toggleTheme } = useThemeStore();
+    const { connected } = useWsStore();
 
     return (
         <header className="h-16 bg-surface-850/80 dark:bg-surface-850/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-4 md:px-6 shrink-0 transition-colors duration-300"
@@ -29,6 +31,21 @@ export default function Header({ onMenuClick }) {
             </div>
 
             <div className="flex items-center gap-2">
+                {/* Real-time connection indicator */}
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.03]" title={connected ? 'Real-time connected' : 'Offline'}>
+                    {connected ? (
+                        <>
+                            <Wifi size={13} className="text-emerald-400" />
+                            <span className="text-[10px] font-medium text-emerald-400/80">Live</span>
+                        </>
+                    ) : (
+                        <>
+                            <WifiOff size={13} className="text-surface-200/30" />
+                            <span className="text-[10px] font-medium text-surface-200/30">Offline</span>
+                        </>
+                    )}
+                </div>
+
                 {/* Theme toggle */}
                 <button
                     onClick={toggleTheme}

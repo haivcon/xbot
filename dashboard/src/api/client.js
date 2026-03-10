@@ -106,6 +106,59 @@ class ApiClient {
     getStats() {
         return this.get('/user/stats');
     }
+
+    getLeaderboard(gameType = 'sudoku') {
+        return this.get(`/user/leaderboard?gameType=${gameType}`);
+    }
+
+    // === New Owner APIs ===
+    getOverview() {
+        return this.get('/owner/overview');
+    }
+
+    getRuntimeConfig() {
+        return this.get('/owner/config/runtime');
+    }
+
+    getAlerts() {
+        return this.get('/owner/alerts');
+    }
+
+    createAlert(data) {
+        return this.post('/owner/alerts', data);
+    }
+
+    updateAlert(id, data) {
+        return this.put(`/owner/alerts/${id}`, data);
+    }
+
+    deleteAlert(id) {
+        return this.delete(`/owner/alerts/${id}`);
+    }
+
+    getPosts() {
+        return this.get('/owner/posts');
+    }
+
+    createPost(data) {
+        return this.post('/owner/posts', data);
+    }
+
+    updatePost(id, data) {
+        return this.put(`/owner/posts/${id}`, data);
+    }
+
+    deletePost(id) {
+        return this.delete(`/owner/posts/${id}`);
+    }
+
+    getAiKeys() {
+        return this.get('/owner/config/ai-keys');
+    }
+
+    refreshToken() {
+        return this.post('/auth/refresh');
+    }
 }
 
 const api = new ApiClient();

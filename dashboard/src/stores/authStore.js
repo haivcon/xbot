@@ -6,6 +6,7 @@ const useAuthStore = create((set, get) => ({
     user: null,
     token: null,
     role: null, // 'owner' | 'user'
+    viewMode: null, // 'owner' | 'user' — for owners to toggle view
     loading: true,
     error: null,
 
@@ -14,7 +15,7 @@ const useAuthStore = create((set, get) => ({
         if (stored) {
             try {
                 const data = JSON.parse(stored);
-                set({ user: data.user, token: data.token, role: data.role, loading: false });
+                set({ user: data.user, token: data.token, role: data.role, viewMode: data.role, loading: false });
             } catch {
                 localStorage.removeItem('xbot_dashboard_auth');
                 set({ loading: false });
@@ -38,7 +39,7 @@ const useAuthStore = create((set, get) => ({
             }
             const data = await res.json();
             localStorage.setItem('xbot_dashboard_auth', JSON.stringify(data));
-            set({ user: data.user, token: data.token, role: data.role, loading: false });
+            set({ user: data.user, token: data.token, role: data.role, viewMode: data.role, loading: false });
             return data;
         } catch (err) {
             set({ error: err.message, loading: false });
@@ -48,11 +49,17 @@ const useAuthStore = create((set, get) => ({
 
     logout: () => {
         localStorage.removeItem('xbot_dashboard_auth');
-        set({ user: null, token: null, role: null, error: null });
+        set({ user: null, token: null, role: null, viewMode: null, error: null });
     },
 
     isOwner: () => get().role === 'owner',
+    isOwnerView: () => get().viewMode === 'owner',
     isAuthenticated: () => !!get().token,
+
+    toggleViewMode: () => {
+        if (get().role !== 'owner') return; // Only owners can toggle
+        set({ viewMode: get().viewMode === 'owner' ? 'user' : 'owner' });
+    },
 
     getHeaders: () => {
         const token = get().token;

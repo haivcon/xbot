@@ -4,6 +4,7 @@ const fs = require('fs');
 const logger = require('../core/logger');
 const log = logger.child('API');
 const cors = require('cors');
+const compression = require('compression');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../../db.js');
 const { normalizeAddressSafe } = require('../utils/helpers');
@@ -171,6 +172,7 @@ function startApiServer() {
     app.disable('etag');
 
     app.use(cors());
+    app.use(compression()); // Gzip/Brotli compression for all responses
     app.use(metricsMiddleware);
     app.use(express.json({ limit: BODY_LIMIT }));
     app.use(requestTimeoutGuard);

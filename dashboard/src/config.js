@@ -24,9 +24,6 @@ const config = {
 
     // ─── Default Language ───
     defaultLang: import.meta.env.VITE_DEFAULT_LANG || 'en',
-
-    // ─── Dev Mode ───
-    devLoginEnabled: import.meta.env.VITE_DEV_LOGIN !== 'false',
 };
 
 export default config;
