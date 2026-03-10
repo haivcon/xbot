@@ -343,6 +343,42 @@ function registerCoreCommands(deps = {}) {
             await handleAiaCommand(msg);
         }
     });
+    // COMMAND: /dashboard - Open web dashboard with auto-login link
+    bot.onText(/^\/dashboard(?:@[\w_]+)?(?:\s|$)/, async (msg) => {
+        if (await enforceBanForMessage(msg)) return;
+        const userId = msg.from?.id?.toString();
+        const lang = await getLang(msg);
+
+        try {
+            const crypto = require('crypto');
+            const { dashboardLoginTokens } = require('../core/state');
+
+            const token = crypto.randomBytes(32).toString('hex');
+
+            dashboardLoginTokens.set(token, {
+                userId,
+                firstName: msg.from?.first_name || '',
+                username: msg.from?.username || '',
+                createdAt: Date.now(),
+            });
+
+            setTimeout(() => dashboardLoginTokens.delete(token), 5 * 60 * 1000);
+
+            const port = process.env.API_PORT || 3001;
+            const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${port}`;
+            const loginUrl = `${baseUrl}/api/dashboard/auth/auto-login?token=${token}`;
+
+            const text = `🌐 XBot Dashboard\n\n🔗 ${loginUrl}\n\n⏳ Link expires in 5 minutes`;
+
+            await bot.sendMessage(msg.chat.id, text, {
+                disable_web_page_preview: true,
+            });
+        } catch (err) {
+            const logger = require('../core/logger');
+            logger.child('Dashboard').error('Error generating dashboard link:', err);
+            await bot.sendMessage(msg.chat.id, '❌ Error generating dashboard link: ' + err.message).catch(() => { });
+        }
+    });
 }
 
 module.exports = registerCoreCommands;

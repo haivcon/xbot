@@ -1,10 +1,40 @@
-node_modules/
-.DS_Store
+# ═══════════════════════════════════════════
+# XBot .gitignore
+# ═══════════════════════════════════════════
+
+# ─── Secrets ───
 .env
-banmao.db
+.env.local
+.env.production
+
+# ─── Dependencies ───
+node_modules/
+dashboard/node_modules/
+
+# ─── Database ───
 *.db
-xlayer_navigator.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ─── Build Output ───
+dashboard/dist/
+
+# ─── Logs ───
+*.log
+logs/
+
+# ─── OS ───
+.DS_Store
+Thumbs.db
+
+# ─── IDE ───
+.vscode/
+
+# ─── Temp ───
+*.jar
 code.txt
-bfg.jar
-bot.db
-# Database - KHÔNG upload, giữ nguyên trên VPS
+cleanup_history.js
+
+# ─── PM2 ───
+ecosystem.config.js

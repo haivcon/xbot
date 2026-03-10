@@ -78,6 +78,7 @@ const welcomeUserIndex = new Map();
 const welcomeAdminStates = new Map();
 const welcomeAdminMenus = new Map();
 const pendingVoiceCommands = new Map(); // For voice command confirmations: token -> { msg, lang, toolCalls, audioContext, transcript, createdAt }
+const dashboardLoginTokens = new Map(); // One-time tokens for dashboard auto-login: token -> { userId, firstName, username, createdAt }
 
 // ============================================
 // TTL Configuration for session-based Maps
@@ -220,5 +221,6 @@ module.exports = {
     SESSION_TTL_MS,
     CACHE_TTL_MS,
     PROMPT_TTL_MS,
-    cleanupExpiredSessions
+    cleanupExpiredSessions,
+    dashboardLoginTokens
 };

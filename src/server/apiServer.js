@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const logger = require('../core/logger');
 const log = logger.child('API');
 const cors = require('cors');
@@ -6,6 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../../db.js');
 const { normalizeAddressSafe } = require('../utils/helpers');
 const { OKX_BASE_URL, API_PORT } = require('../config/env');
+const { createDashboardRoutes } = require('./dashboardRoutes');
 const {
     enqueueJob,
     registerJobHandler,
@@ -369,6 +372,23 @@ function startApiServer() {
             res.status(500).json({ error: 'Dia chi vi khong hop le' });
         }
     });
+
+    // === Dashboard Routes ===
+    app.use('/api/dashboard', createDashboardRoutes());
+    log.child('Dashboard').info('Dashboard API routes mounted at /api/dashboard');
+
+    // === Serve Dashboard Static Files ===
+    const dashboardDist = path.join(__dirname, '../../dashboard/dist');
+    if (fs.existsSync(dashboardDist)) {
+        app.use('/dashboard', express.static(dashboardDist));
+        // SPA fallback: serve index.html for any unmatched dashboard routes
+        app.get('/dashboard/*', (req, res) => {
+            res.sendFile(path.join(dashboardDist, 'index.html'));
+        });
+        log.child('Dashboard').info(`Serving dashboard from ${dashboardDist}`);
+    } else {
+        log.child('Dashboard').info('Dashboard dist not found — run "npm run build" in dashboard/ to enable');
+    }
 
     if (app.locals.apiServerStarted) {
         return;
