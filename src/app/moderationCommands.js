@@ -747,6 +747,8 @@ function registerModerationCommands(deps = {}) {
         await db.deleteFilter(targetChatId, keyword);
         await sendReply(msg, t(lang, 'admin_filter_removed', { keyword: escapeHtml(keyword) }));
     });
+
+    return { buildFiltersListView };
 }
 
 module.exports = registerModerationCommands;

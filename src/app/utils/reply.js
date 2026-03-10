@@ -1,4 +1,5 @@
 const { buildThreadedOptions } = require('./telegram');
+const { retryTelegramCall } = require('../../utils/retry');
 
 function createReplyHelpers(bot) {
     if (!bot) {
@@ -7,7 +8,10 @@ function createReplyHelpers(bot) {
 
     function sendMessageRespectingThread(chatId, sourceMessage, text, options = {}) {
         const messageOptions = buildThreadedOptions(sourceMessage, { ...options });
-        return bot.sendMessage(chatId, text, messageOptions);
+        return retryTelegramCall(
+            () => bot.sendMessage(chatId, text, messageOptions),
+            { maxRetries: 3, label: 'sendMessage' }
+        );
     }
 
     function sendReply(sourceMessage, text, options = {}) {

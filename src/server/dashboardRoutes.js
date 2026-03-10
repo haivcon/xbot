@@ -10,9 +10,12 @@ const db = require('../../db.js');
 const logger = require('../core/logger');
 const log = logger.child('Dashboard');
 
-const JWT_SECRET = process.env.DASHBOARD_JWT_SECRET || process.env.BOT_TOKEN || 'xbot-dashboard-fallback-secret';
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const OWNER_IDS = (process.env.OWNER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+const JWT_SECRET = process.env.DASHBOARD_JWT_SECRET || process.env.TELEGRAM_TOKEN || 'xbot-dashboard-fallback-secret';
+const BOT_TOKEN = process.env.TELEGRAM_TOKEN;
+const OWNER_IDS = [
+    ...(process.env.OWNER_IDS || '').split(',').map(s => s.trim()).filter(Boolean),
+    ...(process.env.BOT_OWNER_ID || '').split(',').map(s => s.trim()).filter(Boolean),
+];
 
 // ============================
 // Simple JWT implementation
@@ -173,7 +176,7 @@ function createDashboardRoutes() {
                 }
             })};
                     localStorage.setItem('xbot_dashboard_auth', JSON.stringify(authData));
-                    window.location.href = '/dashboard/';
+                    window.location.href = '/';
                 </script>
                 </body></html>
             `);

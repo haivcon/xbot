@@ -374,15 +374,16 @@ function startApiServer() {
     });
 
     // === Dashboard Routes ===
-    app.use('/api/dashboard', createDashboardRoutes());
+    app.use('/api/dashboard', express.json({ limit: BODY_LIMIT }), createDashboardRoutes());
     log.child('Dashboard').info('Dashboard API routes mounted at /api/dashboard');
 
-    // === Serve Dashboard Static Files ===
+    // === Serve Dashboard Static Files (at root /) ===
     const dashboardDist = path.join(__dirname, '../../dashboard/dist');
     if (fs.existsSync(dashboardDist)) {
-        app.use('/dashboard', express.static(dashboardDist));
-        // SPA fallback: serve index.html for any unmatched dashboard routes
-        app.get('/dashboard/*', (req, res) => {
+        app.use(express.static(dashboardDist));
+        // SPA fallback: serve index.html for any unmatched non-API routes
+        app.get('*', (req, res, next) => {
+            if (req.path.startsWith('/api/')) return next();
             res.sendFile(path.join(dashboardDist, 'index.html'));
         });
         log.child('Dashboard').info(`Serving dashboard from ${dashboardDist}`);

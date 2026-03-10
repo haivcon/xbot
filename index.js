@@ -1956,7 +1956,7 @@ function startTelegramBot() {
         sendReply,
         t
     });
-    registerModerationCommands({
+    const { buildFiltersListView } = registerModerationCommands({
         bot,
         enforceBanForMessage,
         ensureAdminOrOwner,
