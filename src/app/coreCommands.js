@@ -231,8 +231,7 @@ function registerCoreCommands(deps = {}) {
                 });
                 setTimeout(() => dashboardLoginTokens.delete(token), 5 * 60 * 1000);
 
-                const port = process.env.API_PORT || 3001;
-                const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${port}`;
+                const baseUrl = (process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.API_PORT || 3000}`).replace(/\/+$/, '');
                 const loginUrl = `${baseUrl}/api/dashboard/auth/auto-login?token=${token}`;
 
                 const lang = await getLang(msg);
@@ -413,15 +412,27 @@ function registerCoreCommands(deps = {}) {
 
             setTimeout(() => dashboardLoginTokens.delete(token), 5 * 60 * 1000);
 
-            const port = process.env.API_PORT || 3001;
-            const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${port}`;
+            const baseUrl = (process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.API_PORT || 3000}`).replace(/\/+$/, '');
             const loginUrl = `${baseUrl}/api/dashboard/auth/auto-login?token=${token}`;
+            const dashboardHome = `${baseUrl}/`;
+            const isHttps = loginUrl.startsWith('https://');
 
-            const text = `🌐 XBot Dashboard\n\n🔗 ${loginUrl}\n\n⏳ Link expires in 5 minutes`;
-
-            await bot.sendMessage(msg.chat.id, text, {
-                disable_web_page_preview: true,
-            });
+            if (isHttps) {
+                await bot.sendMessage(msg.chat.id, `🌐 *XBot Dashboard*\n\n✅ Click the button below to login\n⏳ Link expires in 5 minutes`, {
+                    parse_mode: 'Markdown',
+                    disable_web_page_preview: true,
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '🔓 Open Dashboard', url: loginUrl }],
+                            [{ text: '🏠 Dashboard Home', url: dashboardHome }]
+                        ]
+                    }
+                });
+            } else {
+                await bot.sendMessage(msg.chat.id, `🌐 XBot Dashboard\n\n🔗 ${loginUrl}\n\n⏳ Link expires in 5 minutes`, {
+                    disable_web_page_preview: true,
+                });
+            }
         } catch (err) {
             const logger = require('../core/logger');
             logger.child('Dashboard').error('Error generating dashboard link:', err);
