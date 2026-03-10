@@ -11,23 +11,37 @@ class ApiClient {
             ...options.headers,
         };
 
-        const res = await fetch(`${API_BASE}${path}`, {
-            ...options,
-            headers,
-        });
+        const timeout = options.timeout || 30000;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
 
-        if (res.status === 401) {
-            useAuthStore.getState().logout();
-            window.location.href = '/';
-            throw new Error('Unauthorized');
+        try {
+            const res = await fetch(`${API_BASE}${path}`, {
+                ...options,
+                headers,
+                signal: controller.signal,
+            });
+
+            if (res.status === 401) {
+                useAuthStore.getState().logout();
+                window.location.href = '/';
+                throw new Error('Unauthorized');
+            }
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Network error' }));
+                throw new Error(err.error || `HTTP ${res.status}`);
+            }
+
+            return res.json();
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                throw new Error('Request timeout');
+            }
+            throw err;
+        } finally {
+            clearTimeout(timer);
         }
-
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: 'Network error' }));
-            throw new Error(err.error || `HTTP ${res.status}`);
-        }
-
-        return res.json();
     }
 
     get(path) {
@@ -120,6 +134,14 @@ class ApiClient {
         return this.get('/owner/config/runtime');
     }
 
+    getOwnerSettings() {
+        return this.get('/owner/config/settings');
+    }
+
+    updateOwnerSettings(data) {
+        return this.put('/owner/config/settings', data);
+    }
+
     getAlerts() {
         return this.get('/owner/alerts');
     }
@@ -162,7 +184,11 @@ class ApiClient {
 
     // === AI Chat APIs ===
     sendChatMessage(message, conversationId = null) {
-        return this.post('/ai/chat', { message, conversationId });
+        return this.request('/ai/chat', {
+            method: 'POST',
+            body: JSON.stringify({ message, conversationId }),
+            timeout: 120000, // 2 min for multi-round tool execution
+        });
     }
 
     getChatHistory() {

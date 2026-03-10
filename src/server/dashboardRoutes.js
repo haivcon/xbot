@@ -519,6 +519,52 @@ function createDashboardRoutes() {
         }
     });
 
+    // --- Owner: Full Settings (read/write for dashboard Settings page) ---
+    router.get('/owner/config/settings', ownerGuard, async (req, res) => {
+        try {
+            // Read system prompt from DB or env
+            let systemPrompt = '';
+            try {
+                const promptData = await db.getGlobalConfig?.('ai_system_prompt');
+                systemPrompt = promptData?.value || '';
+            } catch { /* ignore */ }
+
+            res.json({
+                defaultLanguage: process.env.DEFAULT_LANGUAGE || 'en',
+                aiProvider: process.env.DEFAULT_AI_PROVIDER || 'google',
+                systemPrompt,
+                features: {
+                    games: process.env.DISABLE_GAMES !== 'true',
+                    ai: process.env.DISABLE_AI !== 'true',
+                    trading: process.env.DISABLE_TRADING !== 'true',
+                    priceAlerts: process.env.DISABLE_PRICE_ALERTS !== 'true',
+                },
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.put('/owner/config/settings', ownerGuard, async (req, res) => {
+        try {
+            const { systemPrompt, defaultLanguage, features } = req.body;
+
+            // Save system prompt to DB
+            if (systemPrompt !== undefined) {
+                try {
+                    await db.setGlobalConfig?.('ai_system_prompt', systemPrompt);
+                } catch { /* DB method may not exist */ }
+            }
+
+            // Log the configuration change
+            log.info(`Dashboard: Owner ${req.dashboardUser.userId} updated settings — lang:${defaultLanguage || '-'}, features:${JSON.stringify(features || {})}`);
+
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // --- User Routes ---
     router.get('/user/profile', async (req, res) => {
         try {

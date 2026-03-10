@@ -8,9 +8,11 @@
 .env.production
 openclaw-main
 agent-trade-kit-master
+onchainos-skills-main
 # ─── Dependencies ───
 node_modules/
 dashboard/node_modules/
+onchainos-skills-main
 
 # ─── Database ───
 *.db

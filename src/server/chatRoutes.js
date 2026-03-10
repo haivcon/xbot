@@ -11,8 +11,12 @@ const logger = require('../core/logger');
 const log = logger.child('WebChat');
 const { GEMINI_API_KEYS, GEMINI_MODEL } = require('../config/env');
 const { ONCHAIN_TOOLS, executeToolCall, buildSystemInstruction } = require('../features/ai/ai-onchain');
+const { WEB_TOOL_DECLARATIONS, executeWebToolCall } = require('./webToolExecutor');
 const { buildAIAPrompt } = require('../config/prompts');
 const { t } = require('../core/i18n');
+
+// Debug: verify tools loaded correctly
+log.info(`ONCHAIN_TOOLS loaded: ${Array.isArray(ONCHAIN_TOOLS) ? ONCHAIN_TOOLS.length + ' tool groups' : 'FAILED'}, total declarations: ${Array.isArray(ONCHAIN_TOOLS) ? ONCHAIN_TOOLS.reduce((sum, g) => sum + (g.functionDeclarations?.length || 0), 0) : 0}`);
 
 // ── In-memory session store ──────────────────────────────
 const chatSessions = new Map();
@@ -29,10 +33,39 @@ setInterval(() => {
 }, 10 * 60 * 1000);
 
 // ── Gemini client pool ───────────────────────────────────
-function getGeminiClient() {
-    if (!GEMINI_API_KEYS || GEMINI_API_KEYS.length === 0) return null;
-    const idx = Math.floor(Math.random() * GEMINI_API_KEYS.length);
-    return new GoogleGenAI({ apiKey: GEMINI_API_KEYS[idx] });
+function getGeminiClient(apiKey) {
+    if (!apiKey) return null;
+    return new GoogleGenAI({ apiKey });
+}
+
+/**
+ * Resolve an API key for the given user.
+ * Priority: 1) env GEMINI_API_KEYS  2) user's DB-stored keys
+ */
+async function resolveGeminiKey(userId) {
+    // 1. Try env-level keys
+    if (GEMINI_API_KEYS && GEMINI_API_KEYS.length > 0) {
+        const idx = Math.floor(Math.random() * GEMINI_API_KEYS.length);
+        return GEMINI_API_KEYS[idx];
+    }
+    // 2. Try user's DB-stored keys (added via /api or ConfigPage)
+    if (userId) {
+        try {
+            const db = require('../core/database');
+            const userKeys = await db.listUserAiKeys(userId);
+            const googleKeys = userKeys
+                .filter(k => (k.provider || '').toLowerCase() === 'google' || (k.provider || '').toLowerCase() === 'gemini')
+                .map(k => k.apiKey)
+                .filter(Boolean);
+            if (googleKeys.length > 0) {
+                const idx = Math.floor(Math.random() * googleKeys.length);
+                return googleKeys[idx];
+            }
+        } catch (err) {
+            log.warn(`Failed to load user AI keys: ${err.message}`);
+        }
+    }
+    return null;
 }
 
 // ── Helper: strip HTML tags for web (use markdown) ───────
@@ -50,9 +83,22 @@ function htmlToMarkdown(html) {
 
 // ── Build tool declarations for Gemini ───────────────────
 function getToolDeclarations() {
-    // ONCHAIN_TOOLS is an array of { functionDeclarations: [...] }
-    // We flatten them into a single tools array for Gemini
-    return ONCHAIN_TOOLS;
+    // Flatten ONCHAIN_TOOLS declarations and merge with WEB_TOOL_DECLARATIONS
+    const onchainDecls = [];
+    for (const toolObj of ONCHAIN_TOOLS) {
+        if (toolObj?.functionDeclarations) onchainDecls.push(...toolObj.functionDeclarations);
+    }
+    // Deduplicate by name (web tools take priority)
+    const seen = new Set();
+    const merged = [];
+    for (const decl of WEB_TOOL_DECLARATIONS) {
+        if (decl?.name && !seen.has(decl.name)) { seen.add(decl.name); merged.push(decl); }
+    }
+    for (const decl of onchainDecls) {
+        if (decl?.name && !seen.has(decl.name)) { seen.add(decl.name); merged.push(decl); }
+    }
+    log.info(`[Tools] Merged: ${merged.length} declarations (${WEB_TOOL_DECLARATIONS.length} web + ${onchainDecls.length} onchain, deduped)`);
+    return [{ functionDeclarations: merged }];
 }
 
 // ── Create chat routes ───────────────────────────────────
@@ -73,10 +119,11 @@ function createChatRoutes() {
             return res.status(400).json({ error: 'Message is required' });
         }
 
-        const client = getGeminiClient();
-        if (!client) {
-            return res.status(503).json({ error: 'No AI API keys configured. Add GEMINI_API_KEYS to .env' });
+        const apiKey = await resolveGeminiKey(userId);
+        if (!apiKey) {
+            return res.status(503).json({ error: 'No AI API keys configured. Add GEMINI_API_KEYS to .env or add a key via /api command in Telegram.' });
         }
+        const client = getGeminiClient(apiKey);
 
         try {
             // Build or retrieve session
@@ -124,12 +171,14 @@ function createChatRoutes() {
             while (round < MAX_TOOL_ROUNDS) {
                 round++;
 
+                const mergedTools = getToolDeclarations();
+                log.info(`[Round ${round}] Calling Gemini model=${model}, tools=${mergedTools[0]?.functionDeclarations?.length || 0} total, history=${currentHistory.length} msgs`);
                 const response = await client.models.generateContent({
                     model,
                     contents: currentHistory,
-                    systemInstruction: { parts: [{ text: session.systemInstruction }] },
-                    tools: getToolDeclarations(),
+                    systemInstruction: session.systemInstruction,
                     config: {
+                        tools: mergedTools,
                         temperature: 0.7,
                         maxOutputTokens: 8192,
                     }
@@ -137,6 +186,7 @@ function createChatRoutes() {
 
                 const candidate = response?.candidates?.[0];
                 if (!candidate?.content?.parts) {
+                    log.warn(`[Round ${round}] No candidate parts! Response: ${JSON.stringify(response?.candidates?.[0]).substring(0, 200)}`);
                     finalResponse = 'Sorry, I could not generate a response. Please try again.';
                     break;
                 }
@@ -144,6 +194,7 @@ function createChatRoutes() {
                 const parts = candidate.content.parts;
                 const textParts = parts.filter(p => p.text);
                 const functionCallParts = parts.filter(p => p.functionCall);
+                log.info(`[Round ${round}] Response: ${textParts.length} text parts, ${functionCallParts.length} function calls${functionCallParts.length ? ' (' + functionCallParts.map(p => p.functionCall.name).join(', ') + ')' : ''}`);
 
                 if (functionCallParts.length === 0) {
                     // No function calls — we have the final text response
@@ -171,9 +222,18 @@ function createChatRoutes() {
 
                     let result;
                     try {
-                        result = await executeToolCall(fc, context);
+                        // Try web tools first, then fall back to onchain tools
+                        result = await executeWebToolCall(fc, context);
+                        if (result === undefined) {
+                            result = await executeToolCall(fc, context);
+                        }
                         if (result === undefined) {
                             result = { error: `Unknown tool: ${fc.name}` };
+                        }
+                        // Handle special actions
+                        if (result?.action === 'clear_session') {
+                            session.history = [];
+                            currentHistory = [{ role: 'user', parts: [{ text: message.trim() }] }];
                         }
                     } catch (err) {
                         log.error(`WebChat tool error ${fc.name}: ${err.message}`);
@@ -206,6 +266,9 @@ function createChatRoutes() {
             });
         } catch (err) {
             log.error(`WebChat error: ${err.message}`);
+
+            // Guard: don't send if response was already sent
+            if (res.headersSent) return;
 
             // Check for common Gemini errors
             if (err.message?.includes('RESOURCE_EXHAUSTED') || err.message?.includes('429')) {
