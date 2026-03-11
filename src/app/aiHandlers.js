@@ -3778,7 +3778,16 @@ function createAiHandlers(deps) {
             '4. Do NOT call get_wallet_balance or check balances first - go straight to batch_transfer\n' +
             '5. The amount per transfer = the amount the user specified]'
         });
-        log.child('FnCall').info(`⚡ Batch transfer override: ${uniqueAddresses.length} unique addresses detected and listed`);
+        // CRITICAL: Remove competing tools that match 0x addresses to prevent mis-routing
+        // The AI keeps calling check_wallet_balance_direct instead of batch_transfer
+        const competingTools = ['check_wallet_balance_direct', 'check_wallet_balance', 'transfer_tokens', 'lookup_contract'];
+        if (tools.length > 0 && tools[0].functionDeclarations) {
+          const before = tools[0].functionDeclarations.length;
+          tools[0].functionDeclarations = tools[0].functionDeclarations.filter(
+            f => !competingTools.includes(f.name)
+          );
+          log.child('FnCall').info(`⚡ Batch transfer override: ${uniqueAddresses.length} addresses, removed ${before - tools[0].functionDeclarations.length} competing tools`);
+        }
       }
     }
 
