@@ -93,9 +93,135 @@ function registerAutoDetection(context) {
                 return;
             }
 
-            // Skip if no text AND no audio
-            if (!textOrCaption && !hasAudioMedia) {
+            // Skip if no text AND no audio AND no document
+            if (!textOrCaption && !hasAudioMedia && !msg.document) {
                 return;
+            }
+
+            // ==============================================
+            // #7: CSV/TXT FILE UPLOAD → BATCH TRANSFER
+            // Detect document uploads and parse address lists
+            // ==============================================
+            if (msg.document && chatType === 'private') {
+                const fileName = (msg.document.file_name || '').toLowerCase();
+                const isCSV = fileName.endsWith('.csv') || fileName.endsWith('.txt');
+                if (isCSV && msg.document.file_size < 100000) { // Max 100KB
+                    try {
+                        const { t, getLang } = context;
+                        let lang = 'vi';
+                        try { if (getLang) lang = await getLang(msg); } catch (_) { }
+                        const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+
+                        const fileLink = await bot.getFileLink(msg.document.file_id);
+                        const https = require('https');
+                        const http = require('http');
+                        const fetcher = fileLink.startsWith('https') ? https : http;
+                        const fileContent = await new Promise((resolve, reject) => {
+                            fetcher.get(fileLink, (res) => {
+                                let data = '';
+                                res.on('data', chunk => data += chunk);
+                                res.on('end', () => resolve(data));
+                                res.on('error', reject);
+                            }).on('error', reject);
+                        });
+
+                        // Parse lines: each line = "address" or "address,amount"
+                        const lines = fileContent.split(/[\r\n]+/).map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.toLowerCase().startsWith('address'));
+                        const parsedEntries = [];
+                        const invalidLines = [];
+
+                        for (const line of lines) {
+                            const parts = line.split(/[,;\t]+/).map(p => p.trim());
+                            let addr = parts[0] || '';
+                            let amount = parts[1] || '';
+
+                            // Normalize XKO → 0x
+                            if (/^XKO/i.test(addr)) addr = '0x' + addr.slice(3);
+
+                            if (/^0x[0-9a-fA-F]{40}$/i.test(addr)) {
+                                parsedEntries.push({ address: addr, amount: amount || '' });
+                            } else if (addr.length > 10) {
+                                invalidLines.push(addr.slice(0, 20) + '...');
+                            }
+                        }
+
+                        if (parsedEntries.length === 0) {
+                            const noAddrTexts = {
+                                en: '⚠️ No valid addresses found in file. Format: one address per line, optionally followed by amount (comma-separated).',
+                                vi: '⚠️ Không tìm thấy địa chỉ hợp lệ trong file. Định dạng: mỗi dòng 1 địa chỉ, có thể kèm số lượng (phân cách bằng dấu phẩy).',
+                                zh: '⚠️ 文件中未找到有效地址。格式：每行一个地址，可选数量（逗号分隔）。',
+                                ko: '⚠️ 파일에서 유효한 주소를 찾을 수 없습니다. 형식: 줄당 1개 주소, 선택 수량.',
+                                ru: '⚠️ Не найдено допустимых адресов. Формат: один адрес на строку, опционально с суммой.',
+                                id: '⚠️ Tidak ditemukan alamat valid. Format: satu alamat per baris, opsional jumlah (dipisahkan koma).'
+                            };
+                            await bot.sendMessage(msg.chat.id, noAddrTexts[lk] || noAddrTexts.en, {
+                                parse_mode: 'HTML', reply_to_message_id: msg.message_id
+                            });
+                            return;
+                        }
+
+                        // Store parsed data and show confirmation
+                        processedMessages.set(msgKey, Date.now());
+
+                        const hasAmounts = parsedEntries.some(e => e.amount);
+                        if (!global._csvBatchPending) global._csvBatchPending = new Map();
+                        const csvId = `csv_${userId}_${Date.now()}`;
+                        global._csvBatchPending.set(csvId, {
+                            entries: parsedEntries,
+                            msg: { ...msg },
+                            createdAt: Date.now()
+                        });
+                        setTimeout(() => { global._csvBatchPending.delete(csvId); }, 5 * 60 * 1000);
+
+                        const invalidNote = invalidLines.length > 0
+                            ? `\n⚠️ ${invalidLines.length} invalid: ${invalidLines.slice(0, 3).join(', ')}`
+                            : '';
+                        const amountNote = hasAmounts ? '' : {
+                            en: '\n💡 No amounts in file — you\'ll need to specify the amount and token.',
+                            vi: '\n💡 File không có số lượng — bạn cần chỉ định token và số lượng.',
+                            zh: '\n💡 文件无金额 — 请指定代币和金额。',
+                            ko: '\n💡 파일에 금액 없음 — 토큰과 금액을 지정하세요.',
+                            ru: '\n💡 Суммы не указаны — укажите токен и сумму.',
+                            id: '\n💡 File tanpa jumlah — tentukan token dan jumlah.'
+                        }[lk] || '\n💡 No amounts — specify token and amount.';
+
+                        const csvTexts = {
+                            en: `📄 <b>File Parsed</b>\n━━━━━━━━━━━━━━━━━━\n✅ Found <b>${parsedEntries.length}</b> valid addresses${invalidNote}${amountNote}\n\nWhat would you like to do?`,
+                            vi: `📄 <b>Đã đọc file</b>\n━━━━━━━━━━━━━━━━━━\n✅ Tìm thấy <b>${parsedEntries.length}</b> địa chỉ hợp lệ${invalidNote}${amountNote}\n\nBạn muốn làm gì?`,
+                            zh: `📄 <b>文件已解析</b>\n━━━━━━━━━━━━━━━━━━\n✅ 发现 <b>${parsedEntries.length}</b> 个有效地址${invalidNote}${amountNote}\n\n您想执行什么操作？`,
+                            ko: `📄 <b>파일 분석 완료</b>\n━━━━━━━━━━━━━━━━━━\n✅ <b>${parsedEntries.length}</b>개 유효 주소${invalidNote}${amountNote}\n\n작업을 선택하세요:`,
+                            ru: `📄 <b>Файл обработан</b>\n━━━━━━━━━━━━━━━━━━\n✅ Найдено <b>${parsedEntries.length}</b> адресов${invalidNote}${amountNote}\n\nЧто сделать?`,
+                            id: `📄 <b>File Diproses</b>\n━━━━━━━━━━━━━━━━━━\n✅ Ditemukan <b>${parsedEntries.length}</b> alamat valid${invalidNote}${amountNote}\n\nApa yang ingin dilakukan?`
+                        };
+
+                        const csvBtnTexts = {
+                            en: { transfer: '📤 Batch Transfer', check: '💰 Check Balances', cancel: '❌ Cancel' },
+                            vi: { transfer: '📤 Chuyển hàng loạt', check: '💰 Kiểm tra số dư', cancel: '❌ Hủy' },
+                            zh: { transfer: '📤 批量转账', check: '💰 查看余额', cancel: '❌ 取消' },
+                            ko: { transfer: '📤 일괄 전송', check: '💰 잔액 확인', cancel: '❌ 취소' },
+                            ru: { transfer: '📤 Массовый перевод', check: '💰 Проверить балансы', cancel: '❌ Отмена' },
+                            id: { transfer: '📤 Transfer Massal', check: '💰 Cek Saldo', cancel: '❌ Batal' }
+                        };
+                        const csvBtns = csvBtnTexts[lk] || csvBtnTexts.en;
+
+                        await bot.sendMessage(msg.chat.id, csvTexts[lk] || csvTexts.en, {
+                            parse_mode: 'HTML',
+                            reply_to_message_id: msg.message_id,
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [
+                                        { text: csvBtns.transfer, callback_data: `csvbatch_transfer|${csvId}` },
+                                        { text: csvBtns.check, callback_data: `csvbatch_check|${csvId}` }
+                                    ],
+                                    [{ text: csvBtns.cancel, callback_data: `csvbatch_cancel|${csvId}` }]
+                                ]
+                            }
+                        });
+                        return;
+                    } catch (csvErr) {
+                        log.child('AutoDetection').error('CSV/TXT parse error:', csvErr.message);
+                    }
+                }
             }
 
             // ==============================================
@@ -254,11 +380,12 @@ function registerAutoDetection(context) {
                 // Clear intent → pass to AI directly
                 // Ambiguous intent → show inline keyboard for user to choose
                 // ==============================================
-                const multiAddrMatches = extractedText.match(/0x[0-9a-fA-F]{40}/gi);
+                const multiAddrMatches = extractedText.match(/(?:0x|XKO)[0-9a-fA-F]{38,40}/gi);
                 const hasMultipleAddresses = multiAddrMatches && multiAddrMatches.length >= 2;
 
                 if (hasMultipleAddresses) {
-                    const uniqueAddrs = [...new Set(multiAddrMatches.map(a => a.toLowerCase()))];
+                    // Normalize XKO → 0x for downstream compatibility
+                    const uniqueAddrs = [...new Set(multiAddrMatches.map(a => a.replace(/^XKO/i, '0x').toLowerCase()))];
                     const addrCount = uniqueAddrs.length;
 
                     // Check for clear intent keywords
@@ -267,8 +394,15 @@ function registerAutoDetection(context) {
                     const checkIntent = /kiểm tra|check|xem|balance|số dư|tài sản|portfolio|查看|余额|확인|잔액|проверить|баланс|periksa|saldo/i;
 
                     if (transferIntent.test(extractedText) || swapIntent.test(extractedText) || checkIntent.test(extractedText)) {
-                        // Clear intent detected → pass original message to AI
+                        // Clear intent detected → normalize XKO→0x and pass to AI
                         log.child('AutoDetection').info(`✓ Multi-address (${addrCount}) with clear intent, passing to AI`);
+                        // Normalize XKO addresses to 0x in message text for AI/batch_transfer compatibility
+                        if (/XKO/i.test(msg.text || '')) {
+                            msg.text = (msg.text || '').replace(/XKO/gi, '0x');
+                        }
+                        if (/XKO/i.test(msg.caption || '')) {
+                            msg.caption = (msg.caption || '').replace(/XKO/gi, '0x');
+                        }
                     } else {
                         // Ambiguous intent → show inline keyboard
                         log.child('AutoDetection').info(`✓ Multi-address (${addrCount}) with ambiguous intent, showing action picker`);
@@ -351,6 +485,91 @@ function registerAutoDetection(context) {
                         await handleAiaCommand(syntheticMsg);
                         return;
                     }
+                }
+
+                // ==============================================
+                // SMART INVALID ADDRESS FORMAT GUIDANCE
+                // Detect near-miss addresses and provide helpful guidance
+                // Auto-detect: single transfer vs batch transfer vs balance check
+                // ==============================================
+                const nearMissPatterns = [
+                    /(?:[0O][xX]|[xX][kK][oO0])[0-9a-fA-F]{30,50}/gi,     // Almost correct but wrong length
+                    /\b[a-fA-F0-9]{40,44}\b/g,                              // Hex string without 0x prefix
+                    /(?:0[xX]|XKO)[0-9a-gA-G]{38,42}/gi,                    // Contains non-hex chars (g, G)
+                ];
+
+                let nearMissAddrs = [];
+                for (const p of nearMissPatterns) {
+                    const m = extractedText.match(p);
+                    if (m) nearMissAddrs.push(...m);
+                }
+                // Remove already valid addresses from near-misses
+                nearMissAddrs = nearMissAddrs.filter(a => {
+                    const norm = a.replace(/^XKO/i, '0x').replace(/^[oO0][xX]/, '0x');
+                    return !/^0x[0-9a-fA-F]{40}$/i.test(norm);
+                });
+
+                if (nearMissAddrs.length > 0) {
+                    const { t, getLang } = context;
+                    let lang = 'vi';
+                    try { if (getLang) lang = await getLang(msg); } catch (_) { }
+                    const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+
+                    // Auto-detect context: single transfer, batch, or just addresses
+                    const transferKeywords = /chuyển|transfer|gửi|send|distribute|转账|보내|전송|перевод|kirim/i;
+                    const isBatchContext = nearMissAddrs.length >= 2;
+                    const isTransferContext = transferKeywords.test(extractedText);
+
+                    let guidanceMsg;
+                    const example0x = '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18';
+                    const sampleBad = nearMissAddrs[0]?.slice(0, 12) + '...';
+
+                    if (isBatchContext && isTransferContext) {
+                        // Batch transfer with invalid addresses
+                        const texts = {
+                            en: `⚠️ <b>Invalid address format detected</b>\n━━━━━━━━━━━━━━━━━━\n📋 Found <b>${nearMissAddrs.length}</b> addresses with incorrect format.\n\n❌ Example: <code>${sampleBad}</code>\n✅ Correct format: <code>${example0x}</code>\n\n💡 <b>EVM addresses must:</b>\n• Start with <code>0x</code>\n• Contain exactly 40 hex characters (0-9, a-f)\n• Total 42 characters\n\n📤 To batch transfer, please resend with corrected addresses.`,
+                            vi: `⚠️ <b>Phát hiện địa chỉ sai định dạng</b>\n━━━━━━━━━━━━━━━━━━\n📋 Tìm thấy <b>${nearMissAddrs.length}</b> địa chỉ không hợp lệ.\n\n❌ Ví dụ sai: <code>${sampleBad}</code>\n✅ Đúng: <code>${example0x}</code>\n\n💡 <b>Địa chỉ EVM phải:</b>\n• Bắt đầu bằng <code>0x</code>\n• Chứa đúng 40 ký tự hex (0-9, a-f)\n• Tổng cộng 42 ký tự\n\n📤 Để chuyển hàng loạt, hãy gửi lại với địa chỉ đúng.`,
+                            zh: `⚠️ <b>检测到无效地址格式</b>\n━━━━━━━━━━━━━━━━━━\n📋 发现 <b>${nearMissAddrs.length}</b> 个格式错误的地址。\n\n❌ 错误示例: <code>${sampleBad}</code>\n✅ 正确格式: <code>${example0x}</code>\n\n💡 <b>EVM地址必须:</b>\n• 以 <code>0x</code> 开头\n• 包含40个十六进制字符\n• 共42个字符\n\n📤 请修正地址后重新发送。`,
+                            ko: `⚠️ <b>잘못된 주소 형식 감지</b>\n━━━━━━━━━━━━━━━━━━\n📋 <b>${nearMissAddrs.length}</b>개의 잘못된 주소를 발견했습니다.\n\n❌ 잘못된 예: <code>${sampleBad}</code>\n✅ 올바른 형식: <code>${example0x}</code>\n\n💡 <b>EVM 주소 요구사항:</b>\n• <code>0x</code>로 시작\n• 정확히 40개의 16진수 문자\n\n📤 주소를 수정하여 다시 보내주세요.`,
+                            ru: `⚠️ <b>Обнаружен неверный формат адреса</b>\n━━━━━━━━━━━━━━━━━━\n📋 Найдено <b>${nearMissAddrs.length}</b> адресов с ошибками.\n\n❌ Пример ошибки: <code>${sampleBad}</code>\n✅ Правильный формат: <code>${example0x}</code>\n\n💡 <b>EVM адреса:</b>\n• Начинаются с <code>0x</code>\n• Содержат 40 hex-символов\n\n📤 Исправьте адреса и отправьте заново.`,
+                            id: `⚠️ <b>Format alamat tidak valid terdeteksi</b>\n━━━━━━━━━━━━━━━━━━\n📋 Ditemukan <b>${nearMissAddrs.length}</b> alamat dengan format salah.\n\n❌ Contoh salah: <code>${sampleBad}</code>\n✅ Format benar: <code>${example0x}</code>\n\n💡 <b>Alamat EVM harus:</b>\n• Dimulai dengan <code>0x</code>\n• Berisi tepat 40 karakter hex\n\n📤 Kirim ulang dengan alamat yang benar.`
+                        };
+                        guidanceMsg = texts[lk] || texts.en;
+                    } else if (isTransferContext) {
+                        // Single transfer with invalid address
+                        const texts = {
+                            en: `⚠️ <b>Invalid wallet address</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> is not a valid address.\n\n✅ Correct format: <code>${example0x}</code>\n\n💡 EVM address = <code>0x</code> + 40 hex chars (42 total).\n\n📤 Please resend your transfer command with the correct address.`,
+                            vi: `⚠️ <b>Địa chỉ ví không hợp lệ</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> không phải địa chỉ hợp lệ.\n\n✅ Đúng: <code>${example0x}</code>\n\n💡 Địa chỉ EVM = <code>0x</code> + 40 ký tự hex (tổng 42).\n\n📤 Hãy gửi lại lệnh chuyển với địa chỉ đúng.`,
+                            zh: `⚠️ <b>钱包地址无效</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> 不是有效地址。\n\n✅ 正确: <code>${example0x}</code>\n\n💡 EVM地址 = <code>0x</code> + 40个hex字符。\n\n📤 请用正确地址重新发送。`,
+                            ko: `⚠️ <b>잘못된 지갑 주소</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code>은 유효하지 않습니다.\n\n✅ 올바른 형식: <code>${example0x}</code>\n\n📤 올바른 주소로 다시 보내주세요.`,
+                            ru: `⚠️ <b>Неверный адрес кошелька</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> — неверный адрес.\n\n✅ Правильно: <code>${example0x}</code>\n\n📤 Отправьте команду с правильным адресом.`,
+                            id: `⚠️ <b>Alamat dompet tidak valid</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> bukan alamat valid.\n\n✅ Benar: <code>${example0x}</code>\n\n📤 Kirim ulang dengan alamat yang benar.`
+                        };
+                        guidanceMsg = texts[lk] || texts.en;
+                    } else {
+                        // Just addresses pasted (no clear intent)
+                        const texts = {
+                            en: `⚠️ <b>Invalid address format</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> — wrong format.\n✅ Correct: <code>${example0x}</code>\n\n💡 <b>What would you like to do?</b>\n• "chuyển 100 OKB tới 0x..." → Transfer\n• "kiểm tra 0x..." → Check balance`,
+                            vi: `⚠️ <b>Địa chỉ sai định dạng</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> — sai format.\n✅ Đúng: <code>${example0x}</code>\n\n💡 <b>Bạn muốn làm gì?</b>\n• "chuyển 100 OKB tới 0x..." → Chuyển token\n• "kiểm tra 0x..." → Xem số dư`,
+                            zh: `⚠️ <b>地址格式错误</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> — 格式错误。\n✅ 正确: <code>${example0x}</code>\n\n💡 <b>您想做什么？</b>\n• "转100 OKB到0x..." → 转账\n• "查看0x..." → 查余额`,
+                            ko: `⚠️ <b>주소 형식 오류</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> — 형식 오류.\n✅ 올바른: <code>${example0x}</code>\n\n📤 올바른 주소로 다시 시도해주세요.`,
+                            ru: `⚠️ <b>Неверный формат адреса</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> — ошибка.\n✅ Правильно: <code>${example0x}</code>\n\n📤 Попробуйте с правильным адресом.`,
+                            id: `⚠️ <b>Format alamat salah</b>\n━━━━━━━━━━━━━━━━━━\n❌ <code>${sampleBad}</code> — format salah.\n✅ Benar: <code>${example0x}</code>\n\n📤 Coba lagi dengan alamat yang benar.`
+                        };
+                        guidanceMsg = texts[lk] || texts.en;
+                    }
+
+                    log.child('AutoDetection').info(`✓ Near-miss address(es) detected (${nearMissAddrs.length}), showing format guidance`);
+                    try {
+                        await bot.sendMessage(msg.chat.id, guidanceMsg, {
+                            parse_mode: 'HTML',
+                            reply_to_message_id: msg.message_id,
+                            message_thread_id: msg.message_thread_id || undefined
+                        });
+                    } catch (guidErr) {
+                        log.child('AutoDetection').error('Failed to send address guidance:', guidErr.message);
+                    }
+                    return;
                 }
 
                 // ==============================================

@@ -899,12 +899,12 @@ module.exports = {
                 return (a === 'max' || a === 'all') ? sum : sum + Number(a || 0);
             }, 0);
             const confirmTexts = {
-                en: `📋 <b>Batch Transfer Confirmation</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} transfers\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Est. Total: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ Press to confirm or cancel:`,
-                vi: `📋 <b>Xác nhận chuyển tiền hàng loạt</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} giao dịch\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Ước tính: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ Nhấn để xác nhận hoặc hủy:`,
-                zh: `📋 <b>确认批量转账</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} 笔交易\n🪙 代币: <b>${symbol}</b>\n🌐 链: #${chainIndex}\n💰 预估: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ 按下确认或取消:`,
-                ko: `📋 <b>일괄 전송 확인</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length}건\n🪙 토큰: <b>${symbol}</b>\n🌐 체인: #${chainIndex}\n💰 예상: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ 확인 또는 취소:`,
-                ru: `📋 <b>Подтверждение массовой отправки</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} транзакций\n🪙 Токен: <b>${symbol}</b>\n🌐 Сеть: #${chainIndex}\n💰 Оценка: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ Нажмите для подтверждения или отмены:`,
-                id: `📋 <b>Konfirmasi Transfer Massal</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} transaksi\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Estimasi: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ Tekan untuk konfirmasi atau batal:`
+                en: `📋 <b>Batch Transfer Confirmation</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} transfers\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Est. Total: ~${totalAmount.toFixed(4)} ${symbol}${gasEstimateStr}\n\n⬇️ Press to confirm or cancel:`,
+                vi: `📋 <b>Xác nhận chuyển tiền hàng loạt</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} giao dịch\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Ước tính: ~${totalAmount.toFixed(4)} ${symbol}${gasEstimateStr}\n\n⬇️ Nhấn để xác nhận hoặc hủy:`,
+                zh: `📋 <b>确认批量转账</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} 笔交易\n🪙 代币: <b>${symbol}</b>\n🌐 链: #${chainIndex}\n💰 预估: ~${totalAmount.toFixed(4)} ${symbol}${gasEstimateStr}\n\n⬇️ 按下确认或取消:`,
+                ko: `📋 <b>일괄 전송 확인</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length}건\n🪙 토큰: <b>${symbol}</b>\n🌐 체인: #${chainIndex}\n💰 예상: ~${totalAmount.toFixed(4)} ${symbol}${gasEstimateStr}\n\n⬇️ 확인 또는 취소:`,
+                ru: `📋 <b>Подтверждение массовой отправки</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} транзакций\n🪙 Токен: <b>${symbol}</b>\n🌐 Сеть: #${chainIndex}\n💰 Оценка: ~${totalAmount.toFixed(4)} ${symbol}${gasEstimateStr}\n\n⬇️ Нажмите для подтверждения или отмены:`,
+                id: `📋 <b>Konfirmasi Transfer Massal</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} transaksi\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Estimasi: ~${totalAmount.toFixed(4)} ${symbol}${gasEstimateStr}\n\n⬇️ Tekan untuk konfirmasi atau batal:`
             };
             const btnTexts = {
                 en: { confirm: '✅ Confirm', cancel: '❌ Cancel' },
@@ -971,8 +971,15 @@ module.exports = {
             }
         }
 
+        // cancelMidBtnTexts hoisted for use in both confirm block and progress bar
+        const cancelMidBtnTexts = {
+            en: '⛔ Stop Batch', vi: '⛔ Dừng Batch',
+            zh: '⛔ 停止批量', ko: '⛔ 배치 중지',
+            ru: '⛔ Остановить', id: '⛔ Hentikan'
+        };
         let processedCount = 0;
         let progressMsgId = null; // Track progress bar message for editing
+        const batchStartTime = Date.now(); // Track elapsed time for notification
 
         // #3: Wallet cache to avoid repeated DB queries and key decryption
         const walletCache = new Map();
@@ -1271,9 +1278,14 @@ module.exports = {
                 if (shouldUpdate) {
                     try {
                         if (progressMsgId) {
-                            await bot.editMessageText(barTexts[lk] || barTexts.en, { chat_id: chatId, message_id: progressMsgId, parse_mode: 'HTML' }).catch(() => { });
+                            const elapsed = Math.round((Date.now() - batchStartTime) / 1000);
+                            const elapsedStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m${elapsed % 60}s` : `${elapsed}s`;
+                            const barMsg = (barTexts[lk] || barTexts.en) + `\n⏱ ${elapsedStr}`;
+                            await bot.editMessageText(barMsg, { chat_id: chatId, message_id: progressMsgId, parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: cancelMidBtnTexts[lk] || cancelMidBtnTexts.en, callback_data: `batchconfirm|cancel_${batchId}` }]] } }).catch(() => { });
                         } else {
-                            const pmsg = await bot.sendMessage(chatId, barTexts[lk] || barTexts.en, { parse_mode: 'HTML', disable_notification: true });
+                            const elapsed0 = Math.round((Date.now() - batchStartTime) / 1000);
+                            const barMsg0 = (barTexts[lk] || barTexts.en) + `\n⏱ ${elapsed0}s`;
+                            const pmsg = await bot.sendMessage(chatId, barMsg0, { parse_mode: 'HTML', disable_notification: true, reply_markup: { inline_keyboard: [[{ text: cancelMidBtnTexts[lk] || cancelMidBtnTexts.en, callback_data: `batchconfirm|cancel_${batchId}` }]] } });
                             if (pmsg) progressMsgId = pmsg.message_id;
                         }
                     } catch (e) { /* ignore progress errors */ }
@@ -1450,6 +1462,22 @@ module.exports = {
             }
         }
 
+        // ── #10: Completion notification for long batches ──
+        const totalElapsed = Math.round((Date.now() - batchStartTime) / 1000);
+        if (totalElapsed > 30 && bot && chatId) {
+            const doneTexts = {
+                en: `🔔 <b>Batch Complete!</b>\n✅ ${successCount}/${results.length} transfers done in ${elapsedFmt}.`,
+                vi: `🔔 <b>Batch Hoàn Thành!</b>\n✅ ${successCount}/${results.length} giao dịch hoàn tất trong ${elapsedFmt}.`,
+                zh: `🔔 <b>批量完成!</b>\n✅ ${successCount}/${results.length} 笔转账完成, 耗时 ${elapsedFmt}.`,
+                ko: `🔔 <b>배치 완료!</b>\n✅ ${successCount}/${results.length}건 전송 완료 (${elapsedFmt}).`,
+                ru: `🔔 <b>Пакет завершён!</b>\n✅ ${successCount}/${results.length} транзакций за ${elapsedFmt}.`,
+                id: `🔔 <b>Batch Selesai!</b>\n✅ ${successCount}/${results.length} transfer selesai dalam ${elapsedFmt}.`
+            };
+            try {
+                await bot.sendMessage(chatId, doneTexts[lk] || doneTexts.en, { parse_mode: 'HTML', disable_notification: false });
+            } catch (e) { /* push notification is best-effort */ }
+        }
+
         // ── Delete progress bar message ──
         if (progressMsgId && bot && chatId) {
             try { await bot.deleteMessage(chatId, progressMsgId).catch(() => { }); } catch (_) { }
@@ -1495,6 +1523,41 @@ module.exports = {
             } catch (e) { /* ignore */ }
         }
 
+        // ── #4: Auto-save template prompt ──
+        const uniqueDestAddrs = [...new Set(results.filter(r => r.status === '✅').map(r => r.to).filter(Boolean))];
+        if (uniqueDestAddrs.length >= 3 && bot && chatId) {
+            if (!global._batchSaveTemplatePending) global._batchSaveTemplatePending = new Map();
+            const tplId = `tpl_${userId}_${Date.now()}`;
+            global._batchSaveTemplatePending.set(tplId, {
+                addresses: uniqueDestAddrs,
+                userId,
+                createdAt: Date.now()
+            });
+            setTimeout(() => { global._batchSaveTemplatePending.delete(tplId); }, 5 * 60 * 1000);
+
+            const saveTplTexts = {
+                en: `💾 Save these ${uniqueDestAddrs.length} addresses as a template?`,
+                vi: `💾 Lưu ${uniqueDestAddrs.length} địa chỉ này thành template?`,
+                zh: `💾 将这 ${uniqueDestAddrs.length} 个地址保存为模板？`,
+                ko: `💾 이 ${uniqueDestAddrs.length}개 주소를 템플릿으로 저장?`,
+                ru: `💾 Сохранить ${uniqueDestAddrs.length} адресов как шаблон?`,
+                id: `💾 Simpan ${uniqueDestAddrs.length} alamat sebagai template?`
+            };
+            const saveBtnTexts = {
+                en: '💾 Save Template', vi: '💾 Lưu Template',
+                zh: '💾 保存模板', ko: '💾 템플릿 저장',
+                ru: '💾 Сохранить шаблон', id: '💾 Simpan Template'
+            };
+            try {
+                await bot.sendMessage(chatId, saveTplTexts[lk] || saveTplTexts.en, {
+                    disable_notification: true,
+                    reply_markup: { inline_keyboard: [[
+                        { text: saveBtnTexts[lk] || saveBtnTexts.en, callback_data: `batchsavetemplate|${tplId}` }
+                    ]] }
+                });
+            } catch (e) { /* template prompt is best-effort */ }
+        }
+
         if (fullReport.length <= TG_LIMIT) {
             return { success: true, action: true, displayMessage: fullReport.trim() };
         }
@@ -1528,6 +1591,84 @@ module.exports = {
         return { success: true, action: true, displayMessage: (header + '\n\n' + walletBlocks.slice(0, 10).join('\n\n')).trim() };
     },
 
+
+    // ═══════════════════════════════════════════════════════
+    // #9: Transfer History Dashboard
+    // ═══════════════════════════════════════════════════════
+    async get_transfer_history(args, context) {
+        const { dbAll } = require('../../../../db/core');
+        const userId = context?.userId;
+        if (!userId) return '❌ User not identified.';
+        try {
+            const lang = context?.lang || 'en';
+            const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+            const limit = Math.min(parseInt(args.limit) || 20, 100);
+            const period = args.period || '30d';
+            let since = 0;
+            if (period === '7d') since = Math.floor(Date.now() / 1000) - 7 * 86400;
+            else if (period === '30d') since = Math.floor(Date.now() / 1000) - 30 * 86400;
+
+            const rows = await dbAll(
+                `SELECT * FROM wallet_tx_history WHERE userId = ? AND type IN ('transfer_out', 'batch_transfer') AND createdAt >= ? ORDER BY createdAt DESC LIMIT ?`,
+                [userId, since, limit]
+            );
+
+            if (!rows || rows.length === 0) {
+                const emptyTexts = {
+                    en: '📭 No transfers found in this period.',
+                    vi: '📭 Không tìm thấy giao dịch nào trong khoảng thời gian này.',
+                    zh: '📭 该期间未找到转账记录。',
+                    ko: '📭 해당 기간에 전송 기록이 없습니다.',
+                    ru: '📭 Переводов за этот период не найдено.',
+                    id: '📭 Tidak ada transfer ditemukan dalam periode ini.'
+                };
+                return emptyTexts[lk] || emptyTexts.en;
+            }
+
+            const headerTexts = {
+                en: 'TRANSFER HISTORY', vi: 'LỊCH SỬ CHUYỂN TIỀN',
+                zh: '转账历史', ko: '전송 기록',
+                ru: 'ИСТОРИЯ ПЕРЕВОДОВ', id: 'RIWAYAT TRANSFER'
+            };
+            const totalLabel = { en: 'Total:', vi: 'Tổng:', zh: '总计:', ko: '합계:', ru: 'Итого:', id: 'Total:' };
+            const periodLabels = { en: 'Period:', vi: 'Khoảng:', zh: '期间:', ko: '기간:', ru: 'Период:', id: 'Periode:' };
+
+            // Group by date
+            const byDate = {};
+            let totalAmount = 0;
+            for (const r of rows) {
+                const dt = new Date(r.createdAt * 1000);
+                const dateKey = dt.toISOString().split('T')[0];
+                if (!byDate[dateKey]) byDate[dateKey] = [];
+                byDate[dateKey].push(r);
+                totalAmount += Number(r.fromAmount || 0);
+            }
+
+            const explorerBase = _getExplorerUrl(rows[0]?.chainIndex || '196');
+            let report = `📋 <b>${headerTexts[lk] || headerTexts.en}</b>\n`;
+            report += `━━━━━━━━━━━━━━━━━━\n`;
+            report += `${periodLabels[lk] || periodLabels.en} <b>${period}</b> | ${totalLabel[lk] || totalLabel.en} <b>${rows.length}</b> txs\n\n`;
+
+            for (const [date, txs] of Object.entries(byDate)) {
+                const dayTotal = txs.reduce((s, t) => s + Number(t.fromAmount || 0), 0);
+                report += `📅 <b>${date}</b> (${txs.length} txs, ~${dayTotal.toFixed(2)} ${txs[0]?.fromSymbol || ''})\n`;
+                for (const tx of txs.slice(0, 5)) {
+                    const toShort = tx.toToken ? `${tx.toToken.slice(0, 6)}...${tx.toToken.slice(-4)}` : '?';
+                    const txLink = tx.txHash ? `<a href="${explorerBase}/tx/${tx.txHash}">🔗</a>` : '';
+                    report += `  → ${toShort} | ${Number(tx.fromAmount || 0).toFixed(4)} ${tx.fromSymbol || ''} ${txLink}\n`;
+                }
+                if (txs.length > 5) report += `  ... +${txs.length - 5} more\n`;
+                report += '\n';
+            }
+
+            report += `━━━━━━━━━━━━━━━━━━\n`;
+            report += `💰 ${totalLabel[lk] || totalLabel.en} ${totalAmount.toFixed(4)} tokens across ${rows.length} transfers`;
+
+            return { displayMessage: report.trim(), action: true, success: true };
+        } catch (e) {
+            return `❌ Error: ${e.message}`;
+        }
+    },
     async get_wallet_pnl(args, context) {
         const { dbAll } = require('../../../../db/core');
         const userId = context?.userId;

@@ -3,7 +3,7 @@ module.exports.ONCHAIN_TOOLS = [
         functionDeclarations: [
             {
                 name: 'get_token_price',
-                description: 'Get the current real-time price of one or more tokens on-chain. Use this when users ask about token prices, e.g. "BTC price", "How much is OKB?"',
+                description: 'Get the current real-time price of one or more tokens on-chain. Use ONLY when users ask about token PRICE. Vietnamese: "giá token", "bao nhiêu", "giá bao nhiêu". English: "BTC price", "How much is OKB?". Do NOT use this for holder queries, chart queries, or security checks — use the appropriate tool instead.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -25,7 +25,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'search_token',
-                description: 'Search for tokens by name, symbol, or contract address. Use this when you need to find a token\'s contract address, e.g. "find BANMAO token", "search for USDT on X Layer"',
+                description: 'Search for tokens by name, symbol, or contract address. Use ONLY when user wants to FIND/DISCOVER a token or get its contract address. Vietnamese: "tìm token", "tìm kiếm token". Do NOT use for price, holders, charts, or security — use the specific tool instead.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -37,7 +37,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'get_wallet_balance',
-                description: 'Get the total portfolio value and token balances of a wallet address. Use this when users ask "how much is in my wallet?", "check my balance", or "what tokens do I have?"',
+                description: 'Get the total portfolio value and token balances of a wallet address. Vietnamese: "số dư ví", "tài sản ví", "ví có gì". English: "check balance", "what tokens do I have?". For WATCH wallets only — for trading wallets use get_trading_wallet_balance.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -63,7 +63,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'get_top_tokens',
-                description: 'Get trending/top tokens by price change, volume, or market cap. Use when users ask "trending tokens", "top gainers", "best tokens today"',
+                description: 'Get trending/top tokens by price change, volume, or market cap. Vietnamese: "token nổi bật", "token trending", "token tăng mạnh", "coin hot". English: "trending tokens", "top gainers". Do NOT use for top HOLDERS — use get_token_holders instead.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -75,7 +75,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'get_token_holders',
-                description: 'Get top holders and holder distribution for a token. Use when users ask "who holds this token?", "holder distribution", "whale analysis"',
+                description: 'Get top holders and holder distribution for a token. Use when users ask about WHO holds/owns a token, holder lists, whale addresses. Vietnamese: "ai đang nắm giữ", "top holder", "ai giữ token", "cá voi", "holder lớn nhất", "phân bổ holder", "ai sở hữu". English: "who holds", "top holders", "holder distribution", "whale analysis". IMPORTANT: If user mentions "holder" or "nắm giữ" or "sở hữu" with a token name, ALWAYS use this tool, NOT get_token_price.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -87,7 +87,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'get_gas_price',
-                description: 'Get current gas prices for a blockchain. Use when users ask "gas fees", "how much is gas?", "network congestion"',
+                description: 'Get current gas prices for a blockchain. Vietnamese: "phí gas", "giá gas", "gas bao nhiêu". English: "gas fees", "how much is gas?",',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -97,7 +97,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'get_token_info',
-                description: 'Get detailed token metadata: market cap, liquidity, 24h volume, price change, social links. Use when users ask for detailed analysis of a token.',
+                description: 'Get detailed token metadata: market cap, liquidity, 24h volume, price change, social links. Vietnamese: "thông tin token", "chi tiết token". Use when users want comprehensive token overview (not just price).',
                 parameters: {
                     type: 'object',
                     properties: {

@@ -954,7 +954,126 @@ function registerBatchTransferCallbacks(bot, getLang) {
     }
   });
 
-  log.child('BatchTransfer').info('✔ Batch confirm + retry callbacks registered');
+
+  // batchsavetemplate|tpl_xxx — Save addresses from batch as template
+  bot.on('callback_query', async (query) => {
+    const data = query.data || '';
+    if (!data.startsWith('batchsavetemplate|')) return;
+
+    const tplId = data.slice('batchsavetemplate|'.length);
+    const pending = global._batchSaveTemplatePending?.get(tplId);
+    if (!pending) {
+      await bot.answerCallbackQuery(query.id, { text: '⏰ Expired', show_alert: false });
+      try { await bot.deleteMessage(query.message.chat.id, query.message.message_id); } catch (_) { }
+      return;
+    }
+
+    global._batchSaveTemplatePending.delete(tplId);
+
+    // Generate template name from timestamp
+    const tplName = 'batch_' + new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+    try {
+      const { dbRun } = require('../../db/core');
+      await dbRun(
+        'INSERT OR REPLACE INTO wallet_templates (userId, name, addresses, createdAt) VALUES (?, ?, ?, ?)',
+        [pending.userId, tplName, JSON.stringify(pending.addresses), Math.floor(Date.now() / 1000)]
+      );
+
+      let lang = 'en';
+      try { lang = await getLang(query.message); } catch (_) { }
+      const savedTexts = {
+        en: `✅ Saved template "<b>${tplName}</b>" with ${pending.addresses.length} addresses.`,
+        vi: `✅ Đã lưu template "<b>${tplName}</b>" với ${pending.addresses.length} địa chỉ.`,
+        zh: `✅ 已保存模板 "<b>${tplName}</b>"，含 ${pending.addresses.length} 个地址。`,
+        ko: `✅ 템플릿 "<b>${tplName}</b>" 저장 (${pending.addresses.length}개 주소).`,
+        ru: `✅ Шаблон "<b>${tplName}</b>" сохранён (${pending.addresses.length} адресов).`,
+        id: `✅ Template "<b>${tplName}</b>" disimpan dengan ${pending.addresses.length} alamat.`
+      };
+      const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+
+      await bot.answerCallbackQuery(query.id, { text: '✅ Saved!' });
+      await bot.editMessageText(savedTexts[lk] || savedTexts.en, {
+        chat_id: query.message.chat.id,
+        message_id: query.message.message_id,
+        parse_mode: 'HTML'
+      }).catch(() => { });
+    } catch (err) {
+      log.child('BatchSaveTemplate').error('Save template error:', err.message);
+      await bot.answerCallbackQuery(query.id, { text: '❌ Error saving template', show_alert: true });
+    }
+  });
+
+  // csvbatch_transfer|csv_xxx or csvbatch_check|csv_xxx — Handle CSV file upload actions
+  bot.on('callback_query', async (query) => {
+    const data = query.data || '';
+    if (!data.startsWith('csvbatch_')) return;
+
+    const [action, csvId] = data.split('|');
+    if (!csvId) return;
+
+    if (action === 'csvbatch_cancel') {
+      global._csvBatchPending?.delete(csvId);
+      await bot.answerCallbackQuery(query.id);
+      try { await bot.deleteMessage(query.message.chat.id, query.message.message_id); } catch (_) { }
+      return;
+    }
+
+    const pending = global._csvBatchPending?.get(csvId);
+    if (!pending) {
+      await bot.answerCallbackQuery(query.id, { text: '⏰ Expired', show_alert: false });
+      try { await bot.deleteMessage(query.message.chat.id, query.message.message_id); } catch (_) { }
+      return;
+    }
+
+    global._csvBatchPending.delete(csvId);
+    try { await bot.deleteMessage(query.message.chat.id, query.message.message_id); } catch (_) { }
+
+    const entries = pending.entries;
+    const addrList = entries.map(e => e.address).join('\n');
+
+    if (action === 'csvbatch_transfer') {
+      const hasAmounts = entries.some(e => e.amount);
+      let transferCmd;
+      if (hasAmounts) {
+        const transferDetails = entries.map(e => `${e.address} ${e.amount}`).join('\n');
+        transferCmd = `batch transfer to these addresses with specified amounts:\n${transferDetails}`;
+      } else {
+        transferCmd = `batch transfer to these ${entries.length} addresses:\n${addrList}\nPlease ask me what token and amount to use.`;
+      }
+      // Create synthetic message for AI
+      const syntheticMsg = {
+        ...pending.msg,
+        text: '/aib ' + transferCmd,
+        caption: undefined,
+        document: undefined
+      };
+      try {
+        const { handleAiaCommand } = require('./aiHandlers');
+        await handleAiaCommand(syntheticMsg);
+      } catch (e) {
+        log.child('CSVBatch').error('Transfer from CSV error:', e.message);
+      }
+    } else if (action === 'csvbatch_check') {
+      const checkCmd = `check balances of these ${entries.length} wallets:\n${addrList}`;
+      const syntheticMsg = {
+        ...pending.msg,
+        text: '/aib ' + checkCmd,
+        caption: undefined,
+        document: undefined
+      };
+      try {
+        const { handleAiaCommand } = require('./aiHandlers');
+        await handleAiaCommand(syntheticMsg);
+      } catch (e) {
+        log.child('CSVBatch').error('Check from CSV error:', e.message);
+      }
+    }
+
+    await bot.answerCallbackQuery(query.id);
+  });
+
+  log.child('BatchTransfer').info('✔ Batch confirm + retry + save-template + CSV callbacks registered');
 }
 
 module.exports = {
