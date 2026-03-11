@@ -102,6 +102,11 @@ function chatRateLimit(userId) {
     }
     return bucket.count <= CHAT_RATE_LIMIT;
 }
+// Periodic cleanup for rate limiter (every 5 min)
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of chatRateBuckets) { if (v.resetAt < now) chatRateBuckets.delete(k); }
+}, 5 * 60 * 1000);
 
 // ── Gemini client pool ───────────────────────────────────
 function getGeminiClient(apiKey) {
@@ -367,8 +372,28 @@ function createChatRoutes() {
             res.json({
                 reply: finalResponse || 'No response generated.',
                 conversationId: sessionKey,
-                toolCalls: toolCalls.length > 0 ? toolCalls : undefined
+                toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+                title: session.title
             });
+
+            // #8 Auto-rename: generate a smart title after first exchange
+            if (session.messages.length <= 2 && session.title === message.trim().substring(0, 60)) {
+                (async () => {
+                    try {
+                        const titleResp = await client.models.generateContent({
+                            model: GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20',
+                            contents: [{ role: 'user', parts: [{ text: `Summarize this chat in max 5 words as a title. Just the title, no quotes, no explanation.\n\nUser: ${message}\nAI: ${(finalResponse || '').substring(0, 300)}` }] }],
+                            config: { maxOutputTokens: 30, temperature: 0.3 }
+                        });
+                        const newTitle = titleResp?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                        if (newTitle && newTitle.length > 2 && newTitle.length < 80) {
+                            session.title = newTitle;
+                            await saveSession(session);
+                            log.info(`[AutoTitle] "${sessionKey}" → "${newTitle}"`);
+                        }
+                    } catch (e) { log.debug(`AutoTitle failed: ${e.message}`); }
+                })();
+            }
         } catch (err) {
             log.error(`WebChat error: ${err.message}`);
 
@@ -450,6 +475,168 @@ function createChatRoutes() {
             }
         } catch { /* ignore */ }
         res.json({ ok: true });
+    });
+
+    /**
+     * POST /chat/stream
+     * SSE streaming endpoint — sends text chunks in real-time
+     */
+    router.post('/chat/stream', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        if (!chatRateLimit(userId)) return res.status(429).json({ error: 'Rate limited' });
+
+        const { message, conversationId, image, model: requestedModel } = req.body;
+        if (!message?.trim()) return res.status(400).json({ error: 'Message required' });
+
+        // Validate model selection (allow-list)
+        const ALLOWED_MODELS = ['gemini-2.5-flash-preview-05-20', 'gemini-2.5-pro-preview-05-06'];
+        const useModel = ALLOWED_MODELS.includes(requestedModel) ? requestedModel : (GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20');
+
+        // SSE headers
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        });
+        const sendEvent = (event, data) => { try { if (!res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {} };
+
+        // Handle client abort
+        let aborted = false;
+        req.on('close', () => { aborted = true; });
+
+        try {
+            const apiKey = await resolveGeminiKey(userId);
+            if (!apiKey) { sendEvent('error', { error: 'No API key' }); res.end(); return; }
+            const client = getGeminiClient(apiKey);
+            const sessionKey = conversationId || `web_${userId}_${Date.now()}`;
+
+            let session = await getSession(sessionKey, userId);
+            let sessionHistory;
+
+            if (session) {
+                sessionHistory = (session.messages || []).map(m => ({
+                    role: m.role === 'assistant' ? 'model' : m.role,
+                    parts: [{ text: m.content || '' }]
+                }));
+                if (!session._systemInstruction) {
+                    session._systemInstruction = 'You are an AI trading assistant on a web dashboard. Use Markdown formatting. Keep responses conversational and helpful.';
+                }
+            } else {
+                const systemInstruction = await buildSystemInstruction(userId);
+                const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
+                session = {
+                    id: sessionKey, userId,
+                    title: message.trim().substring(0, 60),
+                    messages: [], createdAt: Date.now(), updatedAt: Date.now(),
+                    _systemInstruction: systemInstruction + '\n\n' + aiaPrompt +
+                        '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. Keep responses conversational and helpful.',
+                };
+                sessionHistory = [];
+            }
+
+            // Build user parts (text + optional image)
+            const userParts = [{ text: message.trim() }];
+            if (image && typeof image === 'string' && image.startsWith('data:image/')) {
+                const match = image.match(/^data:(image\/\w+);base64,(.+)$/);
+                if (match) userParts.push({ inlineData: { mimeType: match[1], data: match[2] } });
+            }
+            sessionHistory.push({ role: 'user', parts: userParts });
+            while (sessionHistory.length > SESSION_MAX_MESSAGES) sessionHistory.shift();
+
+            const model = useModel;
+            const mergedTools = getToolDeclarations();
+            let finalResponse = '';
+            const toolCalls = [];
+            let currentHistory = [...sessionHistory];
+            let round = 0;
+
+            while (round < MAX_TOOL_ROUNDS) {
+                if (aborted) break; // Client disconnected, stop processing
+                round++;
+                const response = await client.models.generateContentStream({
+                    model,
+                    contents: currentHistory,
+                    systemInstruction: session._systemInstruction,
+                    config: { tools: mergedTools, temperature: 0.7, maxOutputTokens: 8192 }
+                });
+
+                let roundText = '';
+                let functionCallParts = [];
+                let allParts = [];
+
+                for await (const chunk of response) {
+                    const parts = chunk?.candidates?.[0]?.content?.parts || [];
+                    for (const part of parts) {
+                        allParts.push(part);
+                        if (part.text) {
+                            roundText += part.text;
+                            sendEvent('text-delta', { text: part.text });
+                        }
+                        if (part.functionCall) functionCallParts.push(part);
+                    }
+                }
+
+                if (functionCallParts.length === 0) {
+                    finalResponse = roundText.trim();
+                    currentHistory.push({ role: 'model', parts: allParts.length > 0 ? allParts : [{ text: finalResponse }] });
+                    break;
+                }
+
+                // Process tool calls
+                currentHistory.push({ role: 'model', parts: allParts });
+                const functionResponseParts = [];
+                for (const part of functionCallParts) {
+                    const fc = part.functionCall;
+                    sendEvent('tool-start', { name: fc.name, args: fc.args });
+                    const context = { userId, chatId: userId, lang: req.dashboardUser?.lang || 'en', isWebChat: true };
+
+                    let result;
+                    const { executeWebToolCall } = require('./webToolExecutor');
+                    result = await executeWebToolCall(fc, context);
+                    if (!result) {
+                        // Fallback to onchain tools safely (same as main endpoint)
+                        try { result = await executeToolCall(fc, context); } catch {}
+                    }
+                    if (!result) result = { error: `Tool ${fc.name} not available via web.` };
+                    if (result?.displayMessage) result.displayMessage = htmlToMarkdown(result.displayMessage);
+
+                    toolCalls.push({ name: fc.name, args: fc.args, result: typeof result === 'string' ? result : JSON.stringify(result)?.substring(0, 500) });
+                    sendEvent('tool-result', { name: fc.name, result: typeof result === 'string' ? result : JSON.stringify(result)?.substring(0, 500) });
+                    functionResponseParts.push({ functionResponse: { name: fc.name, response: result || { error: 'No result' } } });
+                }
+                currentHistory.push({ role: 'user', parts: functionResponseParts });
+            }
+
+            // Save session
+            session.messages = currentHistory.slice(-SESSION_MAX_MESSAGES)
+                .filter(h => h.role === 'user' || h.role === 'model')
+                .map(h => ({ role: h.role === 'model' ? 'assistant' : h.role, content: h.parts?.map(p => p.text).filter(Boolean).join('') || '' }));
+            session.updatedAt = Date.now();
+            await saveSession(session);
+
+            sendEvent('done', { conversationId: sessionKey, title: session.title, toolCalls: toolCalls.length > 0 ? toolCalls : undefined });
+            res.end();
+
+            // Auto-rename (fire-and-forget)
+            if (session.messages.length <= 2 && session.title === message.trim().substring(0, 60)) {
+                (async () => {
+                    try {
+                        const titleResp = await client.models.generateContent({
+                            model, contents: [{ role: 'user', parts: [{ text: `Summarize this chat in max 5 words as a title. Just the title, no quotes.\n\nUser: ${message}\nAI: ${(finalResponse || '').substring(0, 300)}` }] }],
+                            config: { maxOutputTokens: 30, temperature: 0.3 }
+                        });
+                        const t = titleResp?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                        if (t && t.length > 2 && t.length < 80) { session.title = t; await saveSession(session); }
+                    } catch {}
+                })();
+            }
+        } catch (err) {
+            log.error(`Stream error: ${err.message}`);
+            sendEvent('error', { error: err.message || 'Stream failed' });
+            res.end();
+        }
     });
 
     return router;

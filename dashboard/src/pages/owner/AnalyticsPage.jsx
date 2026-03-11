@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
-import { BarChart3, MessageCircle, Gamepad2, CalendarCheck, Bot, RefreshCw } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart3, MessageCircle, Gamepad2, CalendarCheck, Bot, RefreshCw, Download } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
 const COLORS = ['#3b82f6', '#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
 
@@ -49,6 +49,29 @@ export default function AnalyticsPage() {
                     <button onClick={fetchAnalytics} className="btn-secondary !py-2 !px-3">
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                     </button>
+                    <button
+                        onClick={() => {
+                            if (!data) return;
+                            const rows = ['Date,Commands'];
+                            (data.dailyUsage || []).forEach(d => rows.push(`${d.date},${d.commands}`));
+                            if (data.topCommands?.length) {
+                                rows.push('', 'Top Commands', 'Command,Count');
+                                data.topCommands.forEach(c => rows.push(`${c.command},${c.count}`));
+                            }
+                            const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `analytics_${period}.csv`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                        }}
+                        className="btn-secondary !py-2 !px-3"
+                        title="Export CSV"
+                        disabled={!data}
+                    >
+                        <Download size={14} />
+                    </button>
                 </div>
             </div>
 
@@ -76,7 +99,7 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Usage over time */}
                 <div className="glass-card p-5">
-                    <h3 className="font-semibold text-surface-100 mb-4">{t('dashboard.analytics.userGrowth')}</h3>
+                    <h3 className="font-semibold text-surface-100 mb-4">{t('dashboard.analytics.commandTrend') || 'Command Usage Trend'}</h3>
                     <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={data?.dailyUsage || []}>
@@ -92,34 +115,62 @@ export default function AnalyticsPage() {
                     </div>
                 </div>
 
-                {/* Top commands */}
+                {/* User Growth Chart */}
                 <div className="glass-card p-5">
-                    <h3 className="font-semibold text-surface-100 mb-4">{t('dashboard.analytics.topCommands')}</h3>
+                    <h3 className="font-semibold text-surface-100 mb-4">{t('dashboard.analytics.userGrowth')}</h3>
                     <div className="h-64">
-                        {data?.topCommands?.length ? (
+                        {data?.userGrowth?.length ? (
                             <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={data.topCommands}
-                                        dataKey="count"
-                                        nameKey="command"
-                                        cx="50%"
-                                        cy="50%"
-                                        outerRadius={80}
-                                        label={({ command, count }) => `${command} (${count})`}
-                                        labelLine={false}
-                                    >
-                                        {data.topCommands.map((_, i) => (
-                                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }} />
-                                </PieChart>
+                                <AreaChart data={data.userGrowth}>
+                                    <defs>
+                                        <linearGradient id="userGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                                    <YAxis tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                    <Tooltip
+                                        contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', fontSize: '12px' }}
+                                        labelStyle={{ color: '#94a3b8' }}
+                                    />
+                                    <Area type="monotone" dataKey="newUsers" stroke="#10b981" fill="url(#userGrad)" strokeWidth={2} />
+                                </AreaChart>
                             </ResponsiveContainer>
                         ) : (
                             <div className="flex items-center justify-center h-full text-surface-200/40">{t('dashboard.common.noData')}</div>
                         )}
                     </div>
+                </div>
+            </div>
+
+            {/* Top commands (full width) */}
+            <div className="glass-card p-5">
+                <h3 className="font-semibold text-surface-100 mb-4">{t('dashboard.analytics.topCommands')}</h3>
+                <div className="h-64">
+                    {data?.topCommands?.length ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={data.topCommands}
+                                    dataKey="count"
+                                    nameKey="command"
+                                    cx="50%"
+                                    cy="50%"
+                                    outerRadius={80}
+                                    label={({ command, count }) => `${command} (${count})`}
+                                    labelLine={false}
+                                >
+                                    {data.topCommands.map((_, i) => (
+                                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="flex items-center justify-center h-full text-surface-200/40">{t('dashboard.common.noData')}</div>
+                    )}
                 </div>
             </div>
         </div>

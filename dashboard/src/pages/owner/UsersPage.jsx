@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import api from '@/api/client';
-import { Users, Search, ShieldX, Shield, Crown, RefreshCw } from 'lucide-react';
+import { Users, Search, ShieldX, Shield, Crown, RefreshCw, Download } from 'lucide-react';
 
 export default function UsersPage() {
     const { t } = useTranslation();
+    const [searchParams] = useSearchParams();
     const [users, setUsers] = useState([]);
     const [bannedUsers, setBannedUsers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
+    const [search, setSearch] = useState(searchParams.get('q') || '');
     const [tab, setTab] = useState('all'); // 'all' | 'banned'
 
     const fetchData = async () => {
@@ -49,15 +51,38 @@ export default function UsersPage() {
         fetchData();
     };
 
-    const formatDate = (ts) => ts ? new Date(ts).toLocaleDateString() : '—';
+    const formatDate = (ts) => ts ? new Date(ts * 1000).toLocaleDateString() : '—';
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-surface-100">{t('dashboard.users.title')}</h1>
-                <button onClick={fetchData} className="btn-secondary flex items-center gap-2 !py-2 !px-3.5 !text-sm">
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                </button>
+                <div className="flex gap-2">
+                    <button onClick={() => {
+                        if (!users.length) return;
+                        const esc = (v) => `"${String(v || '').replace(/"/g, '""')}"`;
+                        const header = 'Name,Username,UserID,Language,LastSeen,Status';
+                        const rows = users.map(u =>
+                            [
+                                esc(u.firstName || u.username || '-'),
+                                esc(u.username || '-'),
+                                esc(u.chatId || u.userId),
+                                esc(u.lang || 'en'),
+                                esc(u.lastSeen ? new Date(u.lastSeen * 1000).toISOString() : '-'),
+                                bannedUsers.some(b => b.userId === u.chatId) ? 'Banned' : 'Active',
+                            ].join(',')
+                        );
+                        const blob = new Blob([header + '\n' + rows.join('\n')], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.href = url; a.download = 'users_export.csv'; a.click();
+                        URL.revokeObjectURL(url);
+                    }} disabled={!users.length} className="btn-secondary flex items-center gap-1.5 !py-2 !px-3.5 !text-sm disabled:opacity-30">
+                        <Download size={14} /> CSV
+                    </button>
+                    <button onClick={fetchData} className="btn-secondary flex items-center gap-2 !py-2 !px-3.5 !text-sm">
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
             </div>
 
             {/* Stats */}

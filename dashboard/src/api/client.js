@@ -56,8 +56,8 @@ class ApiClient {
         return this.request(path, { method: 'PUT', body: JSON.stringify(body) });
     }
 
-    delete(path) {
-        return this.request(path, { method: 'DELETE' });
+    delete(path, body) {
+        return this.request(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) });
     }
 
     // === Owner APIs ===
@@ -83,6 +83,38 @@ class ApiClient {
         return this.get(`/owner/groups${qs ? '?' + qs : ''}`);
     }
 
+    getGroupDetail(chatId) {
+        return this.get(`/owner/groups/${encodeURIComponent(chatId)}`);
+    }
+
+    updateGroupSettings(chatId, data) {
+        return this.put(`/owner/groups/${encodeURIComponent(chatId)}/settings`, data);
+    }
+
+    sendGroupMessage(chatId, text) {
+        return this.post(`/owner/groups/${encodeURIComponent(chatId)}/message`, { text });
+    }
+
+    deleteGroup(chatId) {
+        return this.delete(`/owner/groups/${encodeURIComponent(chatId)}`);
+    }
+
+    syncGroupMembers(chatId) {
+        return this.post(`/owner/groups/${encodeURIComponent(chatId)}/sync`);
+    }
+
+    broadcastMessage(text) {
+        return this.post('/owner/groups/broadcast', { text });
+    }
+
+    getGroupActivity(chatId, limit = 50) {
+        return this.get(`/owner/groups/${encodeURIComponent(chatId)}/activity?limit=${limit}`);
+    }
+
+    getRecentActivity(limit = 20) {
+        return this.get(`/owner/activity/recent?limit=${limit}`);
+    }
+
     getAnalytics(period = '7d') {
         return this.get(`/owner/analytics?period=${period}`);
     }
@@ -104,9 +136,7 @@ class ApiClient {
         return this.put('/user/preferences', prefs);
     }
 
-    getWallets() {
-        return this.get('/user/wallets');
-    }
+    // (wallet methods via /market/wallets below)
 
     getTradingHistory(params = {}) {
         const qs = new URLSearchParams(params).toString();
@@ -205,6 +235,49 @@ class ApiClient {
 
     clearAllChats() {
         return this.delete('/ai/history');
+    }
+
+    // SSE streaming chat
+    async streamChatMessage(message, conversationId, { onTextDelta, onToolStart, onToolResult, onDone, onError, image, model, signal } = {}) {
+        const headers = {
+            'Content-Type': 'application/json',
+            ...useAuthStore.getState().getHeaders(),
+        };
+        const body = { message, conversationId };
+        if (image) body.image = image;
+        if (model) body.model = model;
+
+        const res = await fetch(`${API_BASE}/ai/chat/stream`, {
+            method: 'POST', headers, body: JSON.stringify(body), signal,
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            let currentEvent = '';
+            for (const line of lines) {
+                if (line.startsWith('event: ')) currentEvent = line.slice(7);
+                else if (line.startsWith('data: ') && currentEvent) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (currentEvent === 'text-delta') onTextDelta?.(data.text);
+                        else if (currentEvent === 'tool-start') onToolStart?.(data);
+                        else if (currentEvent === 'tool-result') onToolResult?.(data);
+                        else if (currentEvent === 'done') onDone?.(data);
+                        else if (currentEvent === 'error') onError?.(data);
+                    } catch {}
+                    currentEvent = '';
+                }
+            }
+        }
     }
 
     // === Market APIs ===

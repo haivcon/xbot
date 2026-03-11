@@ -5,20 +5,41 @@ import {
     Wallet, BarChart3, Fuel, TrendingUp, ArrowRightLeft, AlertTriangle
 } from 'lucide-react';
 
-/* ─── Markdown renderer ─── */
+/* ─── Markdown renderer (XSS-safe) ─── */
 function renderMd(text) {
     if (!text) return '';
-    return text
-        .replace(/```([\s\S]*?)```/g, '<pre class="chat-code-block"><code>$1</code></pre>')
+    let safe = text
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/javascript\s*:/gi, '')
+        .replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
+    const codeBlocks = [];
+    safe = safe.replace(/```([\w]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const idx = codeBlocks.length;
+        codeBlocks.push(`<pre class="chat-code-block"><code class="language-${lang}">${code.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`);
+        return `%%CB_${idx}%%`;
+    });
+    safe = safe
+        .replace(/^-{3,}$/gm, '<hr class="chat-hr"/>')
+        .replace(/((?:^[-*] .+$\n?)+)/gm, (block) => {
+            const items = block.trim().split('\n').map(l => `<li>${l.replace(/^[-*] /, '')}</li>`);
+            return `<ul class="chat-list">${items.join('')}</ul>`;
+        })
+        .replace(/((?:^\d+\. .+$\n?)+)/gm, (block) => {
+            const items = block.trim().split('\n').map(l => `<li>${l.replace(/^\d+\. /, '')}</li>`);
+            return `<ol class="chat-list chat-ol">${items.join('')}</ol>`;
+        })
         .replace(/`([^`]+)`/g, '<code class="chat-inline-code">$1</code>')
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="chat-link">$1</a>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, url) => /javascript\s*:/i.test(url) ? t : `<a href="${url}" target="_blank" rel="noopener" class="chat-link">${t}</a>`)
         .replace(/^> (.+)$/gm, '<blockquote class="chat-blockquote">$1</blockquote>')
         .replace(/^### (.+)$/gm, '<h4 class="chat-h4">$1</h4>')
         .replace(/^## (.+)$/gm, '<h3 class="chat-h3">$1</h3>')
         .replace(/^# (.+)$/gm, '<h2 class="chat-h2">$1</h2>')
         .replace(/\n/g, '<br/>');
+    codeBlocks.forEach((block, i) => { safe = safe.replace(`%%CB_${i}%%`, block); });
+    return safe;
 }
 
 /* ─── Tool result visual cards ─── */
@@ -114,6 +135,7 @@ export default function ChatWidget() {
     const [unread, setUnread] = useState(0);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+    const abortRef = useRef(null);
 
     const scrollToBottom = useCallback(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -126,11 +148,16 @@ export default function ChatWidget() {
         const msg = (text || input).trim();
         if (!msg || loading) return;
         setInput('');
+        if (inputRef.current) inputRef.current.style.height = '36px';
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
         setMessages(prev => [...prev, { role: 'user', content: msg }]);
         setLoading(true);
 
         try {
             const data = await api.sendChatMessage(msg, conversationId);
+            if (controller.signal.aborted) return;
             setConversationId(data.conversationId);
             const reply = {
                 role: 'assistant',
@@ -138,15 +165,17 @@ export default function ChatWidget() {
                 toolCalls: data.toolCalls
             };
             setMessages(prev => [...prev, reply]);
-            if (!open) setUnread(prev => prev + 1);
         } catch (err) {
+            if (controller.signal.aborted) return;
             setMessages(prev => [...prev, {
                 role: 'assistant',
                 content: `❌ ${err.message || 'Failed to get response'}`
             }]);
         } finally {
-            setLoading(false);
-            inputRef.current?.focus();
+            if (!controller.signal.aborted) {
+                setLoading(false);
+                inputRef.current?.focus();
+            }
         }
     };
 
@@ -158,8 +187,10 @@ export default function ChatWidget() {
     };
 
     const clearChat = () => {
+        abortRef.current?.abort();
         setMessages([]);
         setConversationId(null);
+        setLoading(false);
     };
 
     // Panel dimensions

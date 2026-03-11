@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
+import useWsStore from '@/stores/wsStore';
 import { SkeletonStatCards, SkeletonCard } from '@/components/Skeleton';
 import {
     Activity,
@@ -14,7 +15,27 @@ import {
     MessageSquare,
     Wifi,
     Zap,
+    UserPlus,
+    Terminal,
+    History,
 } from 'lucide-react';
+
+const ACTION_ICONS = {
+    settings_update: '⚙️',
+    message_sent: '💬',
+    group_deleted: '🗑️',
+    member_sync: '🔄',
+    broadcast: '📡',
+};
+
+function timeAgo(ts) {
+    if (!ts) return '—';
+    const sec = Math.floor(Date.now() / 1000) - ts;
+    if (sec < 60) return 'just now';
+    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+    return `${Math.floor(sec / 86400)}d ago`;
+}
 
 function StatCard({ icon: Icon, label, value, sub, color = 'brand' }) {
     const colors = {
@@ -56,29 +77,62 @@ export default function DashboardPage() {
     const [overview, setOverview] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [recentActivity, setRecentActivity] = useState([]);
+    const wsNotifications = useWsStore((s) => s.notifications);
+    const wsLastEvent = useWsStore((s) => s.lastEvent);
 
-    const fetchAll = async () => {
+    const fetchAll = useCallback(async () => {
         try {
             setLoading(true);
-            const [h, o] = await Promise.allSettled([
+            const [h, o, act] = await Promise.allSettled([
                 api.getHealth(),
                 api.getOverview(),
+                api.getRecentActivity(10),
             ]);
             if (h.status === 'fulfilled') setHealth(h.value);
             if (o.status === 'fulfilled') setOverview(o.value);
+            if (act.status === 'fulfilled') setRecentActivity(act.value?.logs || []);
             setError(null);
         } catch (e) {
             setError(e.message);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
+    // Initial fetch + fallback polling every 30s
     useEffect(() => {
         fetchAll();
-        const interval = setInterval(fetchAll, 15000);
+        const interval = setInterval(fetchAll, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [fetchAll]);
+
+    // WS-driven auto-refresh: re-fetch when new WS events arrive
+    useEffect(() => {
+        if (wsLastEvent && wsLastEvent.type === 'group_activity') {
+            // Lightweight: just refresh overview stats + activity, not full health
+            Promise.allSettled([api.getOverview(), api.getRecentActivity(10)]).then(([o, act]) => {
+                if (o.status === 'fulfilled') setOverview(o.value);
+                if (act.status === 'fulfilled') setRecentActivity(act.value?.logs || []);
+            });
+        }
+    }, [wsLastEvent]);
+
+    // Merge WS real-time notifications as top items in activity feed
+    const mergedActivity = (() => {
+        const wsItems = wsNotifications.slice(0, 5).map(n => ({
+            id: n.id,
+            action: n.action,
+            details: n.details,
+            chatId: n.chatId,
+            createdAt: n.ts,
+            _live: true,
+        }));
+        const existing = recentActivity.filter(
+            a => !wsItems.some(w => w.createdAt === a.createdAt && w.action === a.action)
+        );
+        return [...wsItems, ...existing].slice(0, 10);
+    })();
 
     if (loading && !health) {
         return (
@@ -114,7 +168,7 @@ export default function DashboardPage() {
 
             {/* Overview Stats (from /owner/overview) */}
             {overview && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                     <StatCard
                         icon={Users}
                         label={t('dashboard.users.total')}
@@ -127,6 +181,19 @@ export default function DashboardPage() {
                         label={t('dashboard.groups.total')}
                         value={overview.totalGroups}
                         color="purple"
+                    />
+                    <StatCard
+                        icon={UserPlus}
+                        label={t('dashboard.overview.newToday') || 'New Today'}
+                        value={overview.newUsersToday || 0}
+                        sub={`${overview.newUsersWeek || 0} this week`}
+                        color="emerald"
+                    />
+                    <StatCard
+                        icon={Terminal}
+                        label={t('dashboard.overview.commandsToday') || 'Commands Today'}
+                        value={overview.commandsToday || 0}
+                        color="cyan"
                     />
                     <StatCard
                         icon={Wifi}
@@ -184,7 +251,7 @@ export default function DashboardPage() {
                         />
                     </div>
 
-                    {/* Detail cards */}
+                    {/* Detail cards + Activity Feed */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Database */}
                         <div className="glass-card p-5">
@@ -225,6 +292,33 @@ export default function DashboardPage() {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Recent Activity Feed */}
+                    <div className="glass-card p-5">
+                        <div className="flex items-center gap-3 mb-4">
+                            <History size={18} className="text-purple-400" />
+                            <h3 className="font-semibold text-surface-100">{t('dashboard.overview.recentActivity') || 'Recent Activity'}</h3>
+                        </div>
+                        {mergedActivity.length === 0 ? (
+                            <p className="text-xs text-surface-200/25 text-center py-6">{t('dashboard.common.noData') || 'No activity yet'}</p>
+                        ) : (
+                            <div className="space-y-1.5">
+                                {mergedActivity.map((log, i) => (
+                                    <div key={log.id || i} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${
+                                        log._live ? 'bg-brand-500/5 border border-brand-500/10' : 'bg-white/[0.02] hover:bg-white/[0.04]'
+                                    }`}>
+                                        <span className="text-sm shrink-0">{ACTION_ICONS[log.action] || '📌'}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <span className="text-xs font-medium text-surface-100">{log.action?.replace(/_/g, ' ')}</span>
+                                            {log.details && <span className="text-[10px] text-surface-200/40 ml-2 truncate">{log.details}</span>}
+                                        </div>
+                                        {log._live && <span className="text-[9px] px-1.5 py-0.5 rounded bg-brand-500/15 text-brand-400 font-medium">LIVE</span>}
+                                        <span className="text-[10px] text-surface-200/30 shrink-0">{timeAgo(log.createdAt)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </>
             )}

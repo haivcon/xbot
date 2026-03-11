@@ -74,6 +74,18 @@ async function init() {
         PRIMARY KEY (chatId, keyword)
     )`);
 
+    // Group activity log
+    await dbRun(`CREATE TABLE IF NOT EXISTS group_activity_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chatId TEXT,
+        action TEXT,
+        details TEXT,
+        userId TEXT,
+        createdAt INTEGER
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_group_activity_log_chatId ON group_activity_log(chatId)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_group_activity_log_time ON group_activity_log(createdAt DESC)`);
+
     // User wallet tokens
     await dbRun(`CREATE TABLE IF NOT EXISTS user_wallet_tokens (
         chatId TEXT,

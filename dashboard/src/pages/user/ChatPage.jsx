@@ -3,28 +3,83 @@ import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import {
     MessageSquare, Send, Trash2, Plus, ChevronLeft, Bot, User, Loader2,
-    Sparkles, X, ArrowDown, ChevronDown, ChevronRight, Wrench,
+    Sparkles, X, ArrowDown, ChevronDown, ChevronRight, Wrench, Copy, RefreshCw, Check,
     Wallet, TrendingUp, BarChart3, Zap, Shield, Globe, Coins, ArrowLeftRight,
-    HelpCircle, BookOpen, Star, Bell, Search, Activity, ArrowUpDown, Eye
+    HelpCircle, BookOpen, Star, Bell, Search, Activity, ArrowUpDown, Eye,
+    Download, Pin, PinOff, Keyboard, Mic, MicOff, Paperclip, Image,
+    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge
 } from 'lucide-react';
 import { hapticImpact, hapticNotification } from '@/utils/telegram';
 
-/* ─── Markdown renderer (lightweight) ─── */
+/* ─── Markdown renderer (lightweight, XSS-safe) ─── */
 function renderMarkdown(text) {
     if (!text) return '';
-    let html = text
-        .replace(/```([\w]*)\n?([\s\S]*?)```/g, (_, lang, code) =>
-            `<pre class="chat-code-block"><code class="language-${lang}">${code.trim()}</code></pre>`)
+    // Sanitize: strip dangerous HTML before processing
+    let safe = text
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/javascript\s*:/gi, '')
+        .replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
+
+    // Process code blocks first (protect from further parsing)
+    const codeBlocks = [];
+    safe = safe.replace(/```([\w]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const idx = codeBlocks.length;
+        // Syntax highlighting via CSS classes
+        const langClass = lang ? ` language-${lang}` : '';
+        const langLabel = lang ? `<span class="chat-code-lang">${lang}</span>` : '';
+        codeBlocks.push(`<div class="chat-code-wrapper">${langLabel}<pre class="chat-code-block"><code class="${langClass}">${code.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre></div>`);
+        return `%%CODEBLOCK_${idx}%%`;
+    });
+
+    // Process tables (| a | b | row blocks)
+    safe = safe.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
+        const rows = tableBlock.trim().split('\n').filter(r => r.trim());
+        if (rows.length < 1) return tableBlock;
+        let html = '<table class="chat-table">';
+        rows.forEach((row, i) => {
+            if (row.replace(/[|\-\s]/g, '') === '') return; // skip separator row
+            const cells = row.split('|').filter(c => c !== '').map(c => c.trim());
+            const tag = i === 0 ? 'th' : 'td';
+            html += '<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>';
+        });
+        html += '</table>';
+        return html;
+    });
+
+    // Process block-level elements
+    safe = safe
+        // Horizontal rules
+        .replace(/^-{3,}$/gm, '<hr class="chat-hr"/>')
+        // Unordered lists (consecutive - lines)
+        .replace(/((?:^[-*] .+$\n?)+)/gm, (block) => {
+            const items = block.trim().split('\n').map(l => `<li>${l.replace(/^[-*] /, '')}</li>`);
+            return `<ul class="chat-list">${items.join('')}</ul>`;
+        })
+        // Ordered lists (consecutive 1. lines)
+        .replace(/((?:^\d+\. .+$\n?)+)/gm, (block) => {
+            const items = block.trim().split('\n').map(l => `<li>${l.replace(/^\d+\. /, '')}</li>`);
+            return `<ol class="chat-list chat-ol">${items.join('')}</ol>`;
+        });
+
+    // Process inline markdown
+    safe = safe
         .replace(/`([^`]+)`/g, '<code class="chat-inline-code">$1</code>')
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="chat-link">$1</a>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+            if (/javascript\s*:/i.test(url)) return text; // block js: URLs
+            return `<a href="${url}" target="_blank" rel="noopener" class="chat-link">${text}</a>`;
+        })
         .replace(/^> (.+)$/gm, '<blockquote class="chat-blockquote">$1</blockquote>')
         .replace(/^### (.+)$/gm, '<h4 class="chat-h4">$1</h4>')
         .replace(/^## (.+)$/gm, '<h3 class="chat-h3">$1</h3>')
         .replace(/^# (.+)$/gm, '<h2 class="chat-h2">$1</h2>')
         .replace(/\n/g, '<br/>');
-    return html;
+
+    // Restore code blocks
+    codeBlocks.forEach((block, i) => { safe = safe.replace(`%%CODEBLOCK_${i}%%`, block); });
+    return safe;
 }
 
 /* ─── Tool name → icon + color mapping ─── */
@@ -109,10 +164,17 @@ function ToolCallCard({ toolCall }) {
 }
 
 /* ─── Single message bubble ─── */
-function ChatBubble({ message }) {
+function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, onEdit }) {
+    const [copied, setCopied] = useState(false);
     const isUser = message.role === 'user';
+    const isError = !isUser && message.content?.startsWith('\u274c');
+    const copyText = () => {
+        navigator.clipboard.writeText(message.content || '');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
     return (
-        <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} animate-fadeIn`}>
+        <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} animate-fadeIn group ${isPinned ? 'ring-1 ring-amber-500/20 rounded-2xl p-1' : ''}`}>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isUser
                     ? 'bg-brand-500/20 ring-1 ring-brand-500/30'
                     : 'bg-emerald-500/20 ring-1 ring-emerald-500/30'
@@ -121,18 +183,63 @@ function ChatBubble({ message }) {
                     ? <User size={14} className="text-brand-400" />
                     : <Bot size={14} className="text-emerald-400" />}
             </div>
-            <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${isUser
+            <div className={`max-w-[80%] rounded-2xl px-4 py-3 relative ${isUser
                     ? 'bg-brand-500/15 border border-brand-500/20'
                     : 'bg-surface-800/60 border border-white/5'
                 }`}>
                 {isUser ? (
-                    <p className="text-sm text-surface-100 whitespace-pre-wrap">{message.content}</p>
+                    <>
+                        {message.image && <img src={message.image} alt="" className="max-h-32 rounded-lg mb-2 border border-white/10" />}
+                        <p className="text-sm text-surface-100 whitespace-pre-wrap">{message.content}</p>
+                    </>
                 ) : (
                     <div
                         className="text-sm text-surface-200/90 chat-content"
                         dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
                     />
                 )}
+                {message.ts && (
+                    <span className="block text-[9px] text-surface-200/20 mt-1.5 text-right">
+                        {new Date(message.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                )}
+                {/* Action buttons */}
+                <div className={`absolute -bottom-3 ${isUser ? 'left-2' : 'right-2'} opacity-0 group-hover:opacity-100 transition-opacity flex gap-1`}>
+                    {!isUser && (
+                        <>
+                            <button onClick={copyText} className="p-1 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-surface-100 transition-colors" title="Copy">
+                                {copied ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                            </button>
+                            {onFeedback && (
+                                <>
+                                    <button onClick={() => onFeedback('up')}
+                                        className={`p-1 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'up' ? 'text-emerald-400' : 'text-surface-200/50 hover:text-emerald-400'}`} title="Good">
+                                        <ThumbsUp size={10} />
+                                    </button>
+                                    <button onClick={() => onFeedback('down')}
+                                        className={`p-1 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'down' ? 'text-red-400' : 'text-surface-200/50 hover:text-red-400'}`} title="Bad">
+                                        <ThumbsDown size={10} />
+                                    </button>
+                                </>
+                            )}
+                        </>
+                    )}
+                    {isUser && onEdit && (
+                        <button onClick={onEdit} className="p-1 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-brand-400 transition-colors" title="Edit">
+                            <Edit size={10} />
+                        </button>
+                    )}
+                    {onPin && (
+                        <button onClick={onPin} className={`p-1 rounded-md bg-surface-800 border border-white/10 transition-colors ${isPinned ? 'text-amber-400' : 'text-surface-200/50 hover:text-amber-400'}`} title={isPinned ? 'Unpin' : 'Pin'}>
+                            {isPinned ? <PinOff size={10} /> : <Pin size={10} />}
+                        </button>
+                    )}
+                    {isError && onRetry && (
+                        <button onClick={onRetry} className="p-1 rounded-md bg-surface-800 border border-white/10 text-amber-400/60 hover:text-amber-400 transition-colors" title="Retry">
+                            <RefreshCw size={10} />
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -159,6 +266,13 @@ function TypingIndicator() {
     );
 }
 
+// Token autocomplete data (outside component to avoid re-creation)
+const KNOWN_TOKEN_LIST = ['BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'OKB', 'BANMAO', 'PEPE', 'DOGE', 'SHIB', 'ARB', 'OP', 'AVAX', 'MATIC', 'DOT', 'ADA', 'XRP', 'LINK', 'UNI', 'AAVE'];
+const MODEL_OPTIONS = [
+    { id: 'gemini-2.5-flash-preview-05-20', label: 'Flash (Fast)', desc: 'Quick responses' },
+    { id: 'gemini-2.5-pro-preview-05-06', label: 'Pro (Smart)', desc: 'Better reasoning' },
+];
+
 /* ─── Main ChatPage ─── */
 export default function ChatPage() {
     const { t } = useTranslation();
@@ -171,9 +285,23 @@ export default function ChatPage() {
     const [showScroll, setShowScroll] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
     const [expandedGuide, setExpandedGuide] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [pinnedMessages, setPinnedMessages] = useState([]);
+    const [followUpSuggestions, setFollowUpSuggestions] = useState([]);
+    const [showAutocomplete, setShowAutocomplete] = useState(false);
+    const [autocompleteResults, setAutocompleteResults] = useState([]);
+    const [isListening, setIsListening] = useState(false);
+    const [imagePreview, setImagePreview] = useState(null);
+    const [messageFeedback, setMessageFeedback] = useState({});
+    const [selectedModel, setSelectedModel] = useState(MODEL_OPTIONS[0].id);
+    const [showModelPicker, setShowModelPicker] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const recognitionRef = useRef(null);
+    const imageInputRef = useRef(null);
     const messagesEndRef = useRef(null);
     const chatContainerRef = useRef(null);
     const inputRef = useRef(null);
+    const abortRef = useRef(null);
 
     const scrollToBottom = useCallback(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -181,6 +309,16 @@ export default function ChatPage() {
 
     useEffect(() => { scrollToBottom(); }, [messages, loading, scrollToBottom]);
     useEffect(() => { inputRef.current?.focus(); }, []);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handler = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); startNewChat(); }
+            if (e.key === 'Escape' && showHelp) setShowHelp(false);
+        };
+        document.addEventListener('keydown', handler);
+        return () => document.removeEventListener('keydown', handler);
+    }, [showHelp]);
 
     // Scroll detection
     useEffect(() => {
@@ -209,13 +347,22 @@ export default function ChatPage() {
             setMessages(data.messages || []);
             setConversationId(convId);
             setSidebarOpen(false);
+            setPinnedMessages([]);
+            setFollowUpSuggestions([]);
         } catch { /* ignore */ }
     };
 
     const startNewChat = () => {
+        abortRef.current?.abort();
         setMessages([]);
         setConversationId(null);
         setSidebarOpen(false);
+        setPinnedMessages([]);
+        setFollowUpSuggestions([]);
+        setLoading(false);
+        setIsListening(false);
+        setImagePreview(null);
+        recognitionRef.current?.stop();
         inputRef.current?.focus();
     };
 
@@ -234,32 +381,116 @@ export default function ChatPage() {
 
         hapticImpact('light');
         setInput('');
-        const userMsg = { role: 'user', content: msg };
+        if (inputRef.current) inputRef.current.style.height = '40px';
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const userMsg = { role: 'user', content: msg, ts: Date.now(), image: imagePreview || undefined };
         setMessages(prev => [...prev, userMsg]);
         setLoading(true);
+        setFollowUpSuggestions([]);
+        const currentImage = imagePreview;
+        setImagePreview(null);
 
         try {
-            const data = await api.sendChatMessage(msg, conversationId);
-            setConversationId(data.conversationId);
+            let fullText = '';
+            const streamToolCalls = [];
+            // Add placeholder assistant message for streaming
+            const assistantIdx = { current: -1 };
+            setMessages(prev => {
+                assistantIdx.current = prev.length;
+                return [...prev, { role: 'assistant', content: '', toolCalls: [], ts: Date.now() }];
+            });
 
-            const assistantMsg = {
-                role: 'assistant',
-                content: data.reply,
-                toolCalls: data.toolCalls
-            };
-            setMessages(prev => [...prev, assistantMsg]);
+            await api.streamChatMessage(msg, conversationId, {
+                signal: controller.signal,
+                image: currentImage,
+                model: selectedModel,
+                onTextDelta: (text) => {
+                    fullText += text;
+                    setMessages(prev => {
+                        const copy = [...prev];
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], content: fullText };
+                        return copy;
+                    });
+                },
+                onToolStart: (data) => {
+                    streamToolCalls.push({ name: data.name, args: data.args, result: '...' });
+                    setMessages(prev => {
+                        const copy = [...prev];
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], toolCalls: [...streamToolCalls] };
+                        return copy;
+                    });
+                },
+                onToolResult: (data) => {
+                    const tc = streamToolCalls.find(t => t.name === data.name && t.result === '...');
+                    if (tc) tc.result = data.result;
+                    setMessages(prev => {
+                        const copy = [...prev];
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], toolCalls: [...streamToolCalls] };
+                        return copy;
+                    });
+                },
+                onDone: (data) => {
+                    setConversationId(data.conversationId);
+                    setMessages(prev => {
+                        const copy = [...prev];
+                        if (copy[assistantIdx.current]) {
+                            copy[assistantIdx.current] = {
+                                ...copy[assistantIdx.current],
+                                toolCalls: data.toolCalls || streamToolCalls,
+                            };
+                        }
+                        return copy;
+                    });
+                    setFollowUpSuggestions(buildFollowUps(fullText, data.toolCalls || streamToolCalls));
+                    loadConversations();
+                },
+                onError: (data) => {
+                    setMessages(prev => {
+                        const copy = [...prev];
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], content: `\u274c ${data.error || 'Stream failed'}` };
+                        return copy;
+                    });
+                },
+            });
             hapticNotification('success');
-            loadConversations();
         } catch (err) {
+            if (controller.signal.aborted) return;
             hapticNotification('error');
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: `❌ ${err.message || 'Failed to get AI response. Please try again.'}`
-            }]);
+            // Update the existing streaming placeholder instead of adding a duplicate
+            setMessages(prev => {
+                const copy = [...prev];
+                const lastIdx = copy.length - 1;
+                if (lastIdx >= 0 && copy[lastIdx].role === 'assistant' && !copy[lastIdx].content) {
+                    copy[lastIdx] = { ...copy[lastIdx], content: `\u274c ${err.message || 'Failed to get AI response. Please try again.'}` };
+                    return copy;
+                }
+                return [...prev, {
+                    role: 'assistant',
+                    content: `\u274c ${err.message || 'Failed to get AI response. Please try again.'}`,
+                    ts: Date.now()
+                }];
+            });
         } finally {
-            setLoading(false);
-            inputRef.current?.focus();
+            if (!controller.signal.aborted) {
+                setLoading(false);
+                inputRef.current?.focus();
+            }
         }
+    };
+
+    const retryLastMessage = () => {
+        // Find last user message and resend
+        const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+        if (!lastUserMsg) return;
+        // Remove last error message
+        setMessages(prev => {
+            const copy = [...prev];
+            if (copy.length > 0 && copy[copy.length - 1].content?.startsWith('❌')) copy.pop();
+            return copy;
+        });
+        sendMessage(lastUserMsg.content);
     };
 
     const handleKeyDown = (e) => {
@@ -268,6 +499,181 @@ export default function ChatPage() {
             sendMessage();
         }
     };
+
+    // #5 Export conversation as markdown
+    const exportConversation = () => {
+        if (messages.length === 0) return;
+        const lines = messages.map(m => `**${m.role === 'user' ? 'You' : 'AI'}**: ${m.content}`).join('\n\n---\n\n');
+        const blob = new Blob([`# AI Chat Export\n\n${lines}`], { type: 'text/markdown' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `chat-${new Date().toISOString().slice(0, 10)}.md`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+
+    // #10 Pin/unpin message
+    const togglePin = (msgIndex) => {
+        setPinnedMessages(prev =>
+            prev.includes(msgIndex) ? prev.filter(i => i !== msgIndex) : [...prev, msgIndex]
+        );
+    };
+
+    // #7 Filtered conversations for search
+    const filteredConversations = searchQuery.trim()
+        ? conversations.filter(c => c.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+        : conversations;
+
+    // #2 Build follow-up suggestions from AI response
+    const buildFollowUps = (reply, tools) => {
+        const suggestions = [];
+        const toolNames = (tools || []).map(t => t.name);
+        if (toolNames.includes('get_token_price') || toolNames.includes('get_market_price'))
+            suggestions.push('📊 Show price chart', '🔬 Analyze this token', '🔔 Set price alert');
+        else if (toolNames.includes('analyze_token'))
+            suggestions.push('💱 Swap this token', '⭐ Add to favorites', '🐳 Show whale signals');
+        else if (toolNames.includes('get_signal_list'))
+            suggestions.push('📊 Analyze top signal', '💰 Check my portfolio', '🔔 Set alerts');
+        else if (toolNames.includes('swap_tokens') || toolNames.includes('get_swap_quote'))
+            suggestions.push('💼 Check balance', '📊 Show price', '📈 Top trending tokens');
+        else if (toolNames.includes('get_wallet_balance') || toolNames.includes('list_wallets'))
+            suggestions.push('💱 Swap tokens', '📊 Top trending', '🐳 Whale signals');
+        else
+            suggestions.push('💰 Check balance', '📊 Top tokens', '🐳 Whale signals');
+        return suggestions.slice(0, 3);
+    };
+
+    // #4 Token autocomplete
+    const handleInputChange = (e) => {
+        const val = e.target.value;
+        setInput(val);
+        // Check for $ trigger
+        const match = val.match(/\$(\w*)$/);
+        if (match) {
+            const query = match[1].toUpperCase();
+            const results = KNOWN_TOKEN_LIST.filter(t => t.startsWith(query)).slice(0, 6);
+            setAutocompleteResults(results);
+            setShowAutocomplete(results.length > 0);
+        } else {
+            setShowAutocomplete(false);
+        }
+    };
+    const insertToken = (token) => {
+        setInput(prev => prev.replace(/\$\w*$/, token + ' '));
+        setShowAutocomplete(false);
+        inputRef.current?.focus();
+    };
+
+    // #6 Voice input
+    const toggleVoice = () => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) return;
+        if (isListening) {
+            recognitionRef.current?.stop();
+            setIsListening(false);
+            return;
+        }
+        const recognition = new SpeechRecognition();
+        // Use user's language from i18n, fallback to browser default
+        const langMap = { vi: 'vi-VN', en: 'en-US', zh: 'zh-CN', ko: 'ko-KR', ru: 'ru-RU', id: 'id-ID' };
+        const i18nLang = document.documentElement.lang || 'en';
+        recognition.lang = langMap[i18nLang] || 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            setInput(prev => prev + (prev ? ' ' : '') + transcript);
+            setIsListening(false);
+        };
+        recognition.onerror = () => setIsListening(false);
+        recognition.onend = () => setIsListening(false);
+        recognitionRef.current = recognition;
+        recognition.start();
+        setIsListening(true);
+    };
+
+    // #3 Image upload for multimodal
+    const handleImageUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+            // Show feedback instead of silently ignoring
+            alert(t('dashboard.chatPage.imageTooLarge', 'Image must be under 2MB'));
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => setImagePreview(reader.result);
+        reader.readAsDataURL(file);
+        e.target.value = ''; // Reset so same file can be re-selected
+    };
+
+    // #1 Message feedback (thumbs up/down)
+    const handleFeedback = (msgIndex, type) => {
+        setMessageFeedback(prev => ({
+            ...prev,
+            [msgIndex]: prev[msgIndex] === type ? null : type
+        }));
+    };
+
+    // #3 Edit & resend user message
+    const editMessage = (msgIndex) => {
+        const msg = messages[msgIndex];
+        if (!msg || msg.role !== 'user') return;
+        setInput(msg.content);
+        // Remove this message and all after it
+        setMessages(prev => prev.slice(0, msgIndex));
+        // Clean up stale pins and feedback
+        setPinnedMessages(prev => prev.filter(i => i < msgIndex));
+        setMessageFeedback(prev => {
+            const next = {};
+            for (const k in prev) { if (Number(k) < msgIndex) next[k] = prev[k]; }
+            return next;
+        });
+        setFollowUpSuggestions([]);
+        inputRef.current?.focus();
+    };
+
+    // #5 Share conversation
+    const shareConversation = () => {
+        if (messages.length === 0) return;
+        const lines = messages.map(m => `**${m.role === 'user' ? 'You' : 'AI'}**: ${m.content}`).join('\n\n---\n\n');
+        const text = `# AI Chat\n\n${lines}`;
+        if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(text).then(() => hapticNotification('success')).catch(() => {});
+        } else {
+            // Fallback for insecure contexts (http)
+            const ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+            document.body.removeChild(ta);
+            hapticNotification('success');
+        }
+    };
+
+    // #4 Drag & drop image
+    const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+    const handleDragLeave = (e) => {
+        // Prevent flicker when dragging over child elements
+        if (e.currentTarget.contains(e.relatedTarget)) return;
+        setIsDragging(false);
+    };
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer?.files?.[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        if (file.size > 2 * 1024 * 1024) {
+            alert(t('dashboard.chatPage.imageTooLarge', 'Image must be under 2MB'));
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => setImagePreview(reader.result);
+        reader.readAsDataURL(file);
+    };
+
+    // #10 Context indicator (estimate tokens used)
+    const contextSize = messages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+    const contextPercent = Math.min(100, Math.round((contextSize / 100000) * 100)); // ~100k chars ≈ context window
 
     // Quick suggestion prompts (shown in empty state)
     const suggestionCategories = [
@@ -455,10 +861,26 @@ export default function ChatPage() {
                     </div>
                 </div>
 
+                {/* #7 Search bar */}
+                {conversations.length > 0 && (
+                    <div className="px-3 py-2 border-b border-white/5">
+                        <div className="relative">
+                            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-surface-200/25" />
+                            <input
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder={t('dashboard.chatPage.searchConv', 'Search conversations...')}
+                                className="w-full pl-7 pr-3 py-1.5 rounded-lg bg-surface-800/40 border border-white/5 text-[11px] text-surface-100
+                                    placeholder:text-surface-200/20 focus:outline-none focus:border-brand-500/25 transition-colors"
+                            />
+                        </div>
+                    </div>
+                )}
+
                 <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-                    {conversations.length === 0 ? (
+                    {filteredConversations.length === 0 ? (
                         <p className="text-xs text-surface-200/30 text-center py-8">{t('dashboard.chatPage.noConv', 'No conversations yet')}</p>
-                    ) : conversations.map(conv => (
+                    ) : filteredConversations.map(conv => (
                         <button
                             key={conv.conversationId}
                             onClick={() => loadConversation(conv.conversationId)}
@@ -501,6 +923,59 @@ export default function ChatPage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-1">
+                        {/* Model selector */}
+                        <div className="relative">
+                            <button onClick={() => setShowModelPicker(!showModelPicker)}
+                                className="p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-brand-400 transition-colors flex items-center gap-1"
+                                title="Model">
+                                <Settings size={12} />
+                                <span className="hidden sm:inline text-[10px]">{MODEL_OPTIONS.find(m => m.id === selectedModel)?.label || 'Flash'}</span>
+                            </button>
+                            {showModelPicker && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setShowModelPicker(false)} />
+                                    <div className="absolute right-0 top-full mt-1 w-52 bg-surface-800 border border-white/10 rounded-xl shadow-xl z-20 overflow-hidden">
+                                    {MODEL_OPTIONS.map(m => (
+                                        <button key={m.id} onClick={() => { setSelectedModel(m.id); setShowModelPicker(false); }}
+                                            className={`w-full text-left px-3 py-2.5 text-xs transition-colors flex items-center justify-between ${
+                                                selectedModel === m.id ? 'bg-brand-500/10 text-brand-400' : 'text-surface-200/70 hover:bg-white/5'
+                                            }`}>
+                                            <div>
+                                                <span className="font-medium">{m.label}</span>
+                                                <span className="block text-[10px] text-surface-200/40">{m.desc}</span>
+                                            </div>
+                                            {selectedModel === m.id && <Check size={12} className="text-brand-400" />}
+                                        </button>
+                                    ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                        {/* Context indicator */}
+                        {messages.length > 0 && (
+                            <div className="hidden sm:flex items-center gap-1.5 px-2" title={`Context: ${contextPercent}%`}>
+                                <Gauge size={10} className="text-surface-200/30" />
+                                <div className="w-12 h-1 rounded-full bg-surface-800/60 overflow-hidden">
+                                    <div className={`h-full rounded-full transition-all ${contextPercent > 80 ? 'bg-red-400' : contextPercent > 50 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                                        style={{ width: `${contextPercent}%` }} />
+                                </div>
+                                <span className="text-[9px] text-surface-200/25">{contextPercent}%</span>
+                            </div>
+                        )}
+                        {messages.length > 0 && (
+                            <>
+                                <button onClick={shareConversation}
+                                    className="p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-brand-400 transition-colors"
+                                    title="Share">
+                                    <Share2 size={12} />
+                                </button>
+                                <button onClick={exportConversation}
+                                    className="p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-emerald-400 transition-colors"
+                                    title={t('dashboard.chatPage.export', 'Export chat')}>
+                                    <Download size={12} />
+                                </button>
+                            </>
+                        )}
                         <button onClick={() => setShowHelp(!showHelp)}
                             className={`p-2 rounded-lg transition-colors text-xs flex items-center gap-1.5 ${
                                 showHelp ? 'bg-brand-500/15 text-brand-400 border border-brand-500/20' : 'hover:bg-white/5 text-surface-200/40 hover:text-brand-400'
@@ -519,7 +994,20 @@ export default function ChatPage() {
                 </div>
 
                 {/* Messages */}
-                <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
+                <div ref={chatContainerRef}
+                    className={`flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth relative ${isDragging ? 'ring-2 ring-brand-500/30 ring-inset' : ''}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}>
+                    {/* Drag overlay */}
+                    {isDragging && (
+                        <div className="absolute inset-0 bg-brand-500/5 flex items-center justify-center z-10 pointer-events-none">
+                            <div className="flex items-center gap-2 text-brand-400 text-sm font-medium">
+                                <Image size={20} />
+                                <span>Drop image to analyze</span>
+                            </div>
+                        </div>
+                    )}
                     {/* ─── Help Guide Panel (overlay, toggled from header) ─── */}
                     {showHelp && (
                         <div className="animate-fadeIn mb-4">
@@ -638,25 +1126,62 @@ export default function ChatPage() {
                         </div>
                     ) : (
                         <>
+                            {/* Pinned messages strip */}
+                            {pinnedMessages.length > 0 && (
+                                <div className="mb-3 p-2 rounded-xl bg-amber-500/5 border border-amber-500/15">
+                                    <p className="text-[10px] text-amber-400/70 font-semibold flex items-center gap-1 mb-1.5">
+                                        <Pin size={10} /> {t('dashboard.chatPage.pinned', 'Pinned')} ({pinnedMessages.length})
+                                    </p>
+                                    <div className="space-y-1">
+                                        {pinnedMessages.map(idx => messages[idx] && (
+                                            <div key={idx}
+                                                className="text-[11px] text-surface-200/60 truncate px-2 py-1 rounded-lg bg-surface-800/30 cursor-pointer hover:bg-surface-800/50 transition-colors"
+                                                onClick={() => document.getElementById(`msg-${idx}`)?.scrollIntoView({ behavior: 'smooth' })}>
+                                                📌 {messages[idx].content?.substring(0, 80)}...
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {messages.map((msg, i) => (
-                                <div key={i}>
-                                    {/* Tool calls card (shown before assistant text) */}
+                                <div key={i} id={`msg-${i}`}>
                                     {msg.toolCalls && msg.toolCalls.length > 0 && (
                                         <div className="ml-11 mb-2 space-y-1.5">
                                             <p className="text-[10px] text-surface-200/30 flex items-center gap-1.5 mb-1">
                                                 <Wrench size={10} />
-                                                {msg.toolCalls.length} tool{msg.toolCalls.length > 1 ? 's' : ''} executed
+                                                {msg.toolCalls.length} {msg.toolCalls.length > 1 ? t('dashboard.chatPage.toolsUsed', 'tools used') : t('dashboard.chatPage.toolUsed', 'tool used')}
                                             </p>
                                             {msg.toolCalls.map((tc, j) => (
                                                 <ToolCallCard key={j} toolCall={tc} />
                                             ))}
                                         </div>
                                     )}
-                                    <ChatBubble message={msg} />
+                                    <ChatBubble
+                                        message={msg}
+                                        onRetry={retryLastMessage}
+                                        onPin={() => togglePin(i)}
+                                        isPinned={pinnedMessages.includes(i)}
+                                        onFeedback={msg.role === 'assistant' ? (type) => handleFeedback(i, type) : undefined}
+                                        feedback={messageFeedback[i]}
+                                        onEdit={msg.role === 'user' ? () => editMessage(i) : undefined}
+                                    />
                                 </div>
                             ))}
                             {loading && <TypingIndicator />}
                             <div ref={messagesEndRef} />
+                            {/* Follow-up suggestions */}
+                            {followUpSuggestions.length > 0 && !loading && (
+                                <div className="flex flex-wrap gap-1.5 mt-2 animate-fadeIn">
+                                    {followUpSuggestions.map((s, i) => (
+                                        <button key={i}
+                                            onClick={() => sendMessage(s.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}]\s*/u, ''))}
+                                            className="px-3 py-1.5 rounded-full text-[11px] bg-brand-500/8 text-brand-400/80
+                                                border border-brand-500/15 hover:bg-brand-500/15 hover:text-brand-400 transition-all">
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
@@ -672,19 +1197,53 @@ export default function ChatPage() {
 
                 {/* Input */}
                 <div className="p-3 border-t border-white/5 bg-surface-900/80 backdrop-blur-sm">
+                    {/* Image preview */}
+                    {imagePreview && (
+                        <div className="mb-2 flex items-center gap-2">
+                            <div className="relative">
+                                <img src={imagePreview} alt="" className="h-16 rounded-lg border border-white/10 object-cover" />
+                                <button onClick={() => setImagePreview(null)}
+                                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[8px]">
+                                    <X size={8} />
+                                </button>
+                            </div>
+                            <span className="text-[10px] text-surface-200/30">{t('dashboard.chatPage.imageAttached', 'Image attached — AI will analyze')}</span>
+                        </div>
+                    )}
                     <div className="flex items-end gap-2">
+                        {/* Image upload button */}
+                        <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                        <button
+                            onClick={() => imageInputRef.current?.click()}
+                            className="p-2.5 rounded-xl hover:bg-white/5 text-surface-200/30 hover:text-surface-200/60 transition-all flex-shrink-0"
+                            title={t('dashboard.chatPage.uploadImage', 'Upload image for analysis')}>
+                            <Paperclip size={16} />
+                        </button>
                         <div className="flex-1 relative">
+                            {/* Token autocomplete dropdown */}
+                            {showAutocomplete && (
+                                <div className="absolute bottom-full mb-1 left-0 w-full bg-surface-800 border border-white/10 rounded-xl shadow-xl z-10 overflow-hidden">
+                                    {autocompleteResults.map(token => (
+                                        <button key={token}
+                                            onClick={() => insertToken(token)}
+                                            className="w-full text-left px-3 py-2 text-xs text-surface-100 hover:bg-brand-500/10 transition-colors flex items-center gap-2">
+                                            <Coins size={12} className="text-amber-400" />
+                                            <span className="font-semibold">{token}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                             <textarea
                                 ref={inputRef}
                                 value={input}
-                                onChange={(e) => setInput(e.target.value)}
+                                onChange={handleInputChange}
                                 onKeyDown={handleKeyDown}
                                 placeholder={t('dashboard.chatPage.inputPlaceholder', 'Ask anything about crypto, tokens, wallets...')}
                                 rows={1}
-                                className="w-full px-4 py-2.5 rounded-xl bg-surface-800/60 border border-white/5
+                                className={`w-full px-4 py-2.5 rounded-xl bg-surface-800/60 border
                                     text-sm text-surface-100 placeholder:text-surface-200/25
                                     focus:outline-none focus:border-brand-500/30 focus:ring-1 focus:ring-brand-500/20
-                                    resize-none transition-all"
+                                    resize-none transition-all ${isListening ? 'border-red-500/40 ring-1 ring-red-500/20' : 'border-white/5'}`}
                                 style={{ maxHeight: '120px', minHeight: '40px' }}
                                 onInput={(e) => {
                                     e.target.style.height = '40px';
@@ -692,6 +1251,18 @@ export default function ChatPage() {
                                 }}
                             />
                         </div>
+                        {/* Voice input button */}
+                        {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
+                            <button
+                                onClick={toggleVoice}
+                                className={`p-2.5 rounded-xl transition-all flex-shrink-0 ${isListening
+                                    ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse'
+                                    : 'hover:bg-white/5 text-surface-200/30 hover:text-surface-200/60'
+                                }`}
+                                title={isListening ? 'Stop' : t('dashboard.chatPage.voiceHint', 'Voice input')}>
+                                {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+                            </button>
+                        )}
                         <button
                             onClick={() => sendMessage()}
                             disabled={!input.trim() || loading}
@@ -706,6 +1277,7 @@ export default function ChatPage() {
                     </div>
                     <p className="text-[9px] text-surface-200/20 mt-1.5 text-center">
                         {t('dashboard.chatPage.disclaimer', 'AI can make mistakes. Always verify important information.')}
+                        {' · '}<span className="text-surface-200/15">$token · Ctrl+N · Esc</span>
                     </p>
                 </div>
             </div>

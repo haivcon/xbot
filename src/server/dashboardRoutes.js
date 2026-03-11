@@ -540,7 +540,224 @@ function createDashboardRoutes() {
     router.get('/owner/groups', ownerGuard, async (req, res) => {
         try {
             const groups = await db.listGroupProfiles?.() || [];
-            res.json({ groups });
+            // Enrich each group with subscription + settings summary
+            const enriched = await Promise.all(groups.map(async (g) => {
+                let subscription = null, settingsSummary = {};
+                try { subscription = await db.getGroupSubscription?.(g.chatId); } catch {}
+                try {
+                    const s = await db.getGroupBotSettings?.(g.chatId);
+                    settingsSummary = { hasRules: !!s?.rulesText, hasBlacklist: (s?.blacklist?.length || 0) > 0 };
+                } catch {}
+                return { ...g, subscription, ...settingsSummary };
+            }));
+            res.json({ groups: enriched });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Group Detail ---
+    router.get('/owner/groups/:chatId', ownerGuard, async (req, res) => {
+        try {
+            const chatId = decodeURIComponent(req.params.chatId);
+            const [settings, subscription, memberLangs] = await Promise.all([
+                db.getGroupBotSettings?.(chatId) || {},
+                db.getGroupSubscription?.(chatId),
+                db.getGroupMemberLanguages?.(chatId) || [],
+            ]);
+            res.json({
+                settings: settings || {},
+                rules: settings?.rulesText || null,
+                blacklist: Array.isArray(settings?.blacklist) ? settings.blacklist : [],
+                subscription: subscription || null,
+                memberLanguages: memberLangs || [],
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Telegram HTML Sanitizer ---
+    // Telegram only supports: b, strong, i, em, u, ins, s, strike, del, code, pre, a, tg-spoiler, blockquote, tg-emoji
+    const ALLOWED_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'code', 'pre', 'a', 'tg-spoiler', 'blockquote', 'tg-emoji']);
+    function sanitizeTelegramHtml(html) {
+        if (!html) return '';
+        return html
+            // Convert headings to bold + newline
+            .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, '<b>$1</b>\n')
+            // Convert <p> to newlines
+            .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n')
+            // Convert <br> to newlines
+            .replace(/<br\s*\/?>/gi, '\n')
+            // Strip all remaining unsupported tags (keep content)
+            .replace(/<\/?([a-zA-Z][a-zA-Z0-9-]*)[^>]*>/g, (match, tag) => {
+                const t = tag.toLowerCase();
+                if (ALLOWED_TAGS.has(t)) return match;
+                return ''; // strip unsupported tag
+            })
+            .replace(/\n{3,}/g, '\n\n') // collapse excessive newlines
+            .trim();
+    }
+
+    // --- Activity Log Helper (must be defined before endpoints that use it) ---
+    const logGroupActivity = async (chatId, action, details, userId) => {
+        try {
+            const ts = Math.floor(Date.now() / 1000);
+            await db.dbRun(
+                `INSERT INTO group_activity_log (chatId, action, details, userId, createdAt) VALUES (?, ?, ?, ?, ?)`,
+                [chatId, action, details || '', userId || '', ts]
+            );
+            // Broadcast via WebSocket
+            try {
+                const { broadcastWsEvent } = require('./apiServer');
+                broadcastWsEvent('group_activity', { chatId, action, details, userId, ts });
+            } catch { /* ws might not be ready */ }
+        } catch { /* ignore logging failures */ }
+    };
+
+    // --- Broadcast Message to All Groups (must be before :chatId routes) ---
+    router.post('/owner/groups/broadcast', ownerGuard, async (req, res) => {
+        try {
+            const { text } = req.body;
+            if (!text || !text.trim()) return res.status(400).json({ error: 'Message text required' });
+
+            const { bot } = require('../core/bot');
+            const groups = await db.listGroupProfiles?.() || [];
+            let success = 0, failed = 0;
+
+            for (const [idx, g] of groups.entries()) {
+                try {
+                    await bot.sendMessage(g.chatId, sanitizeTelegramHtml(text.trim()), { parse_mode: 'HTML' });
+                    success++;
+                } catch {
+                    failed++;
+                }
+                // Rate limit: wait 500ms between messages
+                if (idx < groups.length - 1) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+
+            log.info(`Dashboard: Broadcast sent to ${success}/${groups.length} groups by ${req.dashboardUser.userId}`);
+            logGroupActivity('ALL', 'broadcast', `Sent to ${success}/${groups.length} groups`, req.dashboardUser.userId);
+            res.json({ success: true, sent: success, failed, total: groups.length });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Get Recent Activity (all groups, must be before :chatId routes) ---
+    router.get('/owner/activity/recent', ownerGuard, async (req, res) => {
+        try {
+            const limit = Math.min(Number(req.query.limit) || 20, 50);
+            const rows = await db.dbAll(
+                `SELECT * FROM group_activity_log ORDER BY createdAt DESC LIMIT ?`,
+                [limit]
+            ) || [];
+            res.json({ logs: rows });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Update Group Settings ---
+    router.put('/owner/groups/:chatId/settings', ownerGuard, async (req, res) => {
+        try {
+            const chatId = decodeURIComponent(req.params.chatId);
+            const { settings, rules, blacklist, subscription } = req.body;
+
+            // Merge all bot settings updates into a single call to avoid overwrites
+            const settingsUpdates = {};
+            if (settings && typeof settings === 'object') {
+                Object.assign(settingsUpdates, settings);
+            }
+            if (Array.isArray(blacklist)) {
+                settingsUpdates.blacklist = blacklist;
+            }
+            if (Object.keys(settingsUpdates).length > 0) {
+                await db.updateGroupBotSettings?.(chatId, settingsUpdates);
+            }
+
+            // Update rules
+            if (rules !== undefined) {
+                await db.setGroupRules?.(chatId, rules, req.dashboardUser.userId);
+            }
+
+            // Update subscription
+            if (subscription !== undefined) {
+                if (subscription === null) {
+                    await db.removeGroupSubscription?.(chatId);
+                } else if (subscription && typeof subscription === 'object') {
+                    await db.upsertGroupSubscription?.(chatId, subscription.lang || 'en', subscription.minStake || 0, subscription.messageThreadId || null);
+                }
+            }
+
+            log.info(`Dashboard: Group ${chatId} settings updated by ${req.dashboardUser.userId}`);
+            logGroupActivity(chatId, 'settings_update', 'Settings updated via dashboard', req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Send Message to Group ---
+    router.post('/owner/groups/:chatId/message', ownerGuard, async (req, res) => {
+        try {
+            const chatId = decodeURIComponent(req.params.chatId);
+            const { text } = req.body;
+            if (!text || !text.trim()) return res.status(400).json({ error: 'Message text required' });
+
+            const { bot } = require('../core/bot');
+            await bot.sendMessage(chatId, sanitizeTelegramHtml(text.trim()), { parse_mode: 'HTML' });
+            log.info(`Dashboard: Message sent to group ${chatId} by ${req.dashboardUser.userId}`);
+            logGroupActivity(chatId, 'message_sent', text.trim().substring(0, 100), req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            log.error(`Dashboard: Failed to send message to group: ${err.message}`);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Delete Group Profile ---
+    router.delete('/owner/groups/:chatId', ownerGuard, async (req, res) => {
+        try {
+            const chatId = decodeURIComponent(req.params.chatId);
+            await db.removeGroupProfile?.(chatId);
+            // Also clean up related data
+            try { await db.removeGroupSubscription?.(chatId); } catch {}
+            log.info(`Dashboard: Group ${chatId} removed by ${req.dashboardUser.userId}`);
+            logGroupActivity(chatId, 'group_deleted', 'Group profile removed', req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Sync Group Member Count from Telegram ---
+    router.post('/owner/groups/:chatId/sync', ownerGuard, async (req, res) => {
+        try {
+            const chatId = decodeURIComponent(req.params.chatId);
+            const { bot } = require('../core/bot');
+            const count = await bot.getChatMemberCount(chatId);
+            await db.upsertGroupProfile?.({ chatId, memberCount: count });
+            logGroupActivity(chatId, 'member_sync', `Synced: ${count} members`, req.dashboardUser.userId);
+            res.json({ success: true, memberCount: count });
+        } catch (err) {
+            log.error(`Dashboard: Failed to sync group ${req.params.chatId}: ${err.message}`);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Get Group Activity Log ---
+    router.get('/owner/groups/:chatId/activity', ownerGuard, async (req, res) => {
+        try {
+            const chatId = decodeURIComponent(req.params.chatId);
+            const limit = Math.min(Number(req.query.limit) || 50, 100);
+            const rows = await db.dbAll(
+                `SELECT * FROM group_activity_log WHERE chatId = ? ORDER BY createdAt DESC LIMIT ?`,
+                [chatId, limit]
+            ) || [];
+            res.json({ logs: rows });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }
@@ -556,6 +773,25 @@ function createDashboardRoutes() {
             const commandStats = await db.getCommandUsageStats?.(since) || {};
             const userStats = await db.getGlobalUserStats?.() || {};
 
+            // Build user growth data (daily new users)
+            let userGrowth = [];
+            try {
+                const sinceTs = Math.floor(since / 1000);
+                const userList = await db.listUsersDetailed?.() || [];
+                const dailyMap = {};
+                for (let i = 0; i < days; i++) {
+                    const d = new Date(Date.now() - i * 86400000);
+                    dailyMap[d.toISOString().split('T')[0]] = 0;
+                }
+                for (const u of userList) {
+                    if (u.firstSeen && u.firstSeen > sinceTs) {
+                        const date = new Date(u.firstSeen * 1000).toISOString().split('T')[0];
+                        if (dailyMap[date] !== undefined) dailyMap[date]++;
+                    }
+                }
+                userGrowth = Object.entries(dailyMap).sort().map(([date, newUsers]) => ({ date, newUsers }));
+            } catch { /* ignore */ }
+
             res.json({
                 totalCommands: commandStats.total || 0,
                 aiChats: userStats.totalAiChats || 0,
@@ -563,6 +799,7 @@ function createDashboardRoutes() {
                 checkins: userStats.totalCheckins || 0,
                 dailyUsage: commandStats.daily || [],
                 topCommands: commandStats.topCommands || [],
+                userGrowth,
             });
         } catch (err) {
             res.status(500).json({ error: err.message });
@@ -583,8 +820,19 @@ function createDashboardRoutes() {
             const mem = health.status === 'fulfilled' ? health.value : process.memoryUsage();
 
             // Calculate active users (seen in last 7 days)
-            const weekAgo = Date.now() - 7 * 86400000;
+            const weekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
+            const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
             const activeUsers = userList.filter(u => u.lastSeen && u.lastSeen > weekAgo).length;
+            const newUsersToday = userList.filter(u => u.firstSeen && u.firstSeen > todayStart).length;
+            const newUsersWeek = userList.filter(u => u.firstSeen && u.firstSeen > weekAgo).length;
+
+            // Get command count today from usage logs
+            let commandsToday = 0;
+            try {
+                const today = new Date().toISOString().split('T')[0]; // "2026-03-11"
+                const row = await db.dbGet(`SELECT SUM(count) as cnt FROM command_usage_logs WHERE usageDate = ?`, [today]);
+                commandsToday = row?.cnt || 0;
+            } catch { /* table may not exist */ }
 
             // Telegram API latency test
             let telegramLatencyMs = -1;
@@ -598,6 +846,9 @@ function createDashboardRoutes() {
             res.json({
                 totalUsers: userList.length,
                 activeUsers,
+                newUsersToday,
+                newUsersWeek,
+                commandsToday,
                 totalGroups: groupList.length,
                 memory: {
                     rss: Math.round(mem.rss / 1024 / 1024),

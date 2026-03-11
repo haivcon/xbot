@@ -25,6 +25,7 @@ const TradingPage = lazy(() => import('@/pages/user/TradingPage'));
 const LeaderboardPage = lazy(() => import('@/pages/user/LeaderboardPage'));
 const ChatPage = lazy(() => import('@/pages/user/ChatPage'));
 const OKXTradingPage = lazy(() => import('@/pages/user/OKXTradingPage'));
+const TransferHistoryPage = lazy(() => import('@/pages/user/TransferHistoryPage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
@@ -106,6 +107,7 @@ export default function App() {
                     <Route path="trading" element={<SuspenseWrapper><TradingPage /></SuspenseWrapper>} />
                     <Route path="leaderboard" element={<SuspenseWrapper><LeaderboardPage /></SuspenseWrapper>} />
                     <Route path="okx-trading" element={<SuspenseWrapper><OKXTradingPage /></SuspenseWrapper>} />
+                    <Route path="history" element={<SuspenseWrapper><TransferHistoryPage /></SuspenseWrapper>} />
                     {/* 404 */}
                     <Route path="*" element={<SuspenseWrapper><NotFoundPage /></SuspenseWrapper>} />
                 </Route>

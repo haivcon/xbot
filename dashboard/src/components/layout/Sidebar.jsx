@@ -22,7 +22,11 @@ import {
     ChevronDown,
     Check,
     ArrowLeftRight,
+    History,
+    Sun,
+    Moon,
 } from 'lucide-react';
+import useThemeStore from '@/stores/themeStore';
 
 const LANGUAGES = [
     { code: 'en', flag: '🇺🇸', label: 'English' },
@@ -84,6 +88,7 @@ function LanguageDropdown() {
 export default function Sidebar({ open, onClose }) {
     const { t } = useTranslation();
     const { isOwner, isOwnerView, user, logout, toggleViewMode, viewMode } = useAuthStore();
+    const { theme, toggleTheme } = useThemeStore();
     const location = useLocation();
 
     const ownerLinks = [
@@ -100,6 +105,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/chat', icon: Bot, label: t('dashboard.sidebar.aiChat') || 'AI Chat', highlight: true },
         { to: '/profile', icon: User, label: t('dashboard.sidebar.profile') },
         { to: '/wallets', icon: Wallet, label: t('dashboard.sidebar.wallets') },
+        { to: '/history', icon: History, label: t('dashboard.sidebar.history') || 'Transfer History' },
         { to: '/trading', icon: BarChart3, label: t('dashboard.sidebar.trading') },
         { to: '/okx-trading', icon: BarChart3, label: t('dashboard.sidebar.okxTrading') || 'OKX Trading' },
         { to: '/leaderboard', icon: Trophy, label: t('dashboard.sidebar.leaderboard') },
@@ -221,7 +227,16 @@ export default function Sidebar({ open, onClose }) {
                         </span>
                     </button>
                 )}
-                <LanguageDropdown />
+                <div className="flex gap-2">
+                    <LanguageDropdown />
+                    <button
+                        onClick={toggleTheme}
+                        className="flex items-center justify-center w-11 h-11 bg-white/[0.03] border border-white/5 rounded-xl hover:bg-white/[0.06] hover:border-white/10 transition-all"
+                        title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                    >
+                        {theme === 'dark' ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-brand-400" />}
+                    </button>
+                </div>
                 <button
                     onClick={logout}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-red-400/70 hover:text-red-400 hover:bg-red-500/5 rounded-xl transition-colors"
