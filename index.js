@@ -1,5 +1,8 @@
 // Đảm bảo dotenv được gọi ĐẦU TIÊN
 require('dotenv').config();
+// Force IPv4 — fix EFATAL on VPS without IPv6 route to Telegram API
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 const logger = require('./src/core/logger');
 const log = logger.child('Bot');
 
