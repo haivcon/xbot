@@ -602,7 +602,7 @@ function createFunctionTools(toolDeps) {
   };
   const checkWalletBalanceDirectDeclaration = {
     name: 'check_wallet_balance_direct',
-    description: 'Look up any wallet address balance and holdings directly. Use when user pastes a wallet address (0x... or XKO...) and wants to see balances, portfolio, assets. Returns detailed data automatically without requiring any button clicks.',
+    description: 'Look up a SINGLE wallet address balance and holdings directly. Use ONLY when user pastes exactly ONE wallet address (0x... or XKO...) and wants to see balances, portfolio, assets. IMPORTANT: If the user message contains 2 or more wallet addresses (0x...), do NOT use this function. For multiple addresses with a transfer/send request, use batch_transfer instead.',
     parameters: {
       type: Type.OBJECT,
       properties: {
