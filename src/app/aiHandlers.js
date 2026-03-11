@@ -169,7 +169,8 @@ const {
   registerWalletHubCallbacks,
   registerSwapConfirmCallback,
   registerTokenSearchCallbacks,
-  registerInlineQueryHandler
+  registerInlineQueryHandler,
+  registerBatchTransferCallbacks
 } = require('./aiRegistrations');
 
 
@@ -614,6 +615,7 @@ function createAiHandlers(deps) {
   registerSwapConfirmCallback(bot, getLang, t);
   registerTradingWalletCallbacks(bot, getLang, t);
   registerWalletHubCallbacks(bot, getLang, t);
+  registerBatchTransferCallbacks(bot, getLang);
   // ──── Price Alert Cron Job (every 60s) ────
   setInterval(async () => {
     try {
@@ -3763,8 +3765,8 @@ function createAiHandlers(deps) {
       if (uniqueAddresses.length >= 2) {
         const addrList = uniqueAddresses.map((a, i) => `  ${i + 1}. ${a}`).join('\n');
         
-        // Detect user intent
-        const transferKeywords = /chuyển|transfer|gửi|send|distribute|hàng loạt|hang loat|tới.*ví|to.*wallet|转账|보내|전송|перевод|kirim/i;
+        // Detect user intent (includes [TRANSFER] marker from inline keyboard callback)
+        const transferKeywords = /\[TRANSFER\]|chuyển|transfer|gửi|send|distribute|hàng loạt|hang loat|tới.*ví|to.*wallet|转账|보내|전송|перевод|kirim/i;
         const hasTransferIntent = transferKeywords.test(userPrompt);
         
         if (hasTransferIntent) {

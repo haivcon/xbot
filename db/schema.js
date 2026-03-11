@@ -620,6 +620,17 @@ async function init() {
     )`);
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_web_chat_user ON web_chat_sessions(userId, updatedAt DESC)`);
 
+    // Wallet templates (named address lists for batch operations)
+    await dbRun(`CREATE TABLE IF NOT EXISTS wallet_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        addresses TEXT NOT NULL,
+        createdAt INTEGER,
+        updatedAt INTEGER,
+        UNIQUE(userId, name)
+    )`);
+
     console.log("Khởi tạo cấu trúc bảng SQLite hoàn tất.");
 }
 

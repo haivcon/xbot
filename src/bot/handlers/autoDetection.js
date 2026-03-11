@@ -512,19 +512,19 @@ function registerAutoDetection(context) {
 
             await bot.answerCallbackQuery(query.id);
 
-            // Build synthetic message with intent prefix
-            const addrList = pending.addresses.join(' ');
-            let intentPrefix = '';
-
+            // Build synthetic message — keep original text in user's language
+            // The original text already contains addresses; just add minimal intent marker
+            let intentMarker = '';
             if (action === 'multiaddr_transfer') {
-                intentPrefix = `transfer tokens to these ${pending.addresses.length} wallets: `;
+                intentMarker = '[TRANSFER] ';
             } else if (action === 'multiaddr_check') {
-                intentPrefix = `check balance and assets of these ${pending.addresses.length} wallets: `;
+                intentMarker = '[CHECK_BALANCE] ';
             }
 
+            // Prepend the marker + original text preserving user's language
             const syntheticMsg = {
                 ...pending.msg,
-                text: `/aib ${intentPrefix}${pending.originalText}`,
+                text: `/aib ${intentMarker}${pending.originalText}`,
                 caption: undefined
             };
 

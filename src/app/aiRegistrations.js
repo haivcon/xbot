@@ -872,6 +872,91 @@ function registerInlineQueryHandler(bot) {
   log.child('Inline').info('✓ Inline query handler registered');
 }
 
+// ═══════════════════════════════════════════════════════
+// Batch Transfer Callbacks (batchconfirm| and batchretry|)
+// ═══════════════════════════════════════════════════════
+function registerBatchTransferCallbacks(bot, getLang) {
+  // batchconfirm|confirm_xxx or batchconfirm|cancel_xxx
+  bot.on('callback_query', async (query) => {
+    const data = query.data || '';
+    if (!data.startsWith('batchconfirm|')) return;
+
+    const payload = data.slice('batchconfirm|'.length);
+    const isConfirm = payload.startsWith('confirm_');
+    const isCancel = payload.startsWith('cancel_');
+    if (!isConfirm && !isCancel) return;
+
+    const batchId = payload.replace(/^(confirm_|cancel_)/, '');
+    const action = isConfirm ? 'confirm' : 'cancel';
+
+    // Resolve pending confirmation promise
+    const resolver = global._batchTransferPending?.get(batchId);
+    if (resolver) {
+      resolver(action);
+    }
+
+    // Set cancel signal for mid-batch abort
+    if (isCancel && global._batchTransferCancel) {
+      global._batchTransferCancel.set(batchId, true);
+    }
+
+    try { await bot.answerCallbackQuery(query.id); } catch (_) { }
+    try { await bot.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => { }); } catch (_) { }
+  });
+
+  // batchretry|retry_xxx
+  bot.on('callback_query', async (query) => {
+    const data = query.data || '';
+    if (!data.startsWith('batchretry|')) return;
+
+    const retryId = data.slice('batchretry|'.length);
+    const pending = global._batchRetryPending?.get(retryId);
+    if (!pending) {
+      const expiredTexts = {
+        en: '⏰ Expired', vi: '⏰ Hết hạn', zh: '⏰ 已过期',
+        ko: '⏰ 만료됨', ru: '⏰ Истекло', id: '⏰ Kedaluwarsa'
+      };
+      await bot.answerCallbackQuery(query.id, { text: expiredTexts.vi, show_alert: false });
+      try { await bot.deleteMessage(query.message.chat.id, query.message.message_id); } catch (_) { }
+      return;
+    }
+
+    global._batchRetryPending.delete(retryId);
+    try { await bot.deleteMessage(query.message.chat.id, query.message.message_id); } catch (_) { }
+
+    const retryingTexts = {
+      en: '🔄 Retrying failed transfers...',
+      vi: '🔄 Đang thử lại các giao dịch thất bại...',
+      zh: '🔄 正在重试失败的转账...',
+      ko: '🔄 실패한 전송을 재시도합니다...',
+      ru: '🔄 Повторяю неудачные переводы...',
+      id: '🔄 Mengulangi transfer yang gagal...'
+    };
+
+    let lang = 'en';
+    try {
+      lang = await getLang(query.message);
+    } catch (_) { }
+
+    await bot.answerCallbackQuery(query.id, { text: retryingTexts[lang] || retryingTexts.en });
+
+    // Re-execute batch_transfer with only failed transfers
+    try {
+      const walletTools = require('../features/ai/onchain/walletTools');
+      const result = await walletTools.batch_transfer(pending.args, pending.context);
+      const displayMsg = typeof result === 'string' ? result : result?.displayMessage;
+      if (displayMsg) {
+        await bot.sendMessage(query.message.chat.id, displayMsg, { parse_mode: 'HTML', disable_web_page_preview: true }).catch(() => { });
+      }
+    } catch (err) {
+      log.child('BatchRetry').error('Retry failed:', err.message);
+      await bot.sendMessage(query.message.chat.id, `❌ Retry error: ${err.message?.slice(0, 100)}`).catch(() => { });
+    }
+  });
+
+  log.child('BatchTransfer').info('✔ Batch confirm + retry callbacks registered');
+}
+
 module.exports = {
   registerImportKeyCommand,
   registerTradingWalletCallbacks,
@@ -879,5 +964,6 @@ module.exports = {
   registerWalletHubCallbacks,
   registerSwapConfirmCallback,
   registerTokenSearchCallbacks,
-  registerInlineQueryHandler
+  registerInlineQueryHandler,
+  registerBatchTransferCallbacks
 };

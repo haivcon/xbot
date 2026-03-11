@@ -972,6 +972,7 @@ module.exports = {
         }
 
         let processedCount = 0;
+        let progressMsgId = null; // Track progress bar message for editing
 
         // #3: Wallet cache to avoid repeated DB queries and key decryption
         const walletCache = new Map();
@@ -1248,12 +1249,35 @@ module.exports = {
                     status: `❌ ${e.message?.slice(0, 60)}`
                 });
             }
-            // Send progress update for large batches
+            // Visual progress bar for large batches
             processedCount += 1;
-            if (bot && chatId && validTransfers.length > 10 && processedCount % 10 === 0 && processedCount < validTransfers.length) {
-                try {
-                    await bot.sendMessage(chatId, `⏳ ${progressTexts[lk]}... ${processedCount}/${validTransfers.length}`, { disable_notification: true }).catch(() => { });
-                } catch (e) { /* ignore progress send errors */ }
+            if (bot && chatId && validTransfers.length > 3) {
+                const total = validTransfers.length;
+                const pct = processedCount / total;
+                const barLen = 10;
+                const filled = Math.round(pct * barLen);
+                const bar = '█'.repeat(filled) + '░'.repeat(barLen - filled);
+                const successSoFar = results.filter(r => r.status === '✅').length;
+                const failSoFar = processedCount - successSoFar - (results.filter(r => r.status?.startsWith('⚠️')).length);
+                const barTexts = {
+                    en: `⏳ <b>Batch Transfer</b>\n[${bar}] ${processedCount}/${total}\n✅ ${successSoFar} ${failSoFar > 0 ? `❌ ${failSoFar}` : ''}`,
+                    vi: `⏳ <b>Chuyển hàng loạt</b>\n[${bar}] ${processedCount}/${total}\n✅ ${successSoFar} ${failSoFar > 0 ? `❌ ${failSoFar}` : ''}`,
+                    zh: `⏳ <b>批量转账</b>\n[${bar}] ${processedCount}/${total}\n✅ ${successSoFar} ${failSoFar > 0 ? `❌ ${failSoFar}` : ''}`,
+                    ko: `⏳ <b>일괄 전송</b>\n[${bar}] ${processedCount}/${total}\n✅ ${successSoFar} ${failSoFar > 0 ? `❌ ${failSoFar}` : ''}`,
+                    ru: `⏳ <b>Массовая отправка</b>\n[${bar}] ${processedCount}/${total}\n✅ ${successSoFar} ${failSoFar > 0 ? `❌ ${failSoFar}` : ''}`,
+                    id: `⏳ <b>Transfer Massal</b>\n[${bar}] ${processedCount}/${total}\n✅ ${successSoFar} ${failSoFar > 0 ? `❌ ${failSoFar}` : ''}`
+                };
+                const shouldUpdate = processedCount === 1 || processedCount % 3 === 0 || processedCount === total;
+                if (shouldUpdate) {
+                    try {
+                        if (progressMsgId) {
+                            await bot.editMessageText(barTexts[lk] || barTexts.en, { chat_id: chatId, message_id: progressMsgId, parse_mode: 'HTML' }).catch(() => { });
+                        } else {
+                            const pmsg = await bot.sendMessage(chatId, barTexts[lk] || barTexts.en, { parse_mode: 'HTML', disable_notification: true });
+                            if (pmsg) progressMsgId = pmsg.message_id;
+                        }
+                    } catch (e) { /* ignore progress errors */ }
+                }
             }
 
             // #7: Rate limit delay between TXs to avoid RPC throttling
@@ -1426,6 +1450,51 @@ module.exports = {
             }
         }
 
+        // ── Delete progress bar message ──
+        if (progressMsgId && bot && chatId) {
+            try { await bot.deleteMessage(chatId, progressMsgId).catch(() => { }); } catch (_) { }
+        }
+
+        // ── Retry Failed Transfers ──
+        const failedTransfers = [];
+        results.forEach((r, i) => {
+            if (r.status && r.status !== '✅' && !r.status.startsWith('⚠️') && r.to && r.amount) {
+                const origTransfer = validTransfers.find(t => (t.toAddress || '').trim().toLowerCase() === (r.to || '').toLowerCase());
+                if (origTransfer) failedTransfers.push(origTransfer);
+            }
+        });
+
+        if (failedTransfers.length > 0 && bot && chatId) {
+            if (!global._batchRetryPending) global._batchRetryPending = new Map();
+            const retryId = `retry_${userId}_${Date.now()}`;
+            global._batchRetryPending.set(retryId, {
+                transfers: failedTransfers,
+                args: { ...args, transfers: failedTransfers },
+                context,
+                createdAt: Date.now()
+            });
+            setTimeout(() => { global._batchRetryPending.delete(retryId); }, 5 * 60 * 1000);
+
+            const retryBtnTexts = {
+                en: `🔄 Retry ${failedTransfers.length} failed`,
+                vi: `🔄 Thử lại ${failedTransfers.length} thất bại`,
+                zh: `🔄 重试 ${failedTransfers.length} 笔失败`,
+                ko: `🔄 실패 ${failedTransfers.length}건 재시도`,
+                ru: `🔄 Повторить ${failedTransfers.length} ошибок`,
+                id: `🔄 Ulangi ${failedTransfers.length} gagal`
+            };
+            try {
+                await bot.sendMessage(chatId, retryBtnTexts[lk] || retryBtnTexts.en, {
+                    disable_notification: true,
+                    reply_markup: {
+                        inline_keyboard: [[
+                            { text: retryBtnTexts[lk] || retryBtnTexts.en, callback_data: `batchretry|${retryId}` }
+                        ]]
+                    }
+                });
+            } catch (e) { /* ignore */ }
+        }
+
         if (fullReport.length <= TG_LIMIT) {
             return { success: true, action: true, displayMessage: fullReport.trim() };
         }
@@ -1531,7 +1600,53 @@ module.exports = {
         return '❌ Action không hợp lệ. Hỗ trợ: add, remove, list.';
     },
 
-    async export_wallet_data(args, context) {
+    async manage_wallet_template(args, context) {
+        const { dbGet, dbRun, dbAll } = require('../../../../db/core');
+        const userId = context?.userId;
+        if (!userId) return '\u274c Cannot identify user.';
+        const action = (args.action || '').toLowerCase();
+        let lang = context?.lang || 'en';
+        try { const { getLang } = require('../../../app/language'); if (context?.msg) lang = await getLang(context.msg); } catch (e) { }
+        const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+        const noName = {en:'Template name required.',vi:'C\u1ea7n t\u00ean template.',zh:'\u9700\u8981\u6a21\u677f\u540d\u79f0\u3002',ko:'\ud15c\ud50c\ub9bf\uba85 \ud544\uc694.',ru:'\u041d\u0443\u0436\u043d\u043e \u0438\u043c\u044f \u0448\u0430\u0431\u043b\u043e\u043d\u0430.',id:'Nama template diperlukan.'};
+        const noAddr = {en:'Addresses required.',vi:'C\u1ea7n \u0111\u1ecba ch\u1ec9.',zh:'\u9700\u8981\u5730\u5740\u3002',ko:'\uc8fc\uc18c \ud544\uc694.',ru:'\u041d\u0443\u0436\u043d\u044b \u0430\u0434\u0440\u0435\u0441\u0430.',id:'Alamat diperlukan.'};
+        if (action === 'save') {
+            if (!args.name) return '\u274c ' + noName[lk];
+            if (!args.addresses || args.addresses.length === 0) return '\u274c ' + noAddr[lk];
+            const name = args.name.trim().slice(0, 30);
+            const now = Math.floor(Date.now() / 1000);
+            await dbRun('INSERT OR REPLACE INTO wallet_templates (userId,name,addresses,createdAt,updatedAt) VALUES (?,?,?,?,?)',
+                [userId, name, JSON.stringify(args.addresses), now, now]);
+            const ok = {en:'\u2705 Template "'+name+'" saved ('+args.addresses.length+' addr).',vi:'\u2705 Template "'+name+'" \u0111\u00e3 l\u01b0u ('+args.addresses.length+' \u0111\u1ecba ch\u1ec9).',zh:'\u2705 \u6a21\u677f"'+name+'"\u5df2\u4fdd\u5b58('+args.addresses.length+'\u4e2a\u5730\u5740)\u3002',ko:'\u2705 \ud15c\ud50c\ub9bf "'+name+'" \uc800\uc7a5 ('+args.addresses.length+'\uac1c).',ru:'\u2705 \u0428\u0430\u0431\u043b\u043e\u043d "'+name+'" \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d ('+args.addresses.length+' \u0430\u0434\u0440).',id:'\u2705 Template "'+name+'" disimpan ('+args.addresses.length+' alamat).'};
+            return { success: true, action: true, displayMessage: ok[lk] };
+        } else if (action === 'list') {
+            const rows = await dbAll('SELECT * FROM wallet_templates WHERE userId = ? ORDER BY updatedAt DESC', [userId]) || [];
+            if (!rows.length) { const em = {en:'\ud83d\udced No templates.',vi:'\ud83d\udced Ch\u01b0a c\u00f3 template.',zh:'\ud83d\udced \u65e0\u6a21\u677f\u3002',ko:'\ud83d\udced \ud15c\ud50c\ub9bf \uc5c6\uc74c.',ru:'\ud83d\udced \u041d\u0435\u0442 \u0448\u0430\u0431\u043b\u043e\u043d\u043e\u0432.',id:'\ud83d\udced Belum ada template.'}; return em[lk]; }
+            const hdr = {en:'Wallet Templates',vi:'Template V\u00ed',zh:'\u94b1\u5305\u6a21\u677f',ko:'\uc9c0\uac11 \ud15c\ud50c\ub9bf',ru:'\u0428\u0430\u0431\u043b\u043e\u043d\u044b',id:'Template Dompet'};
+            const aL = {en:'addr',vi:'\u0111\u1ecba ch\u1ec9',zh:'\u5730\u5740',ko:'\uc8fc\uc18c',ru:'\u0430\u0434\u0440',id:'alamat'};
+            let rpt = '\ud83d\udccb <b>'+hdr[lk]+'</b> ('+rows.length+')\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n';
+            rows.forEach((r, i) => { const a = JSON.parse(r.addresses||'[]'); rpt += (i+1)+'. <b>'+r.name+'</b> \u2014 '+a.length+' '+aL[lk]+'\n'; });
+            return { success: true, action: true, displayMessage: rpt };
+        } else if (action === 'load') {
+            if (!args.name) return '\u274c ' + noName[lk];
+            const tpl = await dbGet('SELECT * FROM wallet_templates WHERE userId = ? AND name = ?', [userId, args.name.trim()]);
+            if (!tpl) { const nf = {en:'Template not found.',vi:'Kh\u00f4ng t\u00ecm th\u1ea5y template.',zh:'\u6a21\u677f\u672a\u627e\u5230\u3002',ko:'\ud15c\ud50c\ub9bf \uc5c6\uc74c.',ru:'\u0428\u0430\u0431\u043b\u043e\u043d \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d.',id:'Template tidak ditemukan.'}; return '\u274c ' + nf[lk]; }
+            const addrs = JSON.parse(tpl.addresses||'[]');
+            const ld = {en:'Loaded',vi:'\u0110\u00e3 t\u1ea3i',zh:'\u5df2\u52a0\u8f7d',ko:'\ub85c\ub4dc\ub428',ru:'\u0417\u0430\u0433\u0440\u0443\u0436\u0435\u043d',id:'Dimuat'};
+            let rpt = '\ud83d\udccb <b>'+ld[lk]+': '+tpl.name+'</b>\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n';
+            addrs.forEach((a, i) => { rpt += (i+1)+'. <code>'+a+'</code>\n'; });
+            return { success: true, addresses: addrs, displayMessage: rpt, action: true };
+        } else if (action === 'delete') {
+            if (!args.name) return '\u274c ' + noName[lk];
+            await dbRun('DELETE FROM wallet_templates WHERE userId = ? AND name = ?', [userId, args.name.trim()]);
+            const del = {en:'\u2705 Deleted "'+args.name+'".',vi:'\u2705 \u0110\u00e3 x\u00f3a "'+args.name+'".',zh:'\u2705 \u5df2\u5220\u9664"'+args.name+'"\u3002',ko:'\u2705 "'+args.name+'" \uc0ad\uc81c\ub428.',ru:'\u2705 "'+args.name+'" \u0443\u0434\u0430\u043b\u0451\u043d.',id:'\u2705 "'+args.name+'" dihapus.'};
+            return { success: true, action: true, displayMessage: del[lk] };
+        }
+        const inv = {en:'Invalid action. Use: save, list, load, delete.',vi:'Action kh\u00f4ng h\u1ee3p l\u1ec7. D\u00f9ng: save, list, load, delete.',zh:'\u65e0\u6548\u64cd\u4f5c\u3002\u7528: save, list, load, delete\u3002',ko:'\uc798\ubabb\ub41c \uc791\uc5c5. \uc0ac\uc6a9: save, list, load, delete.',ru:'\u041d\u0435\u0432\u0435\u0440\u043d\u043e\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435. \u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439\u0442\u0435: save, list, load, delete.',id:'Aksi tidak valid. Gunakan: save, list, load, delete.'};
+        return '\u274c ' + inv[lk];
+    },
+
+        async export_wallet_data(args, context) {
         const { dbAll } = require('../../../../db/core');
         const userId = context?.userId;
         if (!userId) return '❌ Không xác định được người dùng.';

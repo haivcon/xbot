@@ -459,6 +459,23 @@ module.exports.ONCHAIN_TOOLS = [
                     },
                     required: ['chainIndex']
                 }
+            },
+            {
+                name: 'manage_wallet_template',
+                description: 'Save, list, load, or delete named wallet address templates for batch transfers. User can say "save these addresses as Team1" or "transfer to template Team1" or "list my templates" or "delete template Team1". Vietnamese: "lưu template ví", "danh sách template", "chuyển tới template", "xóa template".',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        action: { type: 'string', description: '"save", "list", "load", "delete"' },
+                        name: { type: 'string', description: 'Template name (for save/load/delete)' },
+                        addresses: {
+                            type: 'array',
+                            description: 'Array of wallet addresses to save (for "save" action)',
+                            items: { type: 'string' }
+                        }
+                    },
+                    required: ['action']
+                }
             }
         ]
     },
