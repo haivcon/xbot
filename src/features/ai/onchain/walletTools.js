@@ -1080,7 +1080,7 @@ module.exports = {
                 if (wallet.address.toLowerCase() === destAddr) {
                     results.push({
                         wallet: `#${t.fromWalletId}`,
-                        to: destAddr.slice(0, 8) + '...',
+                        to: destAddr,
                         amount: t.amount,
                         status: `❌ ${selfTransferTexts[lk]}`
                     });
@@ -1108,7 +1108,7 @@ module.exports = {
                         if (maxValue <= 0n) {
                             results.push({
                                 wallet: `#${t.fromWalletId}`,
-                                to: destAddr.slice(0, 8) + '...',
+                                to: destAddr,
                                 amount: 'max',
                                 status: `❌ ${insufficientTexts[lk]} (gas)`
                             });
@@ -1122,7 +1122,7 @@ module.exports = {
                     if (amountWei > rawBalance) {
                         results.push({
                             wallet: `#${t.fromWalletId}`,
-                            to: destAddr.slice(0, 8) + '...',
+                            to: destAddr,
                             amount: actualAmount,
                             status: `❌ ${insufficientTexts[lk]}: ${Number(balBeforeSrc).toFixed(4)} ${symbol}`
                         });
@@ -1151,7 +1151,7 @@ module.exports = {
                     if (receipt.status === 0) {
                         results.push({
                             wallet: `#${t.fromWalletId}`,
-                            to: destAddr.slice(0, 8) + '...',
+                            to: destAddr,
                             amount: actualAmount,
                             status: `❌ ${revertTexts[lk]}`,
                             txHash: txHash
@@ -1173,7 +1173,7 @@ module.exports = {
                         if (rawBalance === 0n) {
                             results.push({
                                 wallet: `#${t.fromWalletId}`,
-                                to: destAddr.slice(0, 8) + '...',
+                                to: destAddr,
                                 amount: 'max',
                                 status: `❌ ${insufficientTexts[lk]}: 0 ${symbol}`
                             });
@@ -1187,7 +1187,7 @@ module.exports = {
                     if (amountWei > rawBalance) {
                         results.push({
                             wallet: `#${t.fromWalletId}`,
-                            to: destAddr.slice(0, 8) + '...',
+                            to: destAddr,
                             amount: actualAmount,
                             status: `❌ ${insufficientTexts[lk]}: ${Number(balBeforeSrc).toFixed(4)} ${symbol}`
                         });
@@ -1209,7 +1209,7 @@ module.exports = {
                     if (receipt.status === 0) {
                         results.push({
                             wallet: `#${t.fromWalletId}`,
-                            to: destAddr.slice(0, 8) + '...',
+                            to: destAddr,
                             amount: actualAmount,
                             status: `❌ ${revertTexts[lk]}`,
                             txHash: txHash
@@ -1230,7 +1230,7 @@ module.exports = {
                 } catch (dbErr) { log.child('BATCHTRANSFER').error('DB log error:', dbErr.message); }
                 results.push({
                     wallet: `#${t.fromWalletId}`,
-                    to: destAddr.slice(0, 8) + '...',
+                    to: destAddr,
                     amount: actualAmount,
                     status: '✅',
                     txHash: txHash,
@@ -1240,7 +1240,7 @@ module.exports = {
                 });
             } catch (e) {
                 log.child('BATCHTRANSFER').error(`Error wallet ${t.fromWalletId} → ${t.toAddress}:`, e.message);
-                const destShort = t.toAddress ? (t.toAddress.slice(0, 10) + '...') : '?';
+                const destShort = t.toAddress ? ((t.toAddress || "?")) : '?';
                 results.push({
                     wallet: `#${t.fromWalletId}`,
                     to: destShort,
@@ -1379,13 +1379,13 @@ module.exports = {
             if (r.status === '✅') {
                 walletBlocks.push(
                     `✅ <b>${walletLabel} ${r.wallet}</b>\n` +
-                    `   ${toLabel} <code>${r.to}</code>\n` +
+                    `   ${toLabel} <a href="${explorerBase}/address/${r.to}">${r.to}</a>\n` +
                     `   ${amountLabel} <b>${r.amount} ${symbol}</b>\n` +
                     `   ${balanceLabel} ${r.balBefore} → ${r.balAfter}\n` +
                     `   🔗 <a href="${explorerBase}/tx/${r.txHash}">${linkLabel}</a>`
                 );
             } else {
-                const failDest = r.to ? ` → <code>${r.to}</code>` : '';
+                const failDest = r.to ? ` → <a href="${explorerBase}/address/${r.to}">${r.to}</a>` : '';
                 const failAmount = r.amount ? ` (${r.amount} ${symbol})` : '';
                 walletBlocks.push(
                     `❌ <b>${walletLabel} ${r.wallet}</b>${failDest}${failAmount}: ${failLabel}\n` +

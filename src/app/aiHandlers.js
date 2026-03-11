@@ -3761,10 +3761,24 @@ function createAiHandlers(deps) {
     if (addressMatches && addressMatches.length >= 2) {
       const uniqueAddresses = [...new Set(addressMatches.map(a => a.toLowerCase()))];
       if (uniqueAddresses.length >= 2) {
+        // Build explicit address list so AI doesn't fabricate addresses
+        const addrList = uniqueAddresses.map((a, i) => `  ${i + 1}. ${a}`).join('\n');
         contents[contents.length - 1].parts.push({
-          text: '\n[SYSTEM OVERRIDE — BATCH TRANSFER ROUTING: The user message contains ' + uniqueAddresses.length + ' wallet addresses. You MUST use batch_transfer with mode="distribute" to send tokens to ALL of these addresses simultaneously. DO NOT use transfer_tokens (it only supports a single destination). For the transfers array, use the user\'s default trading wallet as fromWalletId for each entry, and create one entry per destination address with the amount the user specified. If you don\'t know the default walletId, use "default" and the system will resolve it.]'
+          text: '\n[SYSTEM OVERRIDE — BATCH TRANSFER ROUTING (MANDATORY):\n' +
+            'The user message contains ' + uniqueAddresses.length + ' destination wallet addresses.\n' +
+            'You MUST call batch_transfer with these EXACT parameters:\n' +
+            '- mode: "distribute"\n' +
+            '- fromWalletId: "default" (for ALL entries)\n' +
+            '- transfers array: create EXACTLY ' + uniqueAddresses.length + ' entries, one per address below:\n' +
+            addrList + '\n' +
+            'CRITICAL RULES:\n' +
+            '1. Use EVERY address listed above - do NOT skip any\n' +
+            '2. Do NOT fabricate or make up addresses - use ONLY the addresses from the user message\n' +
+            '3. Do NOT call transfer_tokens - it only supports single transfers\n' +
+            '4. Do NOT call get_wallet_balance or check balances first - go straight to batch_transfer\n' +
+            '5. The amount per transfer = the amount the user specified]'
         });
-        log.child('FnCall').info(`⚡ Batch transfer override: ${uniqueAddresses.length} unique addresses detected`);
+        log.child('FnCall').info(`⚡ Batch transfer override: ${uniqueAddresses.length} unique addresses detected and listed`);
       }
     }
 
