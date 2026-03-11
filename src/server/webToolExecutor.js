@@ -47,88 +47,88 @@ const WEB_TOOL_DECLARATIONS = [
     {
         name: 'analyze_token',
         description: 'Deep analysis of a token with technical indicators (RSI, MA, whale trades). Use when user says "analyze", "should I buy", "technical analysis", "forecast", "phân tích".',
-        parameters: { type: 'OBJECT', properties: {
-            symbol: { type: 'STRING', description: 'Token symbol (e.g. "OKB", "ETH")' },
-            chain: { type: 'STRING', description: 'Optional chain filter (e.g. "196" for X Layer)' }
+        parameters: { type: 'object', properties: {
+            symbol: { type: 'string', description: 'Token symbol (e.g. "OKB", "ETH")' },
+            chain: { type: 'string', description: 'Optional chain filter (e.g. "196" for X Layer)' }
         }, required: ['symbol'] }
     },
     {
         name: 'compare_tokens',
         description: 'Compare 2-4 cryptocurrency tokens side by side. Use when user says "compare", "vs", "so sánh".',
-        parameters: { type: 'OBJECT', properties: {
-            symbols: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Array of 2-4 token symbols to compare' }
+        parameters: { type: 'object', properties: {
+            symbols: { type: 'array', items: { type: 'string' }, description: 'Array of 2-4 token symbols to compare' }
         }, required: ['symbols'] }
     },
     // ── Wallet Lookup ──
     {
         name: 'check_wallet_balance_direct',
         description: 'Look up any wallet address balance and holdings directly. Use when user pastes a wallet 0x address.',
-        parameters: { type: 'OBJECT', properties: {
-            address: { type: 'STRING', description: 'The wallet address to look up (0x... format)' }
+        parameters: { type: 'object', properties: {
+            address: { type: 'string', description: 'The wallet address to look up (0x... format)' }
         }, required: ['address'] }
     },
     // ── Contract & Tx Lookup ──
     {
         name: 'lookup_contract',
         description: 'Look up smart contract information by address.',
-        parameters: { type: 'OBJECT', properties: {
-            address: { type: 'STRING', description: 'Contract address to look up' }
+        parameters: { type: 'object', properties: {
+            address: { type: 'string', description: 'Contract address to look up' }
         }, required: ['address'] }
     },
     {
         name: 'lookup_transaction',
         description: 'Look up transaction details by hash.',
-        parameters: { type: 'OBJECT', properties: {
-            txhash: { type: 'STRING', description: 'Transaction hash to look up' }
+        parameters: { type: 'object', properties: {
+            txhash: { type: 'string', description: 'Transaction hash to look up' }
         }, required: ['txhash'] }
     },
     // ── Price Alerts ──
     {
         name: 'set_price_alert',
         description: 'Set a price alert for a token. Bot will notify when price crosses target. Use when user says "alert when", "notify me if", "set alert", "đặt cảnh báo".',
-        parameters: { type: 'OBJECT', properties: {
-            symbol: { type: 'STRING', description: 'Token symbol (e.g. "OKB", "ETH")' },
-            target_price: { type: 'NUMBER', description: 'Target price in USD' },
-            direction: { type: 'STRING', description: '"above" or "below"' }
+        parameters: { type: 'object', properties: {
+            symbol: { type: 'string', description: 'Token symbol (e.g. "OKB", "ETH")' },
+            target_price: { type: 'number', description: 'Target price in USD' },
+            direction: { type: 'string', description: '"above" or "below"' }
         }, required: ['symbol', 'target_price'] }
     },
     {
         name: 'list_price_alerts',
         description: 'Show all active price alerts.',
-        parameters: { type: 'OBJECT', properties: {}, required: [] }
+        parameters: { type: 'object', properties: {}, required: [] }
     },
     {
         name: 'delete_price_alert',
         description: 'Delete a price alert by ID.',
-        parameters: { type: 'OBJECT', properties: {
-            alert_id: { type: 'NUMBER', description: 'Alert ID to delete' }
+        parameters: { type: 'object', properties: {
+            alert_id: { type: 'number', description: 'Alert ID to delete' }
         }, required: ['alert_id'] }
     },
     // ── Favorite Tokens ──
     {
         name: 'add_favorite_token',
         description: 'Add a token to favorites. Use when user says "save", "favorite", "bookmark", "yêu thích", "lưu".',
-        parameters: { type: 'OBJECT', properties: {
-            symbol: { type: 'STRING', description: 'Token symbol (e.g. "OKB")' }
+        parameters: { type: 'object', properties: {
+            symbol: { type: 'string', description: 'Token symbol (e.g. "OKB")' }
         }, required: ['symbol'] }
     },
     {
         name: 'remove_favorite_token',
         description: 'Remove a token from favorites.',
-        parameters: { type: 'OBJECT', properties: {
-            symbol: { type: 'STRING', description: 'Token symbol to remove' }
+        parameters: { type: 'object', properties: {
+            symbol: { type: 'string', description: 'Token symbol to remove' }
         }, required: ['symbol'] }
     },
     {
         name: 'check_favorite_prices',
         description: 'Check prices of all favorite tokens at once. Use when user says "my tokens", "favorites", "yêu thích".',
-        parameters: { type: 'OBJECT', properties: {}, required: [] }
+        parameters: { type: 'object', properties: {}, required: [] }
     },
     // ── Session ──
     {
         name: 'delete_chat_history',
         description: 'Clear this chat session. Use when user says "clear chat", "delete history", "xóa lịch sử".',
-        parameters: { type: 'OBJECT', properties: {}, required: [] }
+        parameters: { type: 'object', properties: {}, required: [] }
     },
 ];
 
@@ -186,7 +186,7 @@ const webToolImplementations = {
                     marketCap: marketCap > 0 ? `$${fmtCap(marketCap)}` : null,
                     sparkline30D: sparkline || null,
                     rsi14: rsi14 !== null ? Number(rsi14.toFixed(1)) : null,
-                    rsiSignal: rsi14 > 70 ? 'overbought' : rsi14 < 30 ? 'oversold' : rsi14 < 45 ? 'accumulation' : 'neutral',
+                    rsiSignal: rsi14 === null ? 'unknown' : rsi14 > 70 ? 'overbought' : rsi14 < 30 ? 'oversold' : rsi14 < 45 ? 'accumulation' : 'neutral',
                     ma7: ma7 !== null ? Number(ma7.toFixed(8)) : null,
                     ma25: ma25 !== null ? Number(ma25.toFixed(8)) : null,
                     maSignal: ma7 && ma25 ? (ma7 > ma25 ? 'bullish (Golden Cross)' : 'bearish (Death Cross)') : 'unknown',

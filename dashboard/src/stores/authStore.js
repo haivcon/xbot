@@ -47,6 +47,28 @@ const useAuthStore = create((set, get) => ({
         }
     },
 
+    loginWithWebApp: async (initData) => {
+        set({ loading: true, error: null });
+        try {
+            const res = await fetch(`${API_BASE}/auth/webapp-login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ initData }),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || 'WebApp login failed');
+            }
+            const data = await res.json();
+            localStorage.setItem('xbot_dashboard_auth', JSON.stringify(data));
+            set({ user: data.user, token: data.token, role: data.role, viewMode: data.role, loading: false });
+            return data;
+        } catch (err) {
+            set({ error: err.message, loading: false });
+            throw err;
+        }
+    },
+
     logout: () => {
         localStorage.removeItem('xbot_dashboard_auth');
         set({ user: null, token: null, role: null, viewMode: null, error: null });

@@ -167,11 +167,11 @@ function createChatRoutes() {
             let finalResponse = '';
             let currentHistory = [...session.history];
             let round = 0;
+            const mergedTools = getToolDeclarations();
 
             while (round < MAX_TOOL_ROUNDS) {
                 round++;
 
-                const mergedTools = getToolDeclarations();
                 log.info(`[Round ${round}] Calling Gemini model=${model}, tools=${mergedTools[0]?.functionDeclarations?.length || 0} total, history=${currentHistory.length} msgs`);
                 const response = await client.models.generateContent({
                     model,

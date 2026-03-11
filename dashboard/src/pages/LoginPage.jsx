@@ -5,10 +5,34 @@ import { Bot, Globe, Shield, Sparkles, Send } from 'lucide-react';
 
 export default function LoginPage() {
     const { t, i18n } = useTranslation();
-    const { login, loading, error } = useAuthStore();
+    const { login, loginWithWebApp, loading, error } = useAuthStore();
     const telegramWidgetRef = useRef(null);
     const [botUsername, setBotUsername] = useState(null);
     const [widgetLoaded, setWidgetLoaded] = useState(false);
+    const [webAppLoading, setWebAppLoading] = useState(false);
+
+    // 🚀 Auto-login via Telegram Mini App (WebApp.initData)
+    useEffect(() => {
+        const tgWebApp = window.Telegram?.WebApp;
+        if (tgWebApp?.initData) {
+            setWebAppLoading(true);
+            // Expand Mini App to full height
+            try { tgWebApp.expand(); } catch { /* ignore */ }
+            // Set theme color to match dashboard
+            try { tgWebApp.setHeaderColor('#0f172a'); } catch { /* ignore */ }
+            try { tgWebApp.setBackgroundColor('#0f172a'); } catch { /* ignore */ }
+
+            loginWithWebApp(tgWebApp.initData)
+                .then(() => {
+                    // Signal Telegram that the app is ready
+                    try { tgWebApp.ready(); } catch { /* ignore */ }
+                })
+                .catch((err) => {
+                    console.warn('WebApp auto-login failed, falling back to widget:', err);
+                    setWebAppLoading(false);
+                });
+        }
+    }, [loginWithWebApp]);
 
     // Fetch bot username from backend
     useEffect(() => {
@@ -51,6 +75,24 @@ export default function LoginPage() {
     }, [botUsername]);
 
     // Dev mode: removed — use Telegram Login Widget or /dashboard command only
+
+    // Show loading screen during Mini App auto-login
+    if (webAppLoading) {
+        return (
+            <div className="min-h-screen bg-surface-900 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center shadow-2xl shadow-brand-500/30 mx-auto mb-6 animate-pulse">
+                        <Bot size={32} className="text-white" />
+                    </div>
+                    <div className="w-8 h-8 border-3 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-surface-200/60 text-sm">Logging in via Telegram...</p>
+                    {error && (
+                        <p className="text-red-400 text-xs mt-2">{error}</p>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     const features = [
         { icon: Shield, title: 'Role-Based Access', desc: 'Owner & User dashboards' },

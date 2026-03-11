@@ -230,6 +230,81 @@ function createDashboardRoutes() {
         }
     });
 
+    // --- Auth: Telegram Mini App (WebApp.initData) login ---
+    router.post('/auth/webapp-login', loginRateLimit, async (req, res) => {
+        try {
+            const { initData } = req.body;
+            if (!initData || typeof initData !== 'string') {
+                return res.status(400).json({ error: 'Missing initData' });
+            }
+            if (!BOT_TOKEN) {
+                return res.status(503).json({ error: 'Bot token not configured' });
+            }
+
+            // Parse initData (URL-encoded string)
+            const params = new URLSearchParams(initData);
+            const hash = params.get('hash');
+            if (!hash) return res.status(401).json({ error: 'Invalid initData: no hash' });
+
+            // Validate HMAC-SHA256 per Telegram docs:
+            // 1. secret_key = HMAC_SHA256("WebAppData", BOT_TOKEN)
+            // 2. data_check_string = sorted key=value pairs (excluding hash), joined by \n
+            // 3. HMAC_SHA256(secret_key, data_check_string) === hash
+            const secretKey = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
+            const dataCheckArr = [];
+            for (const [key, value] of params.entries()) {
+                if (key !== 'hash') dataCheckArr.push(`${key}=${value}`);
+            }
+            dataCheckArr.sort();
+            const dataCheckString = dataCheckArr.join('\n');
+            const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+            if (computedHash !== hash) {
+                log.warn('Dashboard webapp-login: HMAC validation failed');
+                return res.status(401).json({ error: 'Invalid initData signature' });
+            }
+
+            // Check auth_date (max 5 minutes old)
+            const authDate = Number(params.get('auth_date') || 0);
+            if (Math.abs(Date.now() / 1000 - authDate) > 300) {
+                return res.status(401).json({ error: 'initData expired' });
+            }
+
+            // Extract user data
+            const userStr = params.get('user');
+            if (!userStr) return res.status(401).json({ error: 'No user data in initData' });
+
+            let userData;
+            try { userData = JSON.parse(userStr); } catch {
+                return res.status(401).json({ error: 'Invalid user data format' });
+            }
+
+            const userId = String(userData.id);
+            const firstName = userData.first_name || 'User';
+            const username = userData.username || '';
+            const role = await getUserRole(userId, username);
+
+            const jwt = createJWT({ userId, username, firstName, role });
+
+            log.info(`Dashboard webapp-login: ${firstName} (${userId}) as ${role}`);
+
+            res.json({
+                token: jwt,
+                role,
+                user: {
+                    id: Number(userId) || userId,
+                    first_name: firstName,
+                    last_name: userData.last_name || '',
+                    username,
+                    photo_url: userData.photo_url || '',
+                },
+            });
+        } catch (err) {
+            log.error('Dashboard webapp-login error:', err.message);
+            res.status(500).json({ error: 'Internal error' });
+        }
+    });
+
     // --- Auth ---
     router.post('/auth/telegram-login', async (req, res) => {
         try {
