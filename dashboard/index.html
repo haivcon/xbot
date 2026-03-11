@@ -10,7 +10,19 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
     rel="stylesheet" />
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    // Lazy-load Telegram WebApp SDK — only inside Telegram Mini App
+    (function() {
+      var isTelegram = window.location.search.indexOf('tgWebAppData') !== -1
+        || navigator.userAgent.indexOf('Telegram') !== -1
+        || window.parent !== window; // iframe = likely Mini App
+      if (isTelegram) {
+        var s = document.createElement('script');
+        s.src = 'https://telegram.org/js/telegram-web-app.js';
+        document.head.appendChild(s);
+      }
+    })();
+  </script>
   <title>XBot Dashboard</title>
   <script>
     // Prevent FOUC: apply stored theme before React loads

@@ -7,6 +7,7 @@ import {
     Wallet, TrendingUp, BarChart3, Zap, Shield, Globe, Coins, ArrowLeftRight,
     HelpCircle, BookOpen, Star, Bell, Search, Activity, ArrowUpDown, Eye
 } from 'lucide-react';
+import { hapticImpact, hapticNotification } from '@/utils/telegram';
 
 /* ─── Markdown renderer (lightweight) ─── */
 function renderMarkdown(text) {
@@ -231,6 +232,7 @@ export default function ChatPage() {
         const msg = (text || input).trim();
         if (!msg || loading) return;
 
+        hapticImpact('light');
         setInput('');
         const userMsg = { role: 'user', content: msg };
         setMessages(prev => [...prev, userMsg]);
@@ -246,8 +248,10 @@ export default function ChatPage() {
                 toolCalls: data.toolCalls
             };
             setMessages(prev => [...prev, assistantMsg]);
+            hapticNotification('success');
             loadConversations();
         } catch (err) {
+            hapticNotification('error');
             setMessages(prev => [...prev, {
                 role: 'assistant',
                 content: `❌ ${err.message || 'Failed to get AI response. Please try again.'}`

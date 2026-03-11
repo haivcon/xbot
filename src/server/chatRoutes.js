@@ -18,19 +18,90 @@ const { t } = require('../core/i18n');
 // Debug: verify tools loaded correctly
 log.info(`ONCHAIN_TOOLS loaded: ${Array.isArray(ONCHAIN_TOOLS) ? ONCHAIN_TOOLS.length + ' tool groups' : 'FAILED'}, total declarations: ${Array.isArray(ONCHAIN_TOOLS) ? ONCHAIN_TOOLS.reduce((sum, g) => sum + (g.functionDeclarations?.length || 0), 0) : 0}`);
 
-// ── In-memory session store ──────────────────────────────
-const chatSessions = new Map();
-const SESSION_TTL = 30 * 60 * 1000;   // 30 min
+// ── Session store (hybrid: in-memory cache + SQLite persistence) ──
+const { dbRun, dbGet, dbAll } = require('../../db/core');
+const chatSessionsCache = new Map();
+const SESSION_TTL = 30 * 60 * 1000;   // 30 min (cache eviction)
 const SESSION_MAX_MESSAGES = 40;
 const MAX_TOOL_ROUNDS = 8;            // prevent infinite loops
 
-// Cleanup stale sessions every 10 min
+/** Load session from cache or DB */
+async function getSession(sessionId, userId) {
+    if (chatSessionsCache.has(sessionId)) return chatSessionsCache.get(sessionId);
+    try {
+        const row = await dbGet('SELECT * FROM web_chat_sessions WHERE id = ? AND userId = ?', [sessionId, userId]);
+        if (row) {
+            const session = {
+                id: row.id,
+                userId: row.userId,
+                title: row.title,
+                messages: JSON.parse(row.messages || '[]'),
+                updatedAt: row.updatedAt || Date.now(),
+            };
+            chatSessionsCache.set(sessionId, session);
+            return session;
+        }
+    } catch (err) { log.warn('DB load session error:', err.message); }
+    return null;
+}
+
+/** Save session to cache + DB */
+async function saveSession(session) {
+    chatSessionsCache.set(session.id, session);
+    try {
+        await dbRun(
+            `INSERT OR REPLACE INTO web_chat_sessions (id, userId, title, messages, createdAt, updatedAt)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [session.id, session.userId, session.title, JSON.stringify(session.messages), session.createdAt || Date.now(), Date.now()]
+        );
+    } catch (err) { log.warn('DB save session error:', err.message); }
+}
+
+/** Delete session from cache + DB */
+async function deleteSession(sessionId, userId) {
+    chatSessionsCache.delete(sessionId);
+    try {
+        await dbRun('DELETE FROM web_chat_sessions WHERE id = ? AND userId = ?', [sessionId, userId]);
+    } catch (err) { log.warn('DB delete session error:', err.message); }
+}
+
+/** List user's sessions from DB */
+async function listUserSessions(userId, limit = 20) {
+    try {
+        return await dbAll(
+            'SELECT id, title, updatedAt FROM web_chat_sessions WHERE userId = ? ORDER BY updatedAt DESC LIMIT ?',
+            [userId, limit]
+        );
+    } catch { return []; }
+}
+
+// Cache cleanup every 10 min (only evicts from memory, not DB)
 setInterval(() => {
     const now = Date.now();
-    for (const [key, session] of chatSessions) {
-        if (now - session.updatedAt > SESSION_TTL) chatSessions.delete(key);
+    for (const [key, session] of chatSessionsCache) {
+        if (now - session.updatedAt > SESSION_TTL) chatSessionsCache.delete(key);
     }
 }, 10 * 60 * 1000);
+
+// ── Per-user chat rate limiter ───────────────────────────
+const chatRateBuckets = new Map();
+const CHAT_RATE_LIMIT = 15;          // max requests per window
+const CHAT_RATE_WINDOW = 60_000;     // 1 minute
+
+function chatRateLimit(userId) {
+    const now = Date.now();
+    let bucket = chatRateBuckets.get(userId);
+    if (!bucket || now > bucket.resetAt) {
+        bucket = { count: 0, resetAt: now + CHAT_RATE_WINDOW };
+    }
+    bucket.count++;
+    chatRateBuckets.set(userId, bucket);
+    // Periodic cleanup
+    if (chatRateBuckets.size > 200 && Math.random() < 0.1) {
+        for (const [k, v] of chatRateBuckets) { if (v.resetAt < now) chatRateBuckets.delete(k); }
+    }
+    return bucket.count <= CHAT_RATE_LIMIT;
+}
 
 // ── Gemini client pool ───────────────────────────────────
 function getGeminiClient(apiKey) {
@@ -114,6 +185,11 @@ function createChatRoutes() {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
+        // Per-user rate limit
+        if (!chatRateLimit(userId)) {
+            return res.status(429).json({ error: 'Too many messages. Please wait a moment.' });
+        }
+
         const { message, conversationId } = req.body;
         if (!message || typeof message !== 'string' || !message.trim()) {
             return res.status(400).json({ error: 'Message is required' });
@@ -128,9 +204,29 @@ function createChatRoutes() {
         try {
             // Build or retrieve session
             const sessionKey = conversationId || `web_${userId}_${Date.now()}`;
-            let session = chatSessions.get(sessionKey);
-            if (!session) {
-                // Build system prompt with user's wallet context
+            let session = await getSession(sessionKey, userId);
+            let sessionHistory;
+            if (session) {
+                // Existing session with DB-backed messages — rebuild Gemini history
+                const systemInstruction = await buildSystemInstruction(userId);
+                const aiaPrompt = buildAIAPrompt({
+                    lang: req.dashboardUser?.lang || 'en',
+                    isGroup: false,
+                    isAdmin: false,
+                    botUsername: process.env.BOT_USERNAME || 'xbot',
+                    userId
+                });
+                sessionHistory = session.messages.map(m => ({
+                    role: m.role === 'assistant' ? 'model' : m.role,
+                    parts: [{ text: m.content }]
+                }));
+                session._systemInstruction = systemInstruction + '\n\n' + aiaPrompt +
+                    '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD (not Telegram). ' +
+                    'Use Markdown formatting instead of HTML. Do NOT use Telegram-specific formatting (<b>, <i>, <code>). ' +
+                    'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
+                    'Keep responses conversational and helpful.';
+            } else {
+                // New session
                 const systemInstruction = await buildSystemInstruction(userId);
                 const aiaPrompt = buildAIAPrompt({
                     lang: req.dashboardUser?.lang || 'en',
@@ -141,31 +237,34 @@ function createChatRoutes() {
                 });
 
                 session = {
-                    history: [],
-                    systemInstruction: systemInstruction + '\n\n' + aiaPrompt +
+                    id: sessionKey,
+                    userId,
+                    title: message.trim().substring(0, 60),
+                    messages: [],
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                    _systemInstruction: systemInstruction + '\n\n' + aiaPrompt +
                         '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD (not Telegram). ' +
                         'Use Markdown formatting instead of HTML. Do NOT use Telegram-specific formatting (<b>, <i>, <code>). ' +
                         'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
                         'Keep responses conversational and helpful.',
-                    createdAt: Date.now(),
-                    updatedAt: Date.now()
                 };
-                chatSessions.set(sessionKey, session);
+                sessionHistory = [];
             }
 
             // Add user message to history
-            session.history.push({ role: 'user', parts: [{ text: message.trim() }] });
+            sessionHistory.push({ role: 'user', parts: [{ text: message.trim() }] });
 
             // Trim old messages
-            while (session.history.length > SESSION_MAX_MESSAGES) {
-                session.history.shift();
+            while (sessionHistory.length > SESSION_MAX_MESSAGES) {
+                sessionHistory.shift();
             }
 
             // Call Gemini with function calling
             const model = GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20';
             const toolCalls = [];
             let finalResponse = '';
-            let currentHistory = [...session.history];
+            let currentHistory = [...sessionHistory];
             let round = 0;
             const mergedTools = getToolDeclarations();
 
@@ -176,7 +275,7 @@ function createChatRoutes() {
                 const response = await client.models.generateContent({
                     model,
                     contents: currentHistory,
-                    systemInstruction: session.systemInstruction,
+                    systemInstruction: session._systemInstruction,
                     config: {
                         tools: mergedTools,
                         temperature: 0.7,
@@ -200,7 +299,7 @@ function createChatRoutes() {
                     // No function calls — we have the final text response
                     finalResponse = textParts.map(p => p.text).join('').trim();
                     // Add assistant response to history
-                    session.history.push({ role: 'model', parts: textParts.length > 0 ? textParts : [{ text: finalResponse }] });
+                    currentHistory.push({ role: 'model', parts: textParts.length > 0 ? textParts : [{ text: finalResponse }] });
                     break;
                 }
 
@@ -232,7 +331,7 @@ function createChatRoutes() {
                         }
                         // Handle special actions
                         if (result?.action === 'clear_session') {
-                            session.history = [];
+                            session.messages = [];
                             currentHistory = [{ role: 'user', parts: [{ text: message.trim() }] }];
                         }
                     } catch (err) {
@@ -255,9 +354,15 @@ function createChatRoutes() {
                 currentHistory.push({ role: 'user', parts: functionResponseParts });
             }
 
-            // Save updated history
-            session.history = currentHistory.slice(-SESSION_MAX_MESSAGES);
+            // Save updated history to DB
+            session.messages = currentHistory.slice(-SESSION_MAX_MESSAGES)
+                .filter(h => h.role === 'user' || h.role === 'model')
+                .map(h => ({
+                    role: h.role === 'model' ? 'assistant' : h.role,
+                    content: h.parts?.map(p => p.text).filter(Boolean).join('') || '',
+                }));
             session.updatedAt = Date.now();
+            await saveSession(session);
 
             res.json({
                 reply: finalResponse || 'No response generated.',
@@ -286,26 +391,16 @@ function createChatRoutes() {
      * GET /history
      * Returns conversation list for the user
      */
-    router.get('/history', (req, res) => {
+    router.get('/history', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
-        const conversations = [];
-        for (const [key, session] of chatSessions) {
-            if (key.startsWith(`web_${userId}_`)) {
-                const messages = session.history.filter(h => h.role === 'user' || h.role === 'model');
-                const firstUserMsg = messages.find(m => m.role === 'user');
-                conversations.push({
-                    conversationId: key,
-                    title: firstUserMsg?.parts?.[0]?.text?.substring(0, 60) || 'New Chat',
-                    messageCount: messages.length,
-                    createdAt: session.createdAt,
-                    updatedAt: session.updatedAt
-                });
-            }
-        }
-
-        conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+        const rows = await listUserSessions(userId);
+        const conversations = rows.map(r => ({
+            conversationId: r.id,
+            title: r.title || 'New Chat',
+            updatedAt: r.updatedAt
+        }));
         res.json({ conversations });
     });
 
@@ -313,43 +408,29 @@ function createChatRoutes() {
      * GET /history/:conversationId
      * Returns full message history for a conversation
      */
-    router.get('/history/:conversationId', (req, res) => {
+    router.get('/history/:conversationId', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         const { conversationId } = req.params;
 
         if (!userId) return res.status(401).json({ error: 'Authentication required' });
-        if (!conversationId.startsWith(`web_${userId}_`)) {
-            return res.status(403).json({ error: 'Access denied' });
-        }
 
-        const session = chatSessions.get(conversationId);
+        const session = await getSession(conversationId, userId);
         if (!session) return res.status(404).json({ error: 'Conversation not found' });
 
-        const messages = session.history
-            .filter(h => h.role === 'user' || h.role === 'model')
-            .map(h => ({
-                role: h.role === 'model' ? 'assistant' : 'user',
-                content: h.parts?.map(p => p.text).filter(Boolean).join('') || '',
-                timestamp: session.updatedAt
-            }));
-
-        res.json({ conversationId, messages });
+        res.json({ conversationId, messages: session.messages || [] });
     });
 
     /**
      * DELETE /history/:conversationId
      * Clear a conversation
      */
-    router.delete('/history/:conversationId', (req, res) => {
+    router.delete('/history/:conversationId', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         const { conversationId } = req.params;
 
         if (!userId) return res.status(401).json({ error: 'Authentication required' });
-        if (!conversationId.startsWith(`web_${userId}_`)) {
-            return res.status(403).json({ error: 'Access denied' });
-        }
 
-        chatSessions.delete(conversationId);
+        await deleteSession(conversationId, userId);
         res.json({ ok: true });
     });
 
@@ -357,13 +438,17 @@ function createChatRoutes() {
      * DELETE /history
      * Clear all conversations for the user
      */
-    router.delete('/history', (req, res) => {
+    router.delete('/history', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
-        for (const key of chatSessions.keys()) {
-            if (key.startsWith(`web_${userId}_`)) chatSessions.delete(key);
-        }
+        try {
+            await dbRun('DELETE FROM web_chat_sessions WHERE userId = ?', [userId]);
+            // Also clear cache
+            for (const key of chatSessionsCache.keys()) {
+                if (chatSessionsCache.get(key)?.userId === userId) chatSessionsCache.delete(key);
+            }
+        } catch { /* ignore */ }
         res.json({ ok: true });
     });
 

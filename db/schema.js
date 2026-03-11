@@ -597,6 +597,17 @@ async function init() {
         updatedAt INTEGER
     )`);
 
+    // Web chat sessions (persistent dashboard AI chat history)
+    await dbRun(`CREATE TABLE IF NOT EXISTS web_chat_sessions (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        title TEXT DEFAULT 'New Chat',
+        messages TEXT DEFAULT '[]',
+        createdAt INTEGER,
+        updatedAt INTEGER
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_web_chat_user ON web_chat_sessions(userId, updatedAt DESC)`);
+
     console.log("Khởi tạo cấu trúc bảng SQLite hoàn tất.");
 }
 

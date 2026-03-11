@@ -370,6 +370,48 @@ function createDashboardRoutes() {
         }
     });
 
+    // --- Auth: Token refresh ---
+    router.post('/auth/refresh', async (req, res) => {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader?.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'No token' });
+            }
+            // Decode without strict expiry check (allow slightly expired tokens for refresh)
+            const token = authHeader.slice(7);
+            let payload;
+            try {
+                const [, body] = token.split('.');
+                payload = JSON.parse(Buffer.from(body, 'base64url').toString());
+            } catch {
+                return res.status(401).json({ error: 'Invalid token' });
+            }
+            // Verify signature
+            const [header, body, signature] = token.split('.');
+            const expected = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+            if (signature !== expected) return res.status(401).json({ error: 'Invalid signature' });
+
+            // Allow refresh within 24h of expiry
+            const now = Math.floor(Date.now() / 1000);
+            if (payload.exp && now - payload.exp > 86400) {
+                return res.status(401).json({ error: 'Token expired beyond refresh window' });
+            }
+
+            const role = await getUserRole(payload.userId, payload.username);
+            const newToken = createJWT({
+                userId: payload.userId,
+                username: payload.username,
+                firstName: payload.firstName,
+                role,
+            });
+
+            res.json({ token: newToken, role });
+        } catch (err) {
+            log.error('Dashboard token refresh error:', err.message);
+            res.status(500).json({ error: 'Internal error' });
+        }
+    });
+
     // --- Health (shared, but reachable from dashboard) ---
     router.get('/health', async (req, res) => {
         try {

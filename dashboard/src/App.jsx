@@ -1,5 +1,5 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import useAuthStore from '@/stores/authStore';
 import config from '@/config';
 import useThemeStore from '@/stores/themeStore';
@@ -8,6 +8,7 @@ import LoginModal from '@/components/LoginModal';
 import ToastContainer from '@/components/ToastContainer';
 import ChatWidget from '@/components/ChatWidget';
 import { PageSkeleton } from '@/components/Skeleton';
+import { setupBackButton, isTelegramMiniApp } from '@/utils/telegram';
 
 // Lazy-loaded pages for code splitting
 const DashboardPage = lazy(() => import('@/pages/owner/DashboardPage'));
@@ -39,11 +40,22 @@ export default function App() {
     const { init, loading, isAuthenticated, isOwner, isOwnerView } = useAuthStore();
     const { initTheme } = useThemeStore();
     const [showLogin, setShowLogin] = useState(false);
+    const location = useLocation();
+    const navigate = useNavigate();
 
     useEffect(() => {
         init();
         initTheme();
     }, []);
+
+    // #5 — Telegram Mini App Back Button
+    const handleBack = useCallback(() => navigate(-1), [navigate]);
+    useEffect(() => {
+        if (!isTelegramMiniApp()) return;
+        const isHome = location.pathname === '/' || location.pathname === '';
+        setupBackButton(!isHome, handleBack);
+        return () => setupBackButton(false, handleBack);
+    }, [location.pathname, handleBack]);
 
     if (loading) {
         return (
