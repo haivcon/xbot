@@ -845,7 +845,7 @@ module.exports = {
             log.child('BATCHTRANSFER').warn(`Duplicate addresses: ${uniqueDups.join(', ')}`);
             results.push({
                 wallet: '⚠️',
-                to: uniqueDups.map(a => a.slice(0, 10) + '...').join(', '),
+                to: uniqueDups.join(', '),
                 status: `⚠️ ${dupWarnTexts[lk]}: ${uniqueDups.length} addr(s)`,
                 amount: '-'
             });
@@ -861,8 +861,8 @@ module.exports = {
             if (!addr || !ethers.isAddress(addr)) {
                 results.push({
                     wallet: `#${t.fromWalletId}`,
-                    to: addr ? (addr.slice(0, 10) + '...') : emptyText[lk],
-                    status: `❌ ${invalidAddrTexts[lk]}: ${addr ? addr.slice(0, 16) + '...' : emptyText[lk]}`,
+                    to: addr || emptyText[lk],
+                    status: `❌ ${invalidAddrTexts[lk]}: ${addr || emptyText[lk]}`,
                     amount: t.amount
                 });
             }
@@ -1419,7 +1419,7 @@ module.exports = {
                     ru: `📊 Отчёт массовой отправки - ${results.length} операций`,
                     id: `📊 Laporan Transfer Massal - ${results.length} transaksi`
                 };
-                await bot.sendDocument(chatId, csvPath, { caption: csvCaptionTexts[lk] || csvCaptionTexts.en, disable_notification: true });
+                await (bot.bot || bot).sendDocument(chatId, csvPath, { caption: csvCaptionTexts[lk] || csvCaptionTexts.en, disable_notification: true });
                 try { fs.unlinkSync(csvPath); } catch (e) { /* cleanup */ }
             } catch (csvErr) {
                 log.child('BATCHTRANSFER').warn('CSV export failed:', csvErr.message);
