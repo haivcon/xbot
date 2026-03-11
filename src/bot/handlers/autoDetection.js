@@ -250,27 +250,107 @@ function registerAutoDetection(context) {
                 processedMessages.set(msgKey, Date.now());
 
                 // ==============================================
-                // PRIORITY: Skip if message looks like a wallet address
-                // Prevent 0x... and XKO... from matching dice patterns
+                // SMART MULTI-ADDRESS ROUTING
+                // Clear intent → pass to AI directly
+                // Ambiguous intent → show inline keyboard for user to choose
                 // ==============================================
-                const walletAddressPattern = /^(0x[a-fA-F0-9]{40,})$|^(XKO[a-fA-F0-9]{38,})$/i;
-                // Feature 9: Also detect Solana addresses (32-44 base58 chars, no 0x)
-                const solanaPattern = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-                const looksLikeAddress = walletAddressPattern.test(extractedText.trim()) ||
-                    /0x[a-fA-F0-9]{40}/.test(extractedText) ||
-                    /XKO[a-fA-F0-9]{38}/.test(extractedText) ||
-                    solanaPattern.test(extractedText.trim());
+                const multiAddrMatches = extractedText.match(/0x[0-9a-fA-F]{40}/gi);
+                const hasMultipleAddresses = multiAddrMatches && multiAddrMatches.length >= 2;
 
-                if (looksLikeAddress) {
-                    log.child('AutoDetection').info('✓ Wallet address detected, routing to AI');
-                    const addressOnly = extractedText.trim().match(/(?:0x[a-fA-F0-9]{40,}|XKO[a-fA-F0-9]{38,}|[1-9A-HJ-NP-Za-km-z]{32,44})/)?.[0] || extractedText.trim();
-                    const syntheticMsg = {
-                        ...msg,
-                        text: `/aib check wallet balance and assets of address ${addressOnly}`,
-                        caption: undefined
-                    };
-                    await handleAiaCommand(syntheticMsg);
-                    return;
+                if (hasMultipleAddresses) {
+                    const uniqueAddrs = [...new Set(multiAddrMatches.map(a => a.toLowerCase()))];
+                    const addrCount = uniqueAddrs.length;
+
+                    // Check for clear intent keywords
+                    const transferIntent = /chuyển|transfer|gửi|send|distribute|hàng loạt|tới.*ví|to.*wallet|转账|보내|전송|перевод|kirim/i;
+                    const swapIntent = /swap|đổi|exchange|trade|mua|bán|buy|sell|交换|스왑|обмен|tukar/i;
+                    const checkIntent = /kiểm tra|check|xem|balance|số dư|tài sản|portfolio|查看|余额|확인|잔액|проверить|баланс|periksa|saldo/i;
+
+                    if (transferIntent.test(extractedText) || swapIntent.test(extractedText) || checkIntent.test(extractedText)) {
+                        // Clear intent detected → pass original message to AI
+                        log.child('AutoDetection').info(`✓ Multi-address (${addrCount}) with clear intent, passing to AI`);
+                    } else {
+                        // Ambiguous intent → show inline keyboard
+                        log.child('AutoDetection').info(`✓ Multi-address (${addrCount}) with ambiguous intent, showing action picker`);
+
+                        const { t, getLang } = context;
+                        let lang = 'vi';
+                        try { if (getLang) lang = await getLang(msg); } catch (_) { /* fallback */ }
+                        const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+
+                        // Store pending multi-address data
+                        if (!global._multiAddrPending) global._multiAddrPending = new Map();
+                        const pendingId = `ma_${userId}_${Date.now()}`;
+                        global._multiAddrPending.set(pendingId, {
+                            addresses: uniqueAddrs,
+                            originalText: extractedText,
+                            msg: { ...msg },
+                            createdAt: Date.now()
+                        });
+
+                        // Auto-cleanup after 5 minutes
+                        setTimeout(() => { global._multiAddrPending.delete(pendingId); }, 5 * 60 * 1000);
+
+                        const headerTexts = {
+                            en: `📋 <b>Multiple Wallets Detected</b>\n━━━━━━━━━━━━━━━━━━\nI found <b>${addrCount}</b> wallet addresses in your message.\nWhat would you like to do?`,
+                            vi: `📋 <b>Phát hiện nhiều ví</b>\n━━━━━━━━━━━━━━━━━━\nTôi phát hiện <b>${addrCount}</b> địa chỉ ví trong tin nhắn.\nBạn muốn làm gì?`,
+                            zh: `📋 <b>检测到多个钱包</b>\n━━━━━━━━━━━━━━━━━━\n在您的消息中发现了 <b>${addrCount}</b> 个钱包地址。\n您想执行什么操作？`,
+                            ko: `📋 <b>다수 지갑 감지</b>\n━━━━━━━━━━━━━━━━━━\n메시지에서 <b>${addrCount}</b>개의 지갑 주소를 발견했습니다.\n원하시는 작업을 선택해주세요:`,
+                            ru: `📋 <b>Обнаружено несколько кошельков</b>\n━━━━━━━━━━━━━━━━━━\nОбнаружено <b>${addrCount}</b> адресов кошельков.\nЧто вы хотите сделать?`,
+                            id: `📋 <b>Beberapa Dompet Terdeteksi</b>\n━━━━━━━━━━━━━━━━━━\nDitemukan <b>${addrCount}</b> alamat dompet di pesan Anda.\nApa yang ingin Anda lakukan?`
+                        };
+
+                        const btnTexts = {
+                            en: { transfer: '📤 Transfer tokens', check: '💰 Check balances', cancel: '❌ Cancel' },
+                            vi: { transfer: '📤 Chuyển token', check: '💰 Kiểm tra số dư', cancel: '❌ Hủy' },
+                            zh: { transfer: '📤 转账代币', check: '💰 查看余额', cancel: '❌ 取消' },
+                            ko: { transfer: '📤 토큰 전송', check: '💰 잔액 확인', cancel: '❌ 취소' },
+                            ru: { transfer: '📤 Перевод токенов', check: '💰 Проверить балансы', cancel: '❌ Отмена' },
+                            id: { transfer: '📤 Transfer token', check: '💰 Cek saldo', cancel: '❌ Batal' }
+                        };
+                        const btns = btnTexts[lk] || btnTexts.en;
+
+                        try {
+                            await bot.sendMessage(msg.chat.id, headerTexts[lk] || headerTexts.en, {
+                                parse_mode: 'HTML',
+                                reply_to_message_id: msg.message_id,
+                                message_thread_id: msg.message_thread_id || undefined,
+                                reply_markup: {
+                                    inline_keyboard: [
+                                        [
+                                            { text: btns.transfer, callback_data: `multiaddr_transfer|${pendingId}` },
+                                            { text: btns.check, callback_data: `multiaddr_check|${pendingId}` }
+                                        ],
+                                        [
+                                            { text: btns.cancel, callback_data: `multiaddr_cancel|${pendingId}` }
+                                        ]
+                                    ]
+                                }
+                            });
+                        } catch (kbErr) {
+                            log.child('AutoDetection').error('Failed to send multi-address picker:', kbErr.message);
+                        }
+                        return;
+                    }
+                } else {
+                    const walletAddressPattern = /^(0x[a-fA-F0-9]{40,})$|^(XKO[a-fA-F0-9]{38,})$/i;
+                    const solanaPattern = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+                    const looksLikeAddress = walletAddressPattern.test(extractedText.trim()) ||
+                        /0x[a-fA-F0-9]{40}/.test(extractedText) ||
+                        /XKO[a-fA-F0-9]{38}/.test(extractedText) ||
+                        solanaPattern.test(extractedText.trim());
+
+                    if (looksLikeAddress) {
+                        log.child('AutoDetection').info('✓ Single wallet address detected, routing to balance check');
+                        const addressOnly = extractedText.trim().match(/(?:0x[a-fA-F0-9]{40,}|XKO[a-fA-F0-9]{38,}|[1-9A-HJ-NP-Za-km-z]{32,44})/)?.[0] || extractedText.trim();
+                        const syntheticMsg = {
+                            ...msg,
+                            text: `/aib check wallet balance and assets of address ${addressOnly}`,
+                            caption: undefined
+                        };
+                        await handleAiaCommand(syntheticMsg);
+                        return;
+                    }
                 }
 
                 // ==============================================
@@ -396,6 +476,63 @@ function registerAutoDetection(context) {
             }
         } catch (error) {
             log.child('AutoDetection').error('Error:', error.message);
+        }
+    });
+
+    // ── Multi-Address Action Callback Handler ──
+    bot.on('callback_query', async (query) => {
+        try {
+            const data = query.data || '';
+            if (!data.startsWith('multiaddr_')) return;
+
+            const [action, pendingId] = data.split('|');
+            if (!pendingId) return;
+
+            const pending = global._multiAddrPending?.get(pendingId);
+            if (!pending) {
+                await bot.answerCallbackQuery(query.id, { text: '⏰ Expired / Hết hạn', show_alert: false });
+                try { await bot.deleteMessage(query.message.chat.id, query.message.message_id); } catch (_) { }
+                return;
+            }
+
+            // Cleanup
+            global._multiAddrPending.delete(pendingId);
+
+            // Delete the picker keyboard message
+            try { await bot.deleteMessage(query.message.chat.id, query.message.message_id); } catch (_) { }
+
+            if (action === 'multiaddr_cancel') {
+                const cancelTexts = {
+                    en: '✅ Cancelled', vi: '✅ Đã hủy', zh: '✅ 已取消',
+                    ko: '✅ 취소됨', ru: '✅ Отменено', id: '✅ Dibatalkan'
+                };
+                await bot.answerCallbackQuery(query.id, { text: cancelTexts.vi, show_alert: false });
+                return;
+            }
+
+            await bot.answerCallbackQuery(query.id);
+
+            // Build synthetic message with intent prefix
+            const addrList = pending.addresses.join(' ');
+            let intentPrefix = '';
+
+            if (action === 'multiaddr_transfer') {
+                intentPrefix = `transfer tokens to these ${pending.addresses.length} wallets: `;
+            } else if (action === 'multiaddr_check') {
+                intentPrefix = `check balance and assets of these ${pending.addresses.length} wallets: `;
+            }
+
+            const syntheticMsg = {
+                ...pending.msg,
+                text: `/aib ${intentPrefix}${pending.originalText}`,
+                caption: undefined
+            };
+
+            log.child('AutoDetection').info(`✓ Multi-address callback: ${action}, ${pending.addresses.length} addresses`);
+            await handleAiaCommand(syntheticMsg);
+
+        } catch (err) {
+            log.child('AutoDetection').error('Multi-address callback error:', err.message);
         }
     });
 

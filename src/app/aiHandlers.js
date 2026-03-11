@@ -3755,38 +3755,52 @@ function createAiHandlers(deps) {
       log.child('FnCall').info('⚡ Wallet creation override injected into AI prompt');
     }
 
-    // ── BATCH TRANSFER OVERRIDE ──
-    // Force AI to call batch_transfer when user provides multiple wallet addresses
+    // ── MULTI-ADDRESS CONTEXT HANDLER ──
+    // When user provides multiple wallet addresses, help AI understand context
     const addressMatches = userPrompt.match(/0x[0-9a-fA-F]{40}/gi);
     if (addressMatches && addressMatches.length >= 2) {
       const uniqueAddresses = [...new Set(addressMatches.map(a => a.toLowerCase()))];
       if (uniqueAddresses.length >= 2) {
-        // Build explicit address list so AI doesn't fabricate addresses
         const addrList = uniqueAddresses.map((a, i) => `  ${i + 1}. ${a}`).join('\n');
-        contents[contents.length - 1].parts.push({
-          text: '\n[SYSTEM OVERRIDE — BATCH TRANSFER ROUTING (MANDATORY):\n' +
-            'The user message contains ' + uniqueAddresses.length + ' destination wallet addresses.\n' +
-            'You MUST call batch_transfer with these EXACT parameters:\n' +
-            '- mode: "distribute"\n' +
-            '- fromWalletId: "default" (for ALL entries)\n' +
-            '- transfers array: create EXACTLY ' + uniqueAddresses.length + ' entries, one per address below:\n' +
-            addrList + '\n' +
-            'CRITICAL RULES:\n' +
-            '1. Use EVERY address listed above - do NOT skip any\n' +
-            '2. Do NOT fabricate or make up addresses - use ONLY the addresses from the user message\n' +
-            '3. Do NOT call transfer_tokens - it only supports single transfers\n' +
-            '4. Do NOT call get_wallet_balance or check balances first - go straight to batch_transfer\n' +
-            '5. The amount per transfer = the amount the user specified]'
-        });
-        // CRITICAL: Remove competing tools that match 0x addresses to prevent mis-routing
-        // The AI keeps calling check_wallet_balance_direct instead of batch_transfer
-        const competingTools = ['check_wallet_balance_direct', 'check_wallet_balance', 'transfer_tokens', 'lookup_contract'];
-        if (tools.length > 0 && tools[0].functionDeclarations) {
-          const before = tools[0].functionDeclarations.length;
-          tools[0].functionDeclarations = tools[0].functionDeclarations.filter(
-            f => !competingTools.includes(f.name)
-          );
-          log.child('FnCall').info(`⚡ Batch transfer override: ${uniqueAddresses.length} addresses, removed ${before - tools[0].functionDeclarations.length} competing tools`);
+        
+        // Detect user intent
+        const transferKeywords = /chuyển|transfer|gửi|send|distribute|hàng loạt|hang loat|tới.*ví|to.*wallet|转账|보내|전송|перевод|kirim/i;
+        const hasTransferIntent = transferKeywords.test(userPrompt);
+        
+        if (hasTransferIntent) {
+          // TRANSFER INTENT: Force batch_transfer with explicit address list
+          contents[contents.length - 1].parts.push({
+            text: '\n[SYSTEM OVERRIDE — BATCH TRANSFER ROUTING (MANDATORY):\n' +
+              'The user message contains ' + uniqueAddresses.length + ' destination wallet addresses.\n' +
+              'You MUST call batch_transfer with these EXACT parameters:\n' +
+              '- mode: "distribute"\n' +
+              '- fromWalletId: "default" (for ALL entries)\n' +
+              '- transfers array: create EXACTLY ' + uniqueAddresses.length + ' entries, one per address below:\n' +
+              addrList + '\n' +
+              'CRITICAL RULES:\n' +
+              '1. Use EVERY address listed above - do NOT skip any\n' +
+              '2. Do NOT fabricate or make up addresses - use ONLY the addresses from the user message\n' +
+              '3. Do NOT call transfer_tokens - it only supports single transfers\n' +
+              '4. Do NOT call check_wallet_balance_direct - that is for checking a single wallet\n' +
+              '5. The amount per transfer = the amount the user specified]'
+          });
+          // Remove competing tools to guarantee correct routing
+          const competingTools = ['check_wallet_balance_direct', 'check_wallet_balance', 'transfer_tokens', 'lookup_contract'];
+          if (tools.length > 0 && tools[0].functionDeclarations) {
+            const before = tools[0].functionDeclarations.length;
+            tools[0].functionDeclarations = tools[0].functionDeclarations.filter(
+              f => !competingTools.includes(f.name)
+            );
+            log.child('FnCall').info(`⚡ Batch transfer override: ${uniqueAddresses.length} addresses, removed ${before - tools[0].functionDeclarations.length} competing tools`);
+          }
+        } else {
+          // NON-TRANSFER INTENT (swap, check, etc): provide context but let AI decide
+          contents[contents.length - 1].parts.push({
+            text: '\n[CONTEXT: The user message contains ' + uniqueAddresses.length + ' wallet addresses:\n' +
+              addrList + '\n' +
+              'Use the appropriate tool based on user intent. If they want to check balances, check each address. If they want to swap, handle accordingly.]'
+          });
+          log.child('FnCall').info(`⚡ Multi-address context: ${uniqueAddresses.length} addresses, non-transfer intent — AI decides`);
         }
       }
     }
