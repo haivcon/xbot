@@ -346,7 +346,7 @@ module.exports.ONCHAIN_TOOLS = [
             // ── Phase 3: Wallet Upgrades ──
             {
                 name: 'transfer_tokens',
-                description: 'Transfer native tokens or ERC-20 tokens from a trading wallet to another address. Vietnamese: "chuyển token", "gửi OKB", "transfer". Supports native (OKB/ETH) and ERC-20 tokens.',
+                description: 'Transfer native tokens or ERC-20 tokens from a trading wallet to a SINGLE destination address. Vietnamese: "chuyển token", "gửi OKB", "transfer". Supports native (OKB/ETH) and ERC-20 tokens. IMPORTANT: This function supports ONLY ONE destination address. If the user provides MULTIPLE wallet addresses (2 or more 0x... addresses) to send tokens to, you MUST use batch_transfer with mode="distribute" instead. NEVER call transfer_tokens multiple times in a loop for batch sends.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -361,7 +361,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'batch_transfer',
-                description: 'Transfer tokens from multiple wallets to one or more destinations at once. Vietnamese: "chuyển hàng loạt", "gom quỹ", "phân phối token". Modes: collect (many→one), distribute (one→many), custom (N→N).',
+                description: 'Transfer tokens from multiple wallets to one or more destinations at once. Vietnamese: "chuyển hàng loạt", "gom quỹ", "phân phối token", "chuyển đến các ví", "gửi đến danh sách ví". Modes: collect (many→one), distribute (one→many), custom (N→N). CRITICAL ROUTING RULE: When user provides a LIST of multiple wallet addresses (2+ addresses starting with 0x) to send tokens to, you MUST use this function with mode="distribute". Use the user\'s default trading wallet as fromWalletId for each entry in the transfers array, and create one entry per destination address with the specified amount. Example: "Transfer 333 banmao to 0xAAA..., 0xBBB..., 0xCCC..." → batch_transfer with mode="distribute", transfers=[{fromWalletId:"default", toAddress:"0xAAA", amount:"333"}, {fromWalletId:"default", toAddress:"0xBBB", amount:"333"}, ...].',
                 parameters: {
                     type: 'object',
                     properties: {

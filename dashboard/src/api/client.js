@@ -255,6 +255,7 @@ class ApiClient {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let currentEvent = ''; // MUST persist across chunk reads
 
         while (true) {
             const { done, value } = await reader.read();
@@ -262,18 +263,21 @@ class ApiClient {
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
-            let currentEvent = '';
             for (const line of lines) {
-                if (line.startsWith('event: ')) currentEvent = line.slice(7);
-                else if (line.startsWith('data: ') && currentEvent) {
+                const trimmed = line.replace('\r', '');
+                if (trimmed.startsWith('event: ')) {
+                    currentEvent = trimmed.slice(7).trim();
+                } else if (trimmed.startsWith('data: ') && currentEvent) {
                     try {
-                        const data = JSON.parse(line.slice(6));
+                        const data = JSON.parse(trimmed.slice(6));
                         if (currentEvent === 'text-delta') onTextDelta?.(data.text);
                         else if (currentEvent === 'tool-start') onToolStart?.(data);
                         else if (currentEvent === 'tool-result') onToolResult?.(data);
                         else if (currentEvent === 'done') onDone?.(data);
                         else if (currentEvent === 'error') onError?.(data);
                     } catch {}
+                    currentEvent = '';
+                } else if (trimmed === '') {
                     currentEvent = '';
                 }
             }

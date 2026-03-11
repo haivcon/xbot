@@ -3755,6 +3755,19 @@ function createAiHandlers(deps) {
       log.child('FnCall').info('⚡ Wallet creation override injected into AI prompt');
     }
 
+    // ── BATCH TRANSFER OVERRIDE ──
+    // Force AI to call batch_transfer when user provides multiple wallet addresses
+    const addressMatches = userPrompt.match(/0x[0-9a-fA-F]{40}/gi);
+    if (addressMatches && addressMatches.length >= 2) {
+      const uniqueAddresses = [...new Set(addressMatches.map(a => a.toLowerCase()))];
+      if (uniqueAddresses.length >= 2) {
+        contents[contents.length - 1].parts.push({
+          text: '\n[SYSTEM OVERRIDE — BATCH TRANSFER ROUTING: The user message contains ' + uniqueAddresses.length + ' wallet addresses. You MUST use batch_transfer with mode="distribute" to send tokens to ALL of these addresses simultaneously. DO NOT use transfer_tokens (it only supports a single destination). For the transfers array, use the user\'s default trading wallet as fromWalletId for each entry, and create one entry per destination address with the amount the user specified. If you don\'t know the default walletId, use "default" and the system will resolve it.]'
+        });
+        log.child('FnCall').info(`⚡ Batch transfer override: ${uniqueAddresses.length} unique addresses detected`);
+      }
+    }
+
     let finalResponse = null;
     let maxIterations = 10; // Prevent infinite loops
 

@@ -976,13 +976,27 @@ module.exports = {
         // #3: Wallet cache to avoid repeated DB queries and key decryption
         const walletCache = new Map();
         async function getCachedWallet(walletId) {
-            if (walletCache.has(walletId)) return walletCache.get(walletId);
-            const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [parseInt(walletId), userId]);
+            // Resolve "default" or invalid walletId to user's actual default wallet
+            let resolvedId = walletId;
+            if (String(walletId).toLowerCase() === 'default' || !walletId || isNaN(parseInt(walletId))) {
+                const defaultWallet = await dbGet('SELECT id FROM user_trading_wallets WHERE userId = ? AND isDefault = 1', [userId]);
+                if (!defaultWallet) {
+                    const firstWallet = await dbGet('SELECT id FROM user_trading_wallets WHERE userId = ? ORDER BY createdAt ASC LIMIT 1', [userId]);
+                    if (!firstWallet) return null;
+                    resolvedId = firstWallet.id;
+                } else {
+                    resolvedId = defaultWallet.id;
+                }
+            } else {
+                resolvedId = parseInt(walletId);
+            }
+            if (walletCache.has(resolvedId)) return walletCache.get(resolvedId);
+            const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [resolvedId, userId]);
             if (!tw) return null;
             const privateKey = global._decryptTradingKey(tw.encryptedKey);
             const wallet = new ethers.Wallet(privateKey, provider);
             const cached = { tw, wallet };
-            walletCache.set(walletId, cached);
+            walletCache.set(resolvedId, cached);
             return cached;
         }
 
