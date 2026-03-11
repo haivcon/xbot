@@ -898,6 +898,29 @@ module.exports = {
                 const a = String(t.amount || '0').toLowerCase();
                 return (a === 'max' || a === 'all') ? sum : sum + Number(a || 0);
             }, 0);
+
+            // #5: Pre-batch gas estimation
+            let gasEstimateStr = '';
+            try {
+                const feeData = await provider.getFeeData();
+                const gasPerTx = isNative ? 21000n : 65000n;
+                const totalGas = gasPerTx * BigInt(validTransfers.length);
+                const gasPrice = feeData.maxFeePerGas || feeData.gasPrice || ethers.parseUnits('1', 'gwei');
+                const totalGasCost = totalGas * gasPrice * 130n / 100n;
+                const gasCostStr = Number(ethers.formatEther(totalGasCost)).toFixed(6);
+                const firstWalletId = validTransfers[0]?.fromWalletId;
+                const firstCached = await getCachedWallet(firstWalletId);
+                if (firstCached) {
+                    const nativeBal = await provider.getBalance(firstCached.wallet.address);
+                    const gasWarnTexts = { en: '⚠️ Insufficient gas!', vi: '⚠️ Không đủ gas!', zh: '⚠️ Gas不足!', ko: '⚠️ 가스 부족!', ru: '⚠️ Недостаточно газа!', id: '⚠️ Gas không đủ!' };
+                    if (nativeBal < totalGasCost) {
+                        gasEstimateStr = `\n${gasWarnTexts[lk] || gasWarnTexts.en} (${gasCostStr} native)`;
+                    } else {
+                        gasEstimateStr = `\n⛽ Est. gas: ~${gasCostStr} native`;
+                    }
+                }
+            } catch (e) { /* gas estimation is best-effort */ }
+
             const confirmTexts = {
                 en: `📋 <b>Batch Transfer Confirmation</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} transfers\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Est. Total: ~${totalAmount.toFixed(4)} ${symbol}${gasEstimateStr}\n\n⬇️ Press to confirm or cancel:`,
                 vi: `📋 <b>Xác nhận chuyển tiền hàng loạt</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} giao dịch\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Ước tính: ~${totalAmount.toFixed(4)} ${symbol}${gasEstimateStr}\n\n⬇️ Nhấn để xác nhận hoặc hủy:`,
@@ -1247,14 +1270,23 @@ module.exports = {
                     balAfter: Number(balAfterSrc).toFixed(2)
                 });
             } catch (e) {
-                log.child('BATCHTRANSFER').error(`Error wallet ${t.fromWalletId} → ${t.toAddress}:`, e.message);
-                const destShort = t.toAddress ? ((t.toAddress || "?")) : '?';
-                results.push({
-                    wallet: `#${t.fromWalletId}`,
-                    to: destShort,
-                    amount: t.amount,
-                    status: `❌ ${e.message?.slice(0, 60)}`
-                });
+                const isNetworkErr = /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENETUNREACH|rate.limit|nonce|replacement|underpriced|timeout|502|503|429/i.test(e.message);
+                if (isNetworkErr && !(t._retryCount >= 2)) {
+                    t._retryCount = (t._retryCount || 0) + 1;
+                    const retryDelay = t._retryCount * 2000;
+                    log.child('BATCHTRANSFER').warn(`Network error wallet ${t.fromWalletId}, auto-retry #${t._retryCount} in ${retryDelay}ms: ${e.message?.slice(0, 60)}`);
+                    await new Promise(r => setTimeout(r, retryDelay));
+                    validTransfers.push({ ...t, _retryCount: t._retryCount });
+                } else {
+                    log.child('BATCHTRANSFER').error(`Error wallet ${t.fromWalletId} → ${t.toAddress}:`, e.message);
+                    const destShort = t.toAddress ? ((t.toAddress || "?")) : '?';
+                    results.push({
+                        wallet: `#${t.fromWalletId}`,
+                        to: destShort,
+                        amount: t.amount,
+                        status: `❌ ${e.message?.slice(0, 60)}${t._retryCount ? ` (after ${t._retryCount} retries)` : ''}`
+                    });
+                }
             }
             // Visual progress bar for large batches
             processedCount += 1;
@@ -1399,15 +1431,31 @@ module.exports = {
             hour: '2-digit', minute: '2-digit', second: '2-digit'
         }).format(now);
 
+
+        const elapsedTotal = Math.round((Date.now() - batchStartTime) / 1000);
+        const elapsedFmt = elapsedTotal >= 60 ? `${Math.floor(elapsedTotal / 60)}m${elapsedTotal % 60}s` : `${elapsedTotal}s`;
+        const successRate = results.length > 0 ? Math.round((successCount / results.length) * 100) : 0;
+        const rateEmoji = successRate === 100 ? '🟢' : successRate >= 80 ? '🟡' : '🔴';
+        const elapsedLabels = { en: 'Duration:', vi: 'Thời lượng:', zh: '耗时:', ko: '소요시간:', ru: 'Длительность:', id: 'Durasi:' };
+        const rateLabels = { en: 'Success rate:', vi: 'Tỉ lệ:', zh: '成功率:', ko: '성공률:', ru: 'Успех:', id: 'Tingkat sukses:' };
         const header = `📦 <b>${headerLabel}</b>\n` +
             `━━━━━━━━━━━━━━━━━━\n` +
             `📊 <b>${successCount}/${results.length}</b> ${successStr}\n` +
+            `${rateEmoji} ${rateLabels[lk] || rateLabels.en} <b>${successRate}%</b>\n` +
             `🪙 ${tokenLabel} <b>${symbol}</b>\n` +
             `🌐 ${networkLabel} ${chainName} (#${chainIndex})\n` +
             `💰 <b>${totalSentLabel}</b> ${totalSent.toFixed(6)} ${symbol}\n` +
             `⛽ <b>${gasLabel}</b> ${totalGasEth.toFixed(6)} native\n` +
+            `⏱ ${elapsedLabels[lk] || elapsedLabels.en} ${elapsedFmt}\n` +
             `⏰ ${timeLabel} ${timeString} (GMT+7)\n` +
             `━━━━━━━━━━━━━━━━━━`;
+
+        // #8: Load whitelist labels for address book display
+        const addrLabels = new Map();
+        try {
+            const wl = await dbAll('SELECT address, label FROM wallet_whitelist WHERE userId = ?', [userId]);
+            wl.forEach(w => { if (w.label) addrLabels.set(w.address.toLowerCase(), w.label); });
+        } catch (e) { /* whitelist labels optional */ }
 
         // Build per-wallet result blocks
         const walletBlocks = [];
