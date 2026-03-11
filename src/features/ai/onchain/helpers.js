@@ -113,7 +113,7 @@ async function rpcRetry(fn, maxAttempts = 3, label = 'RPC') {
             const isRetryable = /timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|502|503|504|rate limit|overloaded/i.test(err.message || '');
             if (!isRetryable || attempt === maxAttempts) throw err;
             const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // 1s, 2s, 4s (max 5s)
-            log.child('label').warn(`Attempt ${attempt}/${maxAttempts} failed: ${err.message}. Retrying in ${delay}ms...`);
+            log.child(label).warn(`Attempt ${attempt}/${maxAttempts} failed: ${err.message}. Retrying in ${delay}ms...`);
             await new Promise(r => setTimeout(r, delay));
         }
     }
@@ -122,6 +122,7 @@ async function rpcRetry(fn, maxAttempts = 3, label = 'RPC') {
 
 // ═══════════════════════════════════════════════════════
 // Enhancement #2: Nonce Manager for batch operations
+// NOTE: Used by batch_swap only. batch_transfer uses sequential TXs with auto-nonce.
 // ═══════════════════════════════════════════════════════
 function createNonceManager(provider) {
     const nonceCache = new Map(); // address → next nonce
@@ -144,6 +145,7 @@ function createNonceManager(provider) {
 
 // ═══════════════════════════════════════════════════════
 // Enhancement #3: Balance pre-check
+// NOTE: Used by execute_swap. batch_transfer & transfer_tokens use inline balance checks.
 // ═══════════════════════════════════════════════════════
 async function checkTokenBalance(provider, walletAddress, tokenAddress, requiredAmount, chainIndex) {
     const ethers = require('ethers');

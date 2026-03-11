@@ -2371,6 +2371,40 @@ function startTelegramBot() {
             return;
         }
         // ==============================================
+        // BATCH TRANSFER CONFIRMATION - Handle confirm/cancel for batch_transfer
+        // ==============================================
+        const batchConfirmAction = query.data?.startsWith('batchconfirm|') ? query.data.slice('batchconfirm|'.length) : null;
+        if (batchConfirmAction) {
+            const isConfirm = batchConfirmAction.startsWith('confirm_');
+            const isCancel = batchConfirmAction.startsWith('cancel_');
+            const batchId = batchConfirmAction.replace(/^(confirm_|cancel_)/, '');
+
+            // Delete the confirmation message
+            if (query.message?.message_id) {
+                bot.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => { });
+            }
+
+            const pendingResolver = global._batchTransferPending?.get(batchId);
+            if (pendingResolver) {
+                // Batch is waiting for confirmation
+                pendingResolver(isConfirm ? 'confirm' : 'cancel');
+                const ackText = isConfirm
+                    ? (t(callbackLang, 'batch_confirmed') || '✅ Confirmed, executing...')
+                    : (t(callbackLang, 'batch_cancelled') || '❌ Cancelled');
+                await bot.answerCallbackQuery(queryId, { text: ackText });
+            } else if (isCancel) {
+                // Batch already started — set cancel signal for mid-batch abort
+                if (global._batchTransferCancel) {
+                    global._batchTransferCancel.set(batchId, true);
+                }
+                await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'batch_cancelling') || '⛔ Cancelling batch...' });
+            } else {
+                await bot.answerCallbackQuery(queryId, { text: '⏰ Expired' });
+            }
+            return;
+        }
+
+        // ==============================================
         const autoConfirmAction = query.data?.startsWith('autoconfirm|') ? query.data.split('|') : null;
         if (autoConfirmAction && autoConfirmAction.length > 1) {
             const command = autoConfirmAction[1];

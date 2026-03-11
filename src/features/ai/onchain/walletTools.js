@@ -499,12 +499,27 @@ module.exports = {
             const provider = new ethers.JsonRpcProvider(rpcUrl);
             const privateKey = global._decryptTradingKey(tw.encryptedKey);
             const wallet = new ethers.Wallet(privateKey, provider);
-            const rawToAddr = (args.toAddress || '').trim();
+            let rawToAddr = (args.toAddress || '').trim();
+            // Auto-correct XKO prefix → 0x (AI sometimes generates XKO from X Layer context)
+            if (rawToAddr.startsWith('XKO') || rawToAddr.startsWith('xko')) {
+                rawToAddr = '0x' + rawToAddr.slice(3);
+            }
             if (!rawToAddr || !ethers.isAddress(rawToAddr)) {
                 return { displayMessage: `❌ Địa chỉ đích không hợp lệ: <code>${rawToAddr ? rawToAddr.slice(0, 20) + '...' : '(trống)'}</code>`, action: true, success: false };
             }
             const toAddr = rawToAddr.toLowerCase();
-            let tokenAddr = args.tokenAddress ? args.tokenAddress.toLowerCase() : 'native';
+
+            // Self-transfer guard
+            if (wallet.address.toLowerCase() === toAddr) {
+                return { displayMessage: '❌ Không thể chuyển token cho chính ví của bạn.', action: true, success: false };
+            }
+
+            let tokenAddr = args.tokenAddress ? args.tokenAddress.trim() : 'native';
+            // Auto-correct XKO prefix → 0x for tokenAddress too
+            if (tokenAddr.startsWith('XKO') || tokenAddr.startsWith('xko')) {
+                tokenAddr = '0x' + tokenAddr.slice(3);
+            }
+            tokenAddr = tokenAddr.toLowerCase();
 
             if (tokenAddr && !tokenAddr.startsWith('0x') && tokenAddr.length < 20 && tokenAddr !== 'native') {
                 const { autoResolveToken } = require('./helpers');
@@ -516,19 +531,46 @@ module.exports = {
 
             const isNative = !tokenAddr || tokenAddr === 'native' || tokenAddr === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 
+            // Correct native chain symbol mapping
+            const chainNativeSymbol = { '1': 'ETH', '56': 'BNB', '196': 'OKB', '137': 'POL', '42161': 'ETH', '8453': 'ETH', '501': 'SOL' };
+
             let txHash, gasUsed = '0', gasFeeEth = '0';
             let balBeforeSrc = '0', balBeforeDst = '0', balAfterSrc = '0', balAfterDst = '0';
-            const symbol = args.symbol || (isNative ? (chainIndex === '196' ? 'OKB' : 'ETH') : 'Token');
+            const symbol = args.symbol || (isNative ? (chainNativeSymbol[chainIndex] || 'ETH') : 'Token');
 
-            log.child('TRANSFER').info(`Starting: user=${userId}, wallet=${tw.address}, to=${toAddr}, token=${tokenAddr}, amount=${args.amount}`);
+            let actualAmount = String(args.amount || '0');
+
+            log.child('TRANSFER').info(`Starting: user=${userId}, wallet=${tw.address}, to=${toAddr}, token=${tokenAddr}, amount=${actualAmount}`);
 
             if (isNative) {
-                balBeforeSrc = ethers.formatEther(await provider.getBalance(wallet.address));
+                const rawBalance = await provider.getBalance(wallet.address);
+                balBeforeSrc = ethers.formatEther(rawBalance);
                 balBeforeDst = ethers.formatEther(await provider.getBalance(toAddr));
 
-                // Enhancement #4: Dynamic gas pricing via getFeeData (EIP-1559 compatible)
-                const amountWei = ethers.parseEther(args.amount);
                 const feeData = await provider.getFeeData();
+
+                // Support "max"/"all" amount
+                if (actualAmount.toLowerCase() === 'max' || actualAmount.toLowerCase() === 'all') {
+                    // Dynamic gas estimation
+                    let estimatedGas;
+                    try {
+                        estimatedGas = await provider.estimateGas({ from: wallet.address, to: toAddr, value: rawBalance / 2n });
+                    } catch (e) { estimatedGas = 21000n; }
+                    const gasPrice = feeData.maxFeePerGas || feeData.gasPrice || ethers.parseUnits('1', 'gwei');
+                    const gasCost = (estimatedGas * 120n / 100n) * gasPrice; // 20% buffer
+                    const maxValue = rawBalance - gasCost;
+                    if (maxValue <= 0n) {
+                        return { displayMessage: `❌ Số dư không đủ để trả phí gas. Số dư: ${ethers.formatEther(rawBalance)} ${symbol}`, action: true, success: false };
+                    }
+                    actualAmount = ethers.formatEther(maxValue);
+                }
+
+                // Balance pre-check
+                const amountWei = ethers.parseEther(actualAmount);
+                if (amountWei > rawBalance) {
+                    return { displayMessage: `❌ Số dư không đủ: ${Number(balBeforeSrc).toFixed(4)} ${symbol}`, action: true, success: false };
+                }
+
                 const txOptions = { to: toAddr, value: amountWei };
                 if (feeData.maxFeePerGas) {
                     // EIP-1559 supported
@@ -539,12 +581,23 @@ module.exports = {
                 }
                 // Enhancement #1: Retry for RPC failures
                 const tx = await rpcRetry(() => wallet.sendTransaction(txOptions), 3, 'TRANSFER');
-                const receipt = await tx.wait();
+                // Receipt retry: fallback to provider.waitForTransaction if tx.wait() fails
+                let receipt;
+                try {
+                    receipt = await tx.wait();
+                } catch (waitErr) {
+                    log.child('TRANSFER').warn(`tx.wait() failed for ${tx.hash}, retrying via provider...`);
+                    receipt = await provider.waitForTransaction(tx.hash, 1, 60000);
+                }
 
                 txHash = receipt.hash;
                 gasUsed = receipt.gasUsed?.toString() || '0';
                 if (receipt.gasUsed && receipt.gasPrice) {
                     gasFeeEth = ethers.formatEther(receipt.gasUsed * receipt.gasPrice);
+                }
+                // Revert detection: TX mined but failed on-chain
+                if (receipt.status === 0) {
+                    return { displayMessage: `❌ TX đã mine nhưng revert on-chain. Gas đã mất: ${gasFeeEth} native. Hash: <code>${txHash}</code>`, action: true, success: false };
                 }
 
                 balAfterSrc = ethers.formatEther(await provider.getBalance(wallet.address));
@@ -561,17 +614,38 @@ module.exports = {
                     log.child('TRANSFER').error('Could not fetch decimals, falling back to 18:', decErr.message);
                 }
 
+                let rawBalance;
                 try {
-                    balBeforeSrc = ethers.formatUnits(await contract.balanceOf(wallet.address), decimals);
+                    rawBalance = await contract.balanceOf(wallet.address);
+                    balBeforeSrc = ethers.formatUnits(rawBalance, decimals);
                     balBeforeDst = ethers.formatUnits(await contract.balanceOf(toAddr), decimals);
                 } catch (balErr) {
                     return `❌ Lỗi: Không thể lấy số dư. Có thể địa chỉ token (${tokenAddr}) không hợp lệ trên mạng lưới này.`;
                 }
 
-                const amountWei = ethers.parseUnits(args.amount, decimals);
-                // Enhancement #1: Retry for RPC failures
+                // Support "max"/"all" amount for ERC-20
+                if (actualAmount.toLowerCase() === 'max' || actualAmount.toLowerCase() === 'all') {
+                    if (rawBalance === 0n) {
+                        return { displayMessage: `❌ Số dư token = 0 ${symbol}`, action: true, success: false };
+                    }
+                    actualAmount = ethers.formatUnits(rawBalance, decimals);
+                }
+
+                // Balance pre-check
+                const amountWei = ethers.parseUnits(actualAmount, decimals);
+                if (amountWei > rawBalance) {
+                    return { displayMessage: `❌ Số dư không đủ: ${Number(balBeforeSrc).toFixed(4)} ${symbol}`, action: true, success: false };
+                }
+
                 const tx = await rpcRetry(() => contract.transfer(toAddr, amountWei), 3, 'TRANSFER-ERC20');
-                const receipt = await tx.wait();
+                // Receipt retry for ERC-20
+                let receipt;
+                try {
+                    receipt = await tx.wait();
+                } catch (waitErr) {
+                    log.child('TRANSFER').warn(`tx.wait() failed for ${tx.hash}, retrying via provider...`);
+                    receipt = await provider.waitForTransaction(tx.hash, 1, 60000);
+                }
 
                 txHash = receipt.hash;
                 gasUsed = receipt.gasUsed?.toString() || '0';
@@ -581,12 +655,16 @@ module.exports = {
 
                 balAfterSrc = ethers.formatUnits(await contract.balanceOf(wallet.address), decimals);
                 balAfterDst = ethers.formatUnits(await contract.balanceOf(toAddr), decimals);
+                // Revert detection for ERC-20
+                if (receipt.status === 0) {
+                    return { displayMessage: `❌ TX đã mine nhưng revert on-chain. Gas đã mất: ${gasFeeEth} native. Hash: <code>${txHash}</code>`, action: true, success: false };
+                }
             }
 
             // Record tx history
             try {
                 await dbRun('INSERT INTO wallet_tx_history (userId, walletId, walletAddress, type, chainIndex, fromToken, toToken, fromAmount, toAmount, fromSymbol, toSymbol, txHash, gasUsed, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                    [userId, wId, tw.address, 'transfer_out', chainIndex, tokenAddr, tokenAddr, args.amount, args.amount, symbol, symbol, txHash, gasUsed, Math.floor(Date.now() / 1000)]);
+                    [userId, wId, tw.address, 'transfer_out', chainIndex, tokenAddr, toAddr, actualAmount, actualAmount, symbol, symbol, txHash, gasUsed, Math.floor(Date.now() / 1000)]);
             } catch (dbErr) { log.child('TRANSFER').error('DB log error:', dbErr.message); }
 
             const explorer = _getExplorerUrl(chainIndex);
@@ -643,7 +721,7 @@ module.exports = {
                 `<b>${detailsLabel}</b>\n` +
                 `➖ ${senderLabel} ${Number(balBeforeSrc).toFixed(2)} → ${Number(balAfterSrc).toFixed(2)} ${symbol}\n` +
                 `➕ ${receiverLabel} ${Number(balBeforeDst).toFixed(2)} → ${Number(balAfterDst).toFixed(2)} ${symbol}\n` +
-                `💰 ${amountLabel} <b>${args.amount} ${symbol}</b>\n\n` +
+                `💰 ${amountLabel} <b>${actualAmount} ${symbol}</b>\n\n` +
                 `🔗 <a href="${explorer}/tx/${txHash}">${linkLabel}</a>`;
 
             return { success: true, action: true, displayMessage: report };
@@ -663,14 +741,33 @@ module.exports = {
         const { dbGet, dbRun, dbAll } = require('../../../../db/core');
         const ethers = require('ethers');
         const userId = context?.userId;
-        if (!userId) return '❌ Không xác định được người dùng.';
-        if (!global._decryptTradingKey) return '❌ Hệ thống chưa sẵn sàng để ký giao dịch.';
-        const transfers = args.transfers || [];
+        if (!userId) {
+            const noUserTexts = { en: 'Cannot identify user.', vi: 'Không xác định được người dùng.', zh: '无法识别用户。', ko: '사용자를 확인할 수 없습니다.', ru: 'Не удалось определить пользователя.', id: 'Tidak dapat mengidentifikasi pengguna.' };
+            const errLk = context?.lang || 'en';
+            return `❌ ${noUserTexts[errLk] || noUserTexts.en}`;
+        }
+        if (!global._decryptTradingKey) {
+            const notReadyTexts = { en: 'System not ready to sign transactions.', vi: 'Hệ thống chưa sẵn sàng để ký giao dịch.', zh: '系统尚未准备好签署交易。', ko: '시스템이 거래 서명 준비가 되지 않았습니다.', ru: 'Система не готова подписывать транзакции.', id: 'Sistem belum siap untuk menandatangani transaksi.' };
+            const errLk = context?.lang || 'en';
+            return `❌ ${notReadyTexts[errLk] || notReadyTexts.en}`;
+        }
+
+        // #2: Batch size limit to prevent runaway execution
+        const MAX_BATCH_SIZE = 50;
+        let transfers = args.transfers || [];
         if (transfers.length === 0) return '❌ Danh sách chuyển trống.';
+        if (transfers.length > MAX_BATCH_SIZE) {
+            return { displayMessage: `❌ Batch quá lớn: ${transfers.length} items. Tối đa ${MAX_BATCH_SIZE} transfers mỗi lần.`, action: true, success: false };
+        }
         const chainIndex = args.chainIndex || '196';
         const rpcUrl = _getChainRpc(chainIndex);
         const provider = new ethers.JsonRpcProvider(rpcUrl);
-        let tokenAddr = args.tokenAddress ? args.tokenAddress.toLowerCase() : 'native';
+        let tokenAddr = args.tokenAddress ? args.tokenAddress.trim() : 'native';
+        // Auto-correct XKO prefix → 0x for tokenAddress too
+        if (tokenAddr.startsWith('XKO') || tokenAddr.startsWith('xko')) {
+            tokenAddr = '0x' + tokenAddr.slice(3);
+        }
+        tokenAddr = tokenAddr.toLowerCase();
 
         if (tokenAddr && !tokenAddr.startsWith('0x') && tokenAddr.length < 20 && tokenAddr !== 'native') {
             const { autoResolveToken } = require('./helpers');
@@ -680,12 +777,30 @@ module.exports = {
         }
 
         const isNative = !tokenAddr || tokenAddr === 'native' || tokenAddr === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
-        const symbol = args.symbol || (isNative ? (chainIndex === '196' ? 'OKB' : 'ETH') : 'Token');
-        const results = [];
-        // Enhancement #2: Shared nonce manager for batch operations
-        const nonceManager = createNonceManager(provider);
 
+        // #4: Correct native chain symbol mapping
+        const chainNativeSymbol = { '1': 'ETH', '56': 'BNB', '196': 'OKB', '137': 'POL', '42161': 'ETH', '8453': 'ETH', '501': 'SOL' };
+
+        // Resolve ERC-20 symbol early so reports show real name (e.g. "BANMAO") instead of "Token"
+        let symbol = args.symbol || (isNative ? (chainNativeSymbol[chainIndex] || 'ETH') : 'Token');
+        let tokenDecimals = 18;
+        if (!isNative && tokenAddr) {
+            try {
+                const erc20Meta = new ethers.Contract(tokenAddr, ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'], provider);
+                const [resolvedSymbol, resolvedDecimals] = await Promise.all([
+                    erc20Meta.symbol().catch(() => symbol),
+                    erc20Meta.decimals().catch(() => 18)
+                ]);
+                symbol = resolvedSymbol || symbol;
+                tokenDecimals = Number(resolvedDecimals);
+            } catch (e) {
+                log.child('BATCHTRANSFER').warn('Could not resolve token metadata:', e.message);
+            }
+        }
+
+        const results = [];
         let totalGasEth = 0;
+        let totalSent = 0; // #5: Track total tokens sent
 
         // Resolve language early for progress messages
         let lang = context?.lang || 'en';
@@ -714,8 +829,34 @@ module.exports = {
         const walletNotFoundTexts = { en: 'Wallet does not exist', vi: 'Ví không tồn tại', zh: '钱包不存在', ko: '지갑이 존재하지 않습니다', ru: 'Кошелёк не найден', id: 'Dompet tidak ada' };
         const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
 
+        // Detect duplicate destination addresses (likely user error)
+        const destAddrs = transfers.map(t => (t.toAddress || '').trim().toLowerCase()).filter(Boolean);
+        const duplicates = destAddrs.filter((addr, i) => destAddrs.indexOf(addr) !== i);
+        if (duplicates.length > 0) {
+            const uniqueDups = [...new Set(duplicates)];
+            const dupWarnTexts = {
+                en: 'Duplicate destination addresses detected',
+                vi: 'Phát hiện địa chỉ đích bị trùng lặp',
+                zh: '检测到重复的目标地址',
+                ko: '중복된 대상 주소가 감지되었습니다',
+                ru: 'Обнаружены дублирующиеся адреса',
+                id: 'Alamat tujuan duplikat terdeteksi'
+            };
+            log.child('BATCHTRANSFER').warn(`Duplicate addresses: ${uniqueDups.join(', ')}`);
+            results.push({
+                wallet: '⚠️',
+                to: uniqueDups.map(a => a.slice(0, 10) + '...').join(', '),
+                status: `⚠️ ${dupWarnTexts[lk]}: ${uniqueDups.length} addr(s)`,
+                amount: '-'
+            });
+        }
+
         // Pre-validate all destination addresses
         for (const t of transfers) {
+            // Auto-correct XKO prefix → 0x
+            if (t.toAddress && (t.toAddress.startsWith('XKO') || t.toAddress.startsWith('xko'))) {
+                t.toAddress = '0x' + t.toAddress.slice(3);
+            }
             const addr = (t.toAddress || '').trim();
             if (!addr || !ethers.isAddress(addr)) {
                 results.push({
@@ -735,69 +876,351 @@ module.exports = {
         // Progress notification helper for large batches
         let bot = null;
         const chatId = context?.chatId || context?.msg?.chat?.id;
-        if (validTransfers.length > 10 && chatId) {
-            try { bot = require('../../../core/bot'); } catch (e) { /* no bot available */ }
+        try { bot = require('../../../core/bot'); } catch (e) { /* no bot available */ }
+
+        // ── Inline Confirm + Cancel Mechanism ──
+        // Pending batch confirmations stored globally for callback_query handler
+        if (!global._batchTransferPending) global._batchTransferPending = new Map();
+        if (!global._batchTransferCancel) global._batchTransferCancel = new Map();
+
+        const batchId = `bt_${userId}_${Date.now()}`;
+        const cancelledTexts = {
+            en: 'Batch transfer cancelled by user.',
+            vi: 'Chuyển tiền hàng loạt đã bị hủy bởi người dùng.',
+            zh: '批量转账已被用户取消。',
+            ko: '일괄 전송이 사용자에 의해 취소되었습니다.',
+            ru: 'Массовая отправка отменена пользователем.',
+            id: 'Transfer massal dibatalkan oleh pengguna.'
+        };
+
+        if (validTransfers.length > 5 && bot && chatId) {
+            const totalAmount = validTransfers.reduce((sum, t) => {
+                const a = String(t.amount || '0').toLowerCase();
+                return (a === 'max' || a === 'all') ? sum : sum + Number(a || 0);
+            }, 0);
+            const confirmTexts = {
+                en: `📋 <b>Batch Transfer Confirmation</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} transfers\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Est. Total: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ Press to confirm or cancel:`,
+                vi: `📋 <b>Xác nhận chuyển tiền hàng loạt</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} giao dịch\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Ước tính: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ Nhấn để xác nhận hoặc hủy:`,
+                zh: `📋 <b>确认批量转账</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} 笔交易\n🪙 代币: <b>${symbol}</b>\n🌐 链: #${chainIndex}\n💰 预估: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ 按下确认或取消:`,
+                ko: `📋 <b>일괄 전송 확인</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length}건\n🪙 토큰: <b>${symbol}</b>\n🌐 체인: #${chainIndex}\n💰 예상: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ 확인 또는 취소:`,
+                ru: `📋 <b>Подтверждение массовой отправки</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} транзакций\n🪙 Токен: <b>${symbol}</b>\n🌐 Сеть: #${chainIndex}\n💰 Оценка: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ Нажмите для подтверждения или отмены:`,
+                id: `📋 <b>Konfirmasi Transfer Massal</b>\n━━━━━━━━━━━━━━━━━━\n📊 ${validTransfers.length} transaksi\n🪙 Token: <b>${symbol}</b>\n🌐 Chain: #${chainIndex}\n💰 Estimasi: ~${totalAmount.toFixed(4)} ${symbol}\n\n⬇️ Tekan untuk konfirmasi atau batal:`
+            };
+            const btnTexts = {
+                en: { confirm: '✅ Confirm', cancel: '❌ Cancel' },
+                vi: { confirm: '✅ Xác nhận', cancel: '❌ Hủy bỏ' },
+                zh: { confirm: '✅ 确认', cancel: '❌ 取消' },
+                ko: { confirm: '✅ 확인', cancel: '❌ 취소' },
+                ru: { confirm: '✅ Подтвердить', cancel: '❌ Отменить' },
+                id: { confirm: '✅ Konfirmasi', cancel: '❌ Batal' }
+            };
+            const btns = btnTexts[lk] || btnTexts.en;
+
+            try {
+                // Send confirmation with inline buttons
+                await bot.sendMessage(chatId, confirmTexts[lk] || confirmTexts.en, {
+                    parse_mode: 'HTML',
+                    disable_notification: true,
+                    reply_markup: {
+                        inline_keyboard: [[
+                            { text: btns.confirm, callback_data: `batchconfirm|confirm_${batchId}` },
+                            { text: btns.cancel, callback_data: `batchconfirm|cancel_${batchId}` }
+                        ]]
+                    }
+                });
+
+                // Wait for confirmation (60s timeout, auto-proceed)
+                const confirmed = await new Promise((resolve) => {
+                    const timeout = setTimeout(() => {
+                        global._batchTransferPending.delete(batchId);
+                        resolve('timeout');
+                    }, 60000);
+                    global._batchTransferPending.set(batchId, (action) => {
+                        clearTimeout(timeout);
+                        global._batchTransferPending.delete(batchId);
+                        resolve(action);
+                    });
+                });
+
+                if (confirmed === 'cancel') {
+                    return { displayMessage: `❌ ${cancelledTexts[lk] || cancelledTexts.en}`, action: true, success: false };
+                }
+                // 'confirm' or 'timeout' → proceed
+                // Send a small cancel button that stays visible during execution
+                const cancelMidBtnTexts = {
+                    en: '⛔ Cancel Batch', vi: '⛔ Hủy Batch',
+                    zh: '⛔ 取消批量', ko: '⛔ 배치 취소',
+                    ru: '⛔ Отменить', id: '⛔ Batalkan'
+                };
+                const runningTexts = {
+                    en: '🔄 Batch running...', vi: '🔄 Đang chạy batch...',
+                    zh: '🔄 批量执行中...', ko: '🔄 배치 실행중...',
+                    ru: '🔄 Выполнение...', id: '🔄 Batch berjalan...'
+                };
+                try {
+                    await bot.sendMessage(chatId, runningTexts[lk] || runningTexts.en, {
+                        disable_notification: true,
+                        reply_markup: { inline_keyboard: [[
+                            { text: cancelMidBtnTexts[lk] || cancelMidBtnTexts.en, callback_data: `batchconfirm|cancel_${batchId}` }
+                        ]] }
+                    });
+                } catch (e) { /* ignore */ }
+            } catch (e) {
+                // If button send fails, just proceed
+                log.child('BATCHTRANSFER').warn('Confirm button send failed, proceeding:', e.message);
+            }
         }
 
         let processedCount = 0;
+
+        // #3: Wallet cache to avoid repeated DB queries and key decryption
+        const walletCache = new Map();
+        async function getCachedWallet(walletId) {
+            if (walletCache.has(walletId)) return walletCache.get(walletId);
+            const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [parseInt(walletId), userId]);
+            if (!tw) return null;
+            const privateKey = global._decryptTradingKey(tw.encryptedKey);
+            const wallet = new ethers.Wallet(privateKey, provider);
+            const cached = { tw, wallet };
+            walletCache.set(walletId, cached);
+            return cached;
+        }
+
+        const selfTransferTexts = {
+            en: 'Cannot transfer to own wallet',
+            vi: 'Không thể chuyển cho chính ví mình',
+            zh: '不能转账给自己的钱包',
+            ko: '자신의 지갑으로 전송할 수 없습니다',
+            ru: 'Нельзя переводить на свой кошелёк',
+            id: 'Tidak bisa transfer ke dompet sendiri'
+        };
+        const insufficientTexts = {
+            en: 'Insufficient balance',
+            vi: 'Số dư không đủ',
+            zh: '余额不足',
+            ko: '잔액 부족',
+            ru: 'Недостаточный баланс',
+            id: 'Saldo tidak cukup'
+        };
+        const revertTexts = {
+            en: 'TX mined but reverted on-chain',
+            vi: 'TX đã mine nhưng revert on-chain',
+            zh: '交易已打包但链上回滚',
+            ko: 'TX가 채굴되었지만 온체인에서 되돌림',
+            ru: 'TX добыта, но откатилась на чейне',
+            id: 'TX sudah dimining tapi revert on-chain'
+        };
+
+        // #2: Whitelist check — warn if destination addresses are not whitelisted
+        const whitelistedAddrs = new Set();
+        try {
+            const whitelist = await dbAll('SELECT address FROM wallet_whitelist WHERE userId = ?', [userId]);
+            whitelist.forEach(w => whitelistedAddrs.add(w.address.toLowerCase()));
+        } catch (e) { /* whitelist table may not exist yet */ }
+
+        if (whitelistedAddrs.size > 0) {
+            const nonWhitelisted = validTransfers.filter(t => !whitelistedAddrs.has((t.toAddress || '').trim().toLowerCase()));
+            if (nonWhitelisted.length > 0) {
+                const warnTexts = {
+                    en: 'addresses not in whitelist',
+                    vi: 'địa chỉ không trong whitelist',
+                    zh: '地址不在白名单中',
+                    ko: '화이트리스트에 없는 주소',
+                    ru: 'адреса не в белом списке',
+                    id: 'alamat tidak ada di whitelist'
+                };
+                results.push({
+                    wallet: '⚠️',
+                    to: `${nonWhitelisted.length} addr(s)`,
+                    status: `⚠️ ${nonWhitelisted.length} ${warnTexts[lk] || warnTexts.en}`,
+                    amount: '-'
+                });
+                log.child('BATCHTRANSFER').warn(`${nonWhitelisted.length} destination addresses not in whitelist`);
+            }
+        }
+
         for (const t of validTransfers) {
             try {
-                const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [parseInt(t.fromWalletId), userId]);
-                if (!tw) { results.push({ wallet: t.fromWalletId, status: `❌ ${walletNotFoundTexts[lk]}` }); continue; }
-                const privateKey = global._decryptTradingKey(tw.encryptedKey);
-                const wallet = new ethers.Wallet(privateKey, provider);
+                // Cancel signal check — stop if user cancelled mid-batch
+                if (global._batchTransferCancel?.get(batchId)) {
+                    const cancelMidTexts = {
+                        en: 'Cancelled mid-batch',
+                        vi: 'Đã hủy giữa chừng',
+                        zh: '已中途取消',
+                        ko: '중간에 취소됨',
+                        ru: 'Отменено на полпути',
+                        id: 'Dibatalkan di tengah proses'
+                    };
+                    results.push({ wallet: '⛔', to: '-', amount: '-', status: `⛔ ${cancelMidTexts[lk] || cancelMidTexts.en} (${processedCount}/${validTransfers.length})` });
+                    global._batchTransferCancel.delete(batchId);
+                    break;
+                }
+
+                // #3: Use cached wallet objects
+                const cachedWallet = await getCachedWallet(t.fromWalletId);
+                if (!cachedWallet) { results.push({ wallet: t.fromWalletId, status: `❌ ${walletNotFoundTexts[lk]}` }); continue; }
+                const { tw, wallet } = cachedWallet;
                 const destAddr = t.toAddress.trim().toLowerCase();
+
+                // Self-transfer guard
+                if (wallet.address.toLowerCase() === destAddr) {
+                    results.push({
+                        wallet: `#${t.fromWalletId}`,
+                        to: destAddr.slice(0, 8) + '...',
+                        amount: t.amount,
+                        status: `❌ ${selfTransferTexts[lk]}`
+                    });
+                    continue;
+                }
+
                 let txHash, balBeforeSrc = '0', balAfterSrc = '0', gasFeeEth = '0';
+                let actualAmount = String(t.amount || '0');
 
                 if (isNative) {
-                    balBeforeSrc = ethers.formatEther(await provider.getBalance(wallet.address));
-                    // Enhancement #4: Dynamic gas pricing
+                    const rawBalance = await provider.getBalance(wallet.address);
+                    balBeforeSrc = ethers.formatEther(rawBalance);
+
+                    // Support "max" amount: transfer entire balance minus gas reserve
                     const feeData = await provider.getFeeData();
-                    const txOpts = { to: destAddr, value: ethers.parseEther(t.amount) };
+                    if (actualAmount.toLowerCase() === 'max' || actualAmount.toLowerCase() === 'all') {
+                        // #2: Dynamic gas estimation
+                        let estimatedGas;
+                        try {
+                            estimatedGas = await provider.estimateGas({ from: wallet.address, to: destAddr, value: rawBalance / 2n });
+                        } catch (e) { estimatedGas = 21000n; }
+                        const gasPrice = feeData.maxFeePerGas || feeData.gasPrice || ethers.parseUnits('1', 'gwei');
+                        const gasCost = (estimatedGas * 120n / 100n) * gasPrice; // 20% buffer
+                        const maxValue = rawBalance - gasCost;
+                        if (maxValue <= 0n) {
+                            results.push({
+                                wallet: `#${t.fromWalletId}`,
+                                to: destAddr.slice(0, 8) + '...',
+                                amount: 'max',
+                                status: `❌ ${insufficientTexts[lk]} (gas)`
+                            });
+                            continue;
+                        }
+                        actualAmount = ethers.formatEther(maxValue);
+                    }
+
+                    // Balance pre-check
+                    const amountWei = ethers.parseEther(actualAmount);
+                    if (amountWei > rawBalance) {
+                        results.push({
+                            wallet: `#${t.fromWalletId}`,
+                            to: destAddr.slice(0, 8) + '...',
+                            amount: actualAmount,
+                            status: `❌ ${insufficientTexts[lk]}: ${Number(balBeforeSrc).toFixed(4)} ${symbol}`
+                        });
+                        continue;
+                    }
+
+                    const txOpts = { to: destAddr, value: amountWei };
                     if (feeData.maxFeePerGas) {
                         txOpts.maxFeePerGas = feeData.maxFeePerGas;
                         txOpts.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
                     } else if (feeData.gasPrice) {
                         txOpts.gasPrice = feeData.gasPrice;
                     }
-                    // Enhancement #1: Retry for RPC failures
                     const tx = await rpcRetry(() => wallet.sendTransaction(txOpts), 3, 'BATCH-TRANSFER');
-                    const receipt = await tx.wait();
+                    // #3: Receipt retry — if tx.wait() fails, fallback to provider.waitForTransaction
+                    let receipt;
+                    try {
+                        receipt = await tx.wait();
+                    } catch (waitErr) {
+                        log.child('BATCHTRANSFER').warn(`tx.wait() failed for ${tx.hash}, retrying via provider...`);
+                        receipt = await provider.waitForTransaction(tx.hash, 1, 60000);
+                    }
                     txHash = receipt.hash;
                     if (receipt.gasUsed && receipt.gasPrice) gasFeeEth = ethers.formatEther(receipt.gasUsed * receipt.gasPrice);
+                    // Revert detection
+                    if (receipt.status === 0) {
+                        results.push({
+                            wallet: `#${t.fromWalletId}`,
+                            to: destAddr.slice(0, 8) + '...',
+                            amount: actualAmount,
+                            status: `❌ ${revertTexts[lk]}`,
+                            txHash: txHash
+                        });
+                        totalGasEth += Number(gasFeeEth);
+                        continue;
+                    }
                     balAfterSrc = ethers.formatEther(await provider.getBalance(wallet.address));
                 } else {
                     const erc20Abi = ['function transfer(address to, uint256 amount) returns (bool)', 'function decimals() view returns (uint8)', 'function balanceOf(address account) view returns (uint256)'];
                     const contract = new ethers.Contract(tokenAddr, erc20Abi, wallet);
+                    const decimals = tokenDecimals;
 
-                    let decimals = 18;
-                    try {
-                        decimals = await contract.decimals();
-                    } catch (decErr) {
-                        log.child('BATCHTRANSFER').error('Could not fetch decimals, falling back to 18:', decErr.message);
+                    const rawBalance = await contract.balanceOf(wallet.address);
+                    balBeforeSrc = ethers.formatUnits(rawBalance, decimals);
+
+                    // Support "max" amount for ERC-20
+                    if (actualAmount.toLowerCase() === 'max' || actualAmount.toLowerCase() === 'all') {
+                        if (rawBalance === 0n) {
+                            results.push({
+                                wallet: `#${t.fromWalletId}`,
+                                to: destAddr.slice(0, 8) + '...',
+                                amount: 'max',
+                                status: `❌ ${insufficientTexts[lk]}: 0 ${symbol}`
+                            });
+                            continue;
+                        }
+                        actualAmount = ethers.formatUnits(rawBalance, decimals);
                     }
 
-                    balBeforeSrc = ethers.formatUnits(await contract.balanceOf(wallet.address), decimals);
-                    // Enhancement #1: Retry for RPC failures
-                    const tx = await rpcRetry(() => contract.transfer(destAddr, ethers.parseUnits(t.amount, decimals)), 3, 'BATCH-TRANSFER-ERC20');
-                    const receipt = await tx.wait();
+                    // Balance pre-check
+                    const amountWei = ethers.parseUnits(actualAmount, decimals);
+                    if (amountWei > rawBalance) {
+                        results.push({
+                            wallet: `#${t.fromWalletId}`,
+                            to: destAddr.slice(0, 8) + '...',
+                            amount: actualAmount,
+                            status: `❌ ${insufficientTexts[lk]}: ${Number(balBeforeSrc).toFixed(4)} ${symbol}`
+                        });
+                        continue;
+                    }
+
+                    const tx = await rpcRetry(() => contract.transfer(destAddr, amountWei), 3, 'BATCH-TRANSFER-ERC20');
+                    // #3: Receipt retry for ERC-20
+                    let receipt;
+                    try {
+                        receipt = await tx.wait();
+                    } catch (waitErr) {
+                        log.child('BATCHTRANSFER').warn(`tx.wait() failed for ${tx.hash}, retrying via provider...`);
+                        receipt = await provider.waitForTransaction(tx.hash, 1, 60000);
+                    }
                     txHash = receipt.hash;
                     if (receipt.gasUsed && receipt.gasPrice) gasFeeEth = ethers.formatEther(receipt.gasUsed * receipt.gasPrice);
+                    // Revert detection for ERC-20
+                    if (receipt.status === 0) {
+                        results.push({
+                            wallet: `#${t.fromWalletId}`,
+                            to: destAddr.slice(0, 8) + '...',
+                            amount: actualAmount,
+                            status: `❌ ${revertTexts[lk]}`,
+                            txHash: txHash
+                        });
+                        totalGasEth += Number(gasFeeEth);
+                        continue;
+                    }
                     balAfterSrc = ethers.formatUnits(await contract.balanceOf(wallet.address), decimals);
                 }
 
                 totalGasEth += Number(gasFeeEth);
+                totalSent += Number(actualAmount); // #5
 
+                // #8: Include toAddress in DB history
                 try {
-                    await dbRun('INSERT INTO wallet_tx_history (userId, walletId, walletAddress, type, chainIndex, fromToken, fromAmount, fromSymbol, txHash, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                        [userId, parseInt(t.fromWalletId), tw.address, 'transfer_out', chainIndex, tokenAddr, t.amount, symbol, txHash, Math.floor(Date.now() / 1000)]);
+                    await dbRun('INSERT INTO wallet_tx_history (userId, walletId, walletAddress, type, chainIndex, fromToken, toToken, fromAmount, toAmount, fromSymbol, toSymbol, txHash, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                        [userId, parseInt(t.fromWalletId), tw.address, 'transfer_out', chainIndex, tokenAddr, destAddr, actualAmount, actualAmount, symbol, symbol, txHash, Math.floor(Date.now() / 1000)]);
                 } catch (dbErr) { log.child('BATCHTRANSFER').error('DB log error:', dbErr.message); }
                 results.push({
                     wallet: `#${t.fromWalletId}`,
                     to: destAddr.slice(0, 8) + '...',
-                    amount: t.amount,
+                    amount: actualAmount,
                     status: '✅',
                     txHash: txHash,
+                    gas: gasFeeEth,
                     balBefore: Number(balBeforeSrc).toFixed(2),
                     balAfter: Number(balAfterSrc).toFixed(2)
                 });
@@ -818,13 +1241,22 @@ module.exports = {
                     await bot.sendMessage(chatId, `⏳ ${progressTexts[lk]}... ${processedCount}/${validTransfers.length}`, { disable_notification: true }).catch(() => { });
                 } catch (e) { /* ignore progress send errors */ }
             }
+
+            // #7: Rate limit delay between TXs to avoid RPC throttling
+            if (processedCount < validTransfers.length) {
+                await new Promise(r => setTimeout(r, 300));
+            }
         }
+
+        // Clear wallet cache
+        walletCache.clear();
 
         const successCount = results.filter(r => r.status === '✅').length;
 
         let headerLabel = 'BATCH TRANSFER RESULTS';
         let successStr = 'success';
         let gasLabel = 'Total Gas Fee:';
+        let totalSentLabel = 'Total Sent:';
         let walletLabel = 'Wallet';
         let amountLabel = 'Sent:';
         let balanceLabel = 'Balance:';
@@ -839,6 +1271,7 @@ module.exports = {
             headerLabel = 'KẾT QUẢ CHUYỂN TIỀN HÀNG LOẠT';
             successStr = 'thành công';
             gasLabel = 'Tổng phí Gas:';
+            totalSentLabel = 'Tổng đã chuyển:';
             walletLabel = 'Ví';
             amountLabel = 'Chuyển:';
             balanceLabel = 'Số dư:';
@@ -852,6 +1285,7 @@ module.exports = {
             headerLabel = '批量转账结果';
             successStr = '成功';
             gasLabel = '总 Gas 费用:';
+            totalSentLabel = '总转账:';
             walletLabel = '钱包';
             amountLabel = '转账:';
             balanceLabel = '余额:';
@@ -865,6 +1299,7 @@ module.exports = {
             headerLabel = '일괄 전송 결과';
             successStr = '성공';
             gasLabel = '총 가스 비용:';
+            totalSentLabel = '총 전송:';
             walletLabel = '지갑';
             amountLabel = '전송:';
             balanceLabel = '잔액:';
@@ -878,6 +1313,7 @@ module.exports = {
             headerLabel = 'РЕЗУЛЬТАТЫ МАССОВОЙ ОТПРАВКИ';
             successStr = 'успешно';
             gasLabel = 'Общая комиссия:';
+            totalSentLabel = 'Всего отправлено:';
             walletLabel = 'Кошелёк';
             amountLabel = 'Отправлено:';
             balanceLabel = 'Баланс:';
@@ -891,6 +1327,7 @@ module.exports = {
             headerLabel = 'HASIL TRANSFER MASSAL';
             successStr = 'berhasil';
             gasLabel = 'Total Biaya Gas:';
+            totalSentLabel = 'Total Terkirim:';
             walletLabel = 'Dompet';
             amountLabel = 'Terkirim:';
             balanceLabel = 'Saldo:';
@@ -917,6 +1354,7 @@ module.exports = {
             `📊 <b>${successCount}/${results.length}</b> ${successStr}\n` +
             `🪙 ${tokenLabel} <b>${symbol}</b>\n` +
             `🌐 ${networkLabel} ${chainName} (#${chainIndex})\n` +
+            `💰 <b>${totalSentLabel}</b> ${totalSent.toFixed(6)} ${symbol}\n` +
             `⛽ <b>${gasLabel}</b> ${totalGasEth.toFixed(6)} native\n` +
             `⏰ ${timeLabel} ${timeString} (GMT+7)\n` +
             `━━━━━━━━━━━━━━━━━━`;
@@ -945,6 +1383,35 @@ module.exports = {
         // Telegram message limit: split if report is too long
         const TG_LIMIT = 4000;
         const fullReport = header + '\n\n' + walletBlocks.join('\n\n');
+
+        // ── CSV Export ──
+        if (bot && chatId && results.length > 0) {
+            try {
+                const fs = require('fs');
+                const path = require('path');
+                const os = require('os');
+                const csvPath = path.join(os.tmpdir(), `batch_transfer_${userId}_${Date.now()}.csv`);
+                const csvHeader = 'Wallet,To,Amount,Status,TxHash,Gas,BalBefore,BalAfter';
+                const csvRows = results.map(r => {
+                    const esc = (v) => `"${String(v || '').replace(/"/g, '""')}"`;
+                    return [esc(r.wallet), esc(r.to), esc(r.amount), esc(r.status), esc(r.txHash || '-'), esc(r.gas || '-'), esc(r.balBefore || '-'), esc(r.balAfter || '-')].join(',');
+                });
+                fs.writeFileSync(csvPath, csvHeader + '\n' + csvRows.join('\n'), 'utf-8');
+                const csvCaptionTexts = {
+                    en: `📊 Batch Transfer Report - ${results.length} items`,
+                    vi: `📊 Báo cáo chuyển tiền hàng loạt - ${results.length} giao dịch`,
+                    zh: `📊 批量转账报告 - ${results.length} 笔`,
+                    ko: `📊 일괄 전송 보고서 - ${results.length}건`,
+                    ru: `📊 Отчёт массовой отправки - ${results.length} операций`,
+                    id: `📊 Laporan Transfer Massal - ${results.length} transaksi`
+                };
+                await bot.sendDocument(chatId, csvPath, { caption: csvCaptionTexts[lk] || csvCaptionTexts.en, disable_notification: true });
+                try { fs.unlinkSync(csvPath); } catch (e) { /* cleanup */ }
+            } catch (csvErr) {
+                log.child('BATCHTRANSFER').warn('CSV export failed:', csvErr.message);
+            }
+        }
+
         if (fullReport.length <= TG_LIMIT) {
             return { success: true, action: true, displayMessage: fullReport.trim() };
         }

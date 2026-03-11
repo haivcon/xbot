@@ -353,7 +353,7 @@ module.exports.ONCHAIN_TOOLS = [
                         walletId: { type: 'string', description: 'Source wallet ID' },
                         toAddress: { type: 'string', description: 'Destination address' },
                         tokenAddress: { type: 'string', description: 'Token contract address OR token symbol (e.g. "banmao", "USDT"). Use "native" for native chain token (OKB/ETH). System auto-resolves symbols to contract addresses.' },
-                        amount: { type: 'string', description: 'Amount in human-readable units (e.g. "1.5")' },
+                        amount: { type: 'string', description: 'Amount in human-readable units (e.g. "1.5"). Use "max" or "all" to transfer entire balance minus gas reserve.' },
                         chainIndex: { type: 'string', description: 'Chain ID. Default "196"' }
                     },
                     required: ['walletId', 'toAddress', 'tokenAddress', 'amount']
@@ -371,7 +371,7 @@ module.exports.ONCHAIN_TOOLS = [
                         transfers: {
                             type: 'array', items: {
                                 type: 'object', properties: {
-                                    fromWalletId: { type: 'string' }, toAddress: { type: 'string' }, amount: { type: 'string' }
+                                    fromWalletId: { type: 'string' }, toAddress: { type: 'string' }, amount: { type: 'string', description: 'Amount in human units (e.g. "100"). Use "max" or "all" to transfer entire balance minus gas reserve.' }
                                 }
                             }, description: 'Array of {fromWalletId, toAddress, amount}'
                         }
