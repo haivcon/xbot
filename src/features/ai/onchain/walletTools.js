@@ -876,7 +876,7 @@ module.exports = {
         // Progress notification helper for large batches
         let bot = null;
         const chatId = context?.chatId || context?.msg?.chat?.id;
-        try { bot = require('../../../core/bot'); } catch (e) { /* no bot available */ }
+        try { bot = require('../../../core/bot').bot; } catch (e) { /* no bot available */ }
 
         // ── Inline Confirm + Cancel Mechanism ──
         // Pending batch confirmations stored globally for callback_query handler
