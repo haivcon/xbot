@@ -10,19 +10,49 @@ const useAuthStore = create((set, get) => ({
     loading: true,
     error: null,
 
-    init: () => {
+    init: async () => {
+        // 1. Try to restore from localStorage
         const stored = localStorage.getItem('xbot_dashboard_auth');
         if (stored) {
             try {
                 const data = JSON.parse(stored);
-                set({ user: data.user, token: data.token, role: data.role, viewMode: data.role, loading: false });
+                if (data.token) {
+                    set({ user: data.user, token: data.token, role: data.role, viewMode: data.role, loading: false });
+                    return;
+                }
             } catch {
                 localStorage.removeItem('xbot_dashboard_auth');
-                set({ loading: false });
             }
-        } else {
-            set({ loading: false });
         }
+
+        // 2. Try Telegram Mini App auto-login (WebApp.initData)
+        const tgWebApp = window.Telegram?.WebApp;
+        if (tgWebApp?.initData) {
+            try {
+                // Expand Mini App to full height + set theme
+                try { tgWebApp.expand(); } catch { /* ignore */ }
+                try { tgWebApp.setHeaderColor('#0f172a'); } catch { /* ignore */ }
+                try { tgWebApp.setBackgroundColor('#0f172a'); } catch { /* ignore */ }
+
+                const res = await fetch(`${API_BASE}/auth/webapp-login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ initData: tgWebApp.initData }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    localStorage.setItem('xbot_dashboard_auth', JSON.stringify(data));
+                    set({ user: data.user, token: data.token, role: data.role, viewMode: data.role, loading: false });
+                    try { tgWebApp.ready(); } catch { /* ignore */ }
+                    return;
+                }
+            } catch (err) {
+                console.warn('WebApp auto-login failed:', err);
+            }
+        }
+
+        // 3. No auth available — show login screen
+        set({ loading: false });
     },
 
     login: async (telegramData) => {

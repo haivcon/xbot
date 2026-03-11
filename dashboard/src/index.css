@@ -21,6 +21,18 @@
     box-sizing: border-box;
   }
 
+  html, body, #root {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* Safe area for phones with notch */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
   body {
     @apply bg-surface-900 text-surface-100 transition-colors duration-300;
   }
