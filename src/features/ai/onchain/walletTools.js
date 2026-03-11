@@ -1002,9 +1002,31 @@ module.exports = {
         };
         let processedCount = 0;
         let progressMsgId = null; // Track progress bar message for editing
-        const batchStartTime = Date.now(); // Track elapsed time for notification
+        const batchStartTime = Date.now();
 
-        // #3: Wallet cache to avoid repeated DB queries and key decryption
+        // 🚀 Send immediate "Starting batch" message so user sees progress right away
+        if (bot && chatId && validTransfers.length > 0) {
+            const startTexts = {
+                en: `🚀 <b>Starting batch transfer...</b>\n📊 ${validTransfers.length} transfers | 🪙 ${symbol}\n[░░░░░░░░░░] 0/${validTransfers.length}`,
+                vi: `🚀 <b>Bắt đầu chuyển hàng loạt...</b>\n📊 ${validTransfers.length} giao dịch | 🪙 ${symbol}\n[░░░░░░░░░░] 0/${validTransfers.length}`,
+                zh: `🚀 <b>开始批量转账...</b>\n📊 ${validTransfers.length} 笔 | 🪙 ${symbol}\n[░░░░░░░░░░] 0/${validTransfers.length}`,
+                ko: `🚀 <b>일괄 전송 시작...</b>\n📊 ${validTransfers.length}건 | 🪙 ${symbol}\n[░░░░░░░░░░] 0/${validTransfers.length}`,
+                ru: `🚀 <b>Начало массовой отправки...</b>\n📊 ${validTransfers.length} транзакций | 🪙 ${symbol}\n[░░░░░░░░░░] 0/${validTransfers.length}`,
+                id: `🚀 <b>Memulai transfer massal...</b>\n📊 ${validTransfers.length} transaksi | 🪙 ${symbol}\n[░░░░░░░░░░] 0/${validTransfers.length}`
+            };
+            try {
+                const startMsg = await bot.sendMessage(chatId, startTexts[lk] || startTexts.en, {
+                    parse_mode: 'HTML',
+                    disable_notification: true,
+                    reply_markup: validTransfers.length > 3 ? { inline_keyboard: [[
+                        { text: cancelMidBtnTexts[lk] || cancelMidBtnTexts.en, callback_data: `batchconfirm|cancel_${batchId}` }
+                    ]] } : undefined
+                });
+                if (startMsg) progressMsgId = startMsg.message_id;
+            } catch (e) { /* ignore */ }
+        }
+
+// #3: Wallet cache to avoid repeated DB queries and key decryption
         const walletCache = new Map();
         async function getCachedWallet(walletId) {
             // Resolve "default" or invalid walletId to user's actual default wallet
