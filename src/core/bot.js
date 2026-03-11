@@ -16,9 +16,20 @@ const USE_WEBHOOK = PUBLIC_BASE_URL
     && process.env.USE_WEBHOOK !== 'false'
     && !PUBLIC_BASE_URL.includes('localhost');
 
+// Force IPv4 for ALL Telegram API connections — definitive fix for EFATAL: AggregateError on VPS without IPv6
+const https = require('https');
+const ipv4Agent = new https.Agent({ family: 4, keepAlive: true });
+
 const bot = new TelegramBot(TELEGRAM_TOKEN, {
     polling: !USE_WEBHOOK,
     webHook: USE_WEBHOOK ? false : undefined, // webhook set up separately via Express
+    request: {
+        agentClass: https.Agent,
+        agentOptions: { family: 4, keepAlive: true },
+        agent: ipv4Agent,
+        // Also set family directly for newer request versions
+        family: 4
+    }
 });
 
 if (USE_WEBHOOK) {
