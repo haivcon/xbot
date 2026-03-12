@@ -242,7 +242,7 @@ function formatSwapQuoteResult(data, lang = 'en') {
             `📈 <b>${priceStr} ${fromToken}:</b> $${fromPrice < 0.01 ? fromPrice.toFixed(8) : fromPrice.toFixed(4)}\n` +
             `📉 <b>${priceStr} ${toToken}:</b> $${toPrice < 0.01 ? toPrice.toFixed(8) : toPrice.toFixed(4)}\n` +
             `📉 <b>${impactStr}</b> ${priceImpactFormatted}\n` +
-            `⛽ <b>${estGasStr}</b> ${estimatedGas}\n` +
+            `⛽ <b>${estGasStr}</b> ${(() => { try { const gWei = Number(estimatedGas); if (!isNaN(gWei) && gWei > 1000) { const gOkb = (gWei * 1e-9 * 50).toFixed(6); const gUsd = (Number(gOkb) * toPrice).toFixed(4); return `~${gOkb} OKB (~${gUsd})`; } return estimatedGas; } catch(_) { return estimatedGas; } })()}\n` +
             `💵 <b>${feeStr}</b> $${tradeFee}` +
             `${routesText}${warningText}\n\n` +
             `⚡ <i>${confirmStr}</i>`

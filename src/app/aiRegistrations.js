@@ -880,6 +880,86 @@ function registerBatchTransferCallbacks(bot, getLang) {
   bot.on('callback_query', async (query) => {
     const data = query.data || '';
 
+    // ── #2: Swap quote inline confirm/cancel ──
+    if (data.startsWith('swapquote|')) {
+      const parts = data.split('|');
+      const action = parts[1]; // confirm or cancel
+      const qcId = parts[2];
+      const params = global._pendingSwapQuoteConfirms?.get(qcId);
+      try { await bot.answerCallbackQuery(query.id); } catch(_){}
+      // Delete the quote message
+      try { await bot.deleteMessage(query.message.chat.id, query.message.message_id); } catch(_){}
+      if (action === 'confirm' && params) {
+        global._pendingSwapQuoteConfirms.delete(qcId);
+        // Build synthetic /aib message to trigger execute_swap
+        const syntheticMsg = {
+          chat: { id: params.chatId },
+          from: { id: Number(params.userId) },
+          text: '/aib ok'
+        };
+        // Trigger via processAibRequest-like flow
+        try {
+          const tradingTools = require('../features/ai/onchain/tradingTools');
+          const chatId = params.chatId;
+          let progressMsg;
+          try { progressMsg = await bot.sendMessage(chatId, '⏳ Executing swap...', { disable_notification: true }); } catch(_){}
+          const swapResult = await tradingTools.execute_swap({
+            chainIndex: params.chainIndex,
+            fromTokenAddress: params.fromTokenAddress,
+            toTokenAddress: params.toTokenAddress,
+            amount: params.amount
+          }, { userId: params.userId, chatId: params.chatId, msg: syntheticMsg });
+          if (progressMsg) { try { await bot.deleteMessage(chatId, progressMsg.message_id); } catch(_){} }
+          if (swapResult?.displayMessage) {
+            const sendOpts = { parse_mode: 'HTML', disable_web_page_preview: true };
+            if (swapResult.reply_markup) sendOpts.reply_markup = swapResult.reply_markup;
+            await bot.sendMessage(chatId, swapResult.displayMessage, sendOpts);
+          }
+        } catch (execErr) {
+          try { await bot.sendMessage(params.chatId, '❌ Swap failed: ' + execErr.message); } catch(_){}
+        }
+      } else if (action === 'cancel') {
+        global._pendingSwapQuoteConfirms?.delete(qcId);
+        // Clean up multi-swap queue
+        if (params?.userId && global._pendingMultiSwaps?.has(params.userId)) {
+          global._pendingMultiSwaps.delete(params.userId);
+        }
+      }
+      return;
+    }
+
+    // ── #4/#7: Swap action buttons (reverse/repeat) ──
+    if (data.startsWith('swapaction|')) {
+      const parts = data.split('|');
+      const action = parts[1]; // reverse or repeat
+      try { await bot.answerCallbackQuery(query.id); } catch(_){}
+      const chatId = query.message.chat.id;
+      const userId = query.from.id;
+      if (action === 'reverse') {
+        // Reverse: swap from↔to
+        const fromSnippet = parts[2] || '';
+        const toSnippet = parts[3] || '';
+        const chain = parts[4] || '196';
+        // Build synthetic prompt for reversed swap
+        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap from ' + toSnippet + ' to ' + fromSnippet + ' chainIndex ' + chain };
+        try {
+          const { handleAiaCommand } = require('./aiHandlers');
+          if (handleAiaCommand) await handleAiaCommand(syntheticMsg);
+        } catch(_){}
+      } else if (action === 'repeat') {
+        const fromSnippet = parts[2] || '';
+        const toSnippet = parts[3] || '';
+        const amt = parts[4] || '';
+        const chain = parts[5] || '196';
+        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap ' + amt + ' ' + fromSnippet + ' to ' + toSnippet + ' chainIndex ' + chain };
+        try {
+          const { handleAiaCommand } = require('./aiHandlers');
+          if (handleAiaCommand) await handleAiaCommand(syntheticMsg);
+        } catch(_){}
+      }
+      return;
+    }
+
     // ── Swap confirmation handler (must be BEFORE batchconfirm guard) ──
     if (data.startsWith('swapconfirm|')) {
       const parts = data.split('|');

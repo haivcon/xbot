@@ -75,6 +75,33 @@ module.exports = {
 
             // ----------------------------------------
 
+            // --- #1: Swap Max detection ---
+            if (/^(all|max|tất cả|toàn bộ|全部|모두|все|semua|hết)$/i.test(String(args.amount))) {
+                try {
+                    log.child('SWAPQUOTE').info('Swap Max detected, querying wallet balance...');
+                    const userId1 = context?.userId;
+                    if (userId1) {
+                        const { dbGet: dbG1 } = require('../../../../db/core');
+                        const tw1 = await dbG1('SELECT * FROM user_trading_wallets WHERE userId = ? AND isDefault = 1', [userId1]) || await dbG1('SELECT * FROM user_trading_wallets WHERE userId = ?', [userId1]);
+                        if (tw1) {
+                            const bal1 = await onchainos.getWalletBalance(tw1.address, chainIndex);
+                            const assets1 = bal1?.[0]?.tokenAssets || bal1 || [];
+                            const fAddr1 = fromTokenAddress.toLowerCase();
+                            const isNat1 = fAddr1 === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+                            const match1 = isNat1
+                                ? assets1.find(a => (a.tokenSymbol || '').toLowerCase() === 'okb')
+                                : assets1.find(a => (a.tokenContractAddress || '').toLowerCase() === fAddr1);
+                            if (match1 && Number(match1.holdingAmount || match1.balance || 0) > 0) {
+                                args.amount = String(match1.holdingAmount || match1.balance);
+                                log.child('SWAPQUOTE').info('Swap Max: using balance ' + args.amount);
+                            } else {
+                                return { displayMessage: '❌ Không tìm thấy token trong ví / Token not found in wallet' };
+                            }
+                        }
+                    }
+                } catch (maxErr) { log.child('SWAPQUOTE').warn('Swap Max error:', maxErr.message); }
+            }
+
             // --- Phase 5 Auto-Decimal Resolution ---
             let originalAmount = args.amount;
             if (originalAmount && !originalAmount.includes('00000000') && !originalAmount.includes('e+') && originalAmount.length < 16) {
@@ -212,6 +239,19 @@ module.exports = {
 
             // ── #2: Multi-swap combined indicator ──
             const quoteResult = formatSwapQuoteResult(data, context?.lang);
+            // #2: Add inline confirm/cancel buttons to all swap quotes
+            try {
+                let qLang = context?.lang || 'en';
+                try { const { getUserLanguage: gQL2 } = require('../../../../db/users'); const dql = await gQL2(String(context?.chatId || context?.msg?.chat?.id || context?.userId)); if (dql) qLang = dql; } catch(_){}
+                const qlk2 = ['zh-Hans','zh-cn'].includes(qLang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(qLang) ? qLang : 'en');
+                const qBtnLabels = { en: ['✅ Confirm Swap', '❌ Cancel'], vi: ['✅ Xác nhận Swap', '❌ Hủy'], zh: ['✅ 确认兑换', '❌ 取消'], ko: ['✅ 스왑 확인', '❌ 취소'], ru: ['✅ Подтвердить', '❌ Отмена'], id: ['✅ Konfirmasi', '❌ Batal'] };
+                const btnL = qBtnLabels[qlk2] || qBtnLabels.en;
+                const qConfirmId = 'sqc_' + (context?.userId || '0') + '_' + Date.now();
+                quoteResult.reply_markup = { inline_keyboard: [[ { text: btnL[0], callback_data: 'swapquote|confirm|' + qConfirmId }, { text: btnL[1], callback_data: 'swapquote|cancel|' + qConfirmId } ]] };
+                if (!global._pendingSwapQuoteConfirms) global._pendingSwapQuoteConfirms = new Map();
+                global._pendingSwapQuoteConfirms.set(qConfirmId, { fromTokenAddress, toTokenAddress, amount: args.amount, chainIndex, userId: context?.userId, chatId: context?.chatId || context?.msg?.chat?.id });
+                setTimeout(() => { global._pendingSwapQuoteConfirms?.delete(qConfirmId); }, 300000);
+            } catch(_) {}
             const msUserId = context?.userId;
             if (msUserId && global._pendingMultiSwaps?.has(msUserId)) {
                 const qSize = global._pendingMultiSwaps.get(msUserId).length + 1; // +1: current swap not yet queued
@@ -715,6 +755,24 @@ module.exports = {
                 linkLabel = 'Lihat di Explorer';
 }
 
+            // #3: Query remaining balance after swap
+            let balanceLine = '';
+            try {
+                const bal3 = await onchainos.getWalletBalance(tw.address, chainIndex);
+                const assets3 = bal3?.[0]?.tokenAssets || bal3 || [];
+                const fAddr3 = fromTokenAddress.toLowerCase();
+                const isNat3 = fAddr3 === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+                const match3 = isNat3
+                    ? assets3.find(a => (a.tokenSymbol || '').toLowerCase() === 'okb')
+                    : assets3.find(a => (a.tokenContractAddress || '').toLowerCase() === fAddr3);
+                if (match3) {
+                    const remaining = Number(match3.holdingAmount || match3.balance || 0);
+                    const balLabels = { en: 'Remaining', vi: 'Số dư còn lại', zh: '剩余', ko: '잔액', ru: 'Остаток', id: 'Sisa' };
+                    const lk3b = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+                    balanceLine = `\n💼 <b>${balLabels[lk3b]}:</b> ${remaining.toLocaleString('en-US', {maximumFractionDigits: 6})} ${fromSym}`;
+                }
+            } catch(_) {}
+
             // Calculate USD value for display
             let usdLine = '';
             try {
@@ -729,11 +787,20 @@ module.exports = {
                     usdLine = `\n💰 <b>${usdLabels[lk3] || usdLabels.en}:</b> ~${displayUsd.toFixed(displayUsd < 1 ? 6 : 2)}`;
                 }
             } catch(_) {}
+            // #4+#7: Reverse + Repeat inline buttons
+            const reverseLabels = { en: '🔄 Reverse', vi: '🔄 Đổi ngược', zh: '🔄 反向', ko: '🔄 역방향', ru: '🔄 Обратно', id: '🔄 Balik' };
+            const repeatLabels = { en: '🔁 Repeat', vi: '🔁 Lặp lại', zh: '🔁 重复', ko: '🔁 반복', ru: '🔁 Повтор', id: '🔁 Ulangi' };
+            const lk47 = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+            const swapButtons = { inline_keyboard: [[
+                { text: reverseLabels[lk47], callback_data: `swapaction|reverse|${fromTokenAddress.slice(0,10)}|${toTokenAddress.slice(0,10)}|${chainIndex}` },
+                { text: repeatLabels[lk47], callback_data: `swapaction|repeat|${fromTokenAddress.slice(0,10)}|${toTokenAddress.slice(0,10)}|${originalAmount||args.amount}|${chainIndex}` }
+            ]] };
+
             return {
-                action: true, success: txConfirmed,
+                action: true, success: txConfirmed, reply_markup: swapButtons,
                 displayMessage: `🟢 <b>${title}</b>\n` +
                     `━━━━━━━━━━━━━━━━━━\n` +
-                    `💱 <b>${swappedLabel}</b> <code>${fromAmt}</code> ${fromSym} ➔ <code>${toAmt}</code> ${toSym}${usdLine}\n` +
+                    `💱 <b>${swappedLabel}</b> <code>${fromAmt}</code> ${fromSym} ➔ <code>${toAmt}</code> ${toSym}${usdLine}${balanceLine}\n` +
                     `👛 <b>${walletLabel}</b> <code>${tw.address}</code>\n` +
                     `🏷️ <b>${orderLabel}</b> <code>${orderId}</code>\n\n` +
                     `🔗 <a href="${explorerLink}">${linkLabel}</a>`
@@ -775,6 +842,42 @@ module.exports = {
                     `<b>${reasonLabel}</b> ${error.msg || error.message || 'Unknown error'}\n\n` +
                     `<i>${hintMsg}</i>`
             };
+        }
+    },
+
+    // ── #5: Swap History Tool ──
+    async get_swap_history(args, context) {
+        try {
+            const userId = context?.userId;
+            if (!userId) return { displayMessage: '❌ User not identified.' };
+            let lang = context?.lang || 'en';
+            try { const { getUserLanguage: gHL } = require('../../../../db/users'); const dhl = await gHL(String(context?.chatId || context?.msg?.chat?.id || userId)); if (dhl) lang = dhl; } catch(_){}
+            const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+            const { dbAll, dbRun } = require('../../../../db/core');
+            await dbRun("CREATE TABLE IF NOT EXISTS swap_history (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, walletAddress TEXT, chainIndex TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, fromAmount TEXT, toAmount TEXT, txHash TEXT, orderId TEXT, slippage REAL, status TEXT DEFAULT 'success', createdAt TEXT DEFAULT (datetime('now')))");
+            const limit = Number(args.limit) || 10;
+            const rows = await dbAll('SELECT * FROM swap_history WHERE userId = ? ORDER BY id DESC LIMIT ?', [String(userId), limit]);
+            if (!rows || rows.length === 0) {
+                const noData = { en: 'No swap history found.', vi: 'Chưa có lịch sử swap.', zh: '暂无兑换记录。', ko: '스왑 기록 없음.', ru: 'Нет истории обменов.', id: 'Tidak ada riwayat swap.' };
+                return { displayMessage: '📋 ' + (noData[lk] || noData.en) };
+            }
+            const titles = { en: 'SWAP HISTORY', vi: 'LỊCH SỬ SWAP', zh: '兑换历史', ko: '스왑 기록', ru: 'ИСТОРИЯ ОБМЕНОВ', id: 'RIWAYAT SWAP' };
+            let msg = `📋 <b>${titles[lk] || titles.en}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+            rows.forEach((r, i) => {
+                const st = (r.status === 'reverted') ? '❌' : '✅';
+                const fromAmt = Number(r.fromAmount || 0);
+                const displayAmt = fromAmt > 1e15 ? (fromAmt / 1e18).toFixed(4) : fromAmt;
+                msg += `${st} ${displayAmt} ${r.fromSymbol||'?'} ➔ ${r.toSymbol||'?'}\n`;
+                msg += `   🕐 ${r.createdAt || 'N/A'}\n`;
+                if (i < rows.length - 1) msg += '\n';
+            });
+            const totalSuccess = rows.filter(r => r.status !== 'reverted').length;
+            const totalFail = rows.filter(r => r.status === 'reverted').length;
+            msg += `\n📊 ${totalSuccess} ✅ | ${totalFail} ❌`;
+            return { displayMessage: msg };
+        } catch (err) {
+            log.child('SWAPHISTORY').error('Error:', err.message);
+            return { displayMessage: '❌ Error: ' + err.message };
         }
     },
 

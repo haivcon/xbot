@@ -4007,14 +4007,14 @@ function createAiHandlers(deps) {
                         if (!swapOk) {
                           if (progressMsgId && botRef && chatId) { try { await botRef.deleteMessage(chatId, progressMsgId); } catch(_){} progressMsgId = null; }
                           if (botRef && chatId && swapResult?.displayMessage) {
-                            try { await botRef.sendMessage(chatId, swapResult.displayMessage, { parse_mode: 'HTML', disable_web_page_preview: true }); } catch(_){}
+                            const sendOpts = { parse_mode: 'HTML', disable_web_page_preview: true }; if (swapResult.reply_markup) sendOpts.reply_markup = swapResult.reply_markup; try { await botRef.sendMessage(chatId, swapResult.displayMessage, sendOpts); } catch(_){}
                           }
                           break;
                         }
                         // Delete progress msg then show success
                         if (progressMsgId && botRef && chatId) { try { await botRef.deleteMessage(chatId, progressMsgId); } catch(_){} progressMsgId = null; }
                         if (botRef && chatId && swapResult?.displayMessage) {
-                          try { await botRef.sendMessage(chatId, swapResult.displayMessage, { parse_mode: 'HTML', disable_web_page_preview: true }); } catch(_){}
+                          const sendOpts = { parse_mode: 'HTML', disable_web_page_preview: true }; if (swapResult.reply_markup) sendOpts.reply_markup = swapResult.reply_markup; try { await botRef.sendMessage(chatId, swapResult.displayMessage, sendOpts); } catch(_){}
                         }
                       } catch (swapErr) {
                         results.push({ swap: nextSwap, success: false, error: swapErr.message });
