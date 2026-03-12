@@ -47,23 +47,25 @@ module.exports = {
                         const sellTax = Number(sec.sellTax || sec.sell_tax || '0');
 
                         if (isHoneypot || buyTax > 0.1 || sellTax > 0.1 || cannotBuy || cannotSell) {
-                            const lang = context?.lang || 'en';
-                            const alertMsg = lang === 'vi'
-                                ? `🚨 **CẢNH BÁO SCAM / RỦI RO CAO** 🚨\nToken đích (\`${toTokenAddress}\`) có dấu hiệu nguy hiểm:\n\n`
-                                : `🚨 **HIGH RISK / SCAM ALERT** 🚨\nTarget token (\`${toTokenAddress}\`) has dangerous flags:\n\n`;
-
+                            let scamLang = context?.lang || 'en';
+                            try { const { getUserLanguage: gSL } = require('../../../../db/users'); const dsl = await gSL(String(context?.chatId || context?.msg?.chat?.id || context?.userId)); if (dsl) scamLang = dsl; } catch(_){}
+                            const slk = ['zh-Hans','zh-cn'].includes(scamLang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(scamLang) ? scamLang : 'en');
+                            const scamTitles = { en: '🚨 HIGH RISK / SCAM ALERT 🚨', vi: '🚨 CẢNH BÁO SCAM / RỦI RO CAO 🚨', zh: '🚨 高风险/诈骗警告 🚨', ko: '🚨 고위험 / 스캠 경고 🚨', ru: '🚨 ВЫСОКИЙ РИСК / СКАМ 🚨', id: '🚨 PERINGATAN SCAM / RISIKO TINGGI 🚨' };
+                            const scamDescs = { en: 'Target token has dangerous flags:', vi: 'Token đích có dấu hiệu nguy hiểm:', zh: '目标代币有危险标志：', ko: '대상 토큰에 위험 플래그:', ru: 'Целевой токен имеет опасные флаги:', id: 'Token target memiliki tanda berbahaya:' };
+                            const alertMsg = `${scamTitles[slk]}\n${scamDescs[slk]}\n\n`;
+                            const honeypotLabels = { en: '🍯 Is a Honeypot (Malicious contract)', vi: '🍯 Là Honeypot (Mã độc cấm bán)', zh: '🍯 蜜罐合约（恶意合约）', ko: '🍯 허니팟 (악성 계약)', ru: '🍯 Honeypot (вредоносный контракт)', id: '🍯 Honeypot (kontrak berbahaya)' };
+                            const noBuyLabels = { en: '❌ Cannot buy', vi: '❌ Không thể mua', zh: '❌ 无法购买', ko: '❌ 구매 불가', ru: '❌ Нельзя купить', id: '❌ Tidak bisa beli' };
+                            const noSellLabels = { en: '❌ Cannot sell', vi: '❌ Không thể bán', zh: '❌ 无法出售', ko: '❌ 판매 불가', ru: '❌ Нельзя продать', id: '❌ Tidak bisa jual' };
+                            const buyTaxLabels = { en: '💸 Massive Buy Tax: ', vi: '💸 Phí mua siêu cao: ', zh: '💸 超高买入税: ', ko: '💸 과도한 구매세: ', ru: '💸 Огромный налог на покупку: ', id: '💸 Pajak beli sangat tinggi: ' };
+                            const sellTaxLabels = { en: '💸 Massive Sell Tax: ', vi: '💸 Phí bán siêu cao: ', zh: '💸 超高卖出税: ', ko: '💸 과도한 판매세: ', ru: '💸 Огромный налог на продажу: ', id: '💸 Pajak jual sangat tinggi: ' };
                             let reasons = [];
-                            if (isHoneypot) reasons.push(lang === 'vi' ? '🍯 Là Honeypot (Mã độc cấm bán)' : '🍯 Is a Honeypot (Malicious contract)');
-                            if (cannotBuy) reasons.push(lang === 'vi' ? '❌ Mã bị khóa chức năng mua' : '❌ Cannot buy');
-                            if (cannotSell) reasons.push(lang === 'vi' ? '❌ Mã bị khóa chức năng bán' : '❌ Cannot sell');
-                            if (buyTax > 0.1) reasons.push((lang === 'vi' ? `💸 Phí mua siêu cao: ` : `💸 Massive Buy Tax: `) + (buyTax * 100).toFixed(2) + '%');
-                            if (sellTax > 0.1) reasons.push((lang === 'vi' ? `💸 Phí bán siêu cao: ` : `💸 Massive Sell Tax: `) + (sellTax * 100).toFixed(2) + '%');
-
-                            const advice = lang === 'vi'
-                                ? `\n⛔ **Hệ thống AI từ chối báo giá swap để bảo vệ tài sản của bạn.**`
-                                : `\n⛔ **AI system refused to quote this swap to protect your assets.**`;
-
-                            return { displayMessage: alertMsg + reasons.map(r => `> ${r}`).join('\n') + advice };
+                            if (isHoneypot) reasons.push(honeypotLabels[slk] || honeypotLabels.en);
+                            if (cannotBuy) reasons.push(noBuyLabels[slk] || noBuyLabels.en);
+                            if (cannotSell) reasons.push(noSellLabels[slk] || noSellLabels.en);
+                            if (buyTax > 0.1) reasons.push((buyTaxLabels[slk] || buyTaxLabels.en) + (buyTax * 100).toFixed(2) + '%');
+                            if (sellTax > 0.1) reasons.push((sellTaxLabels[slk] || sellTaxLabels.en) + (sellTax * 100).toFixed(2) + '%');
+                            const adviceLabels = { en: '\n⛔ AI system refused to quote this swap to protect your assets.', vi: '\n⛔ Hệ thống AI từ chối báo giá swap để bảo vệ tài sản của bạn.', zh: '\n⛔ AI系统已拒绝此兑换报价以保护您的资产。', ko: '\n⛔ AI 시스템이 자산 보호를 위해 견적을 거부했습니다.', ru: '\n⛔ AI-система отказала в котировке для защиты ваших активов.', id: '\n⛔ Sistem AI menolak kuotasi untuk melindungi aset Anda.' };
+                            return { displayMessage: alertMsg + reasons.map(r => `> ${r}`).join('\n') + (adviceLabels[slk] || adviceLabels.en) };
                         }
                     }
                 } catch (secErr) {
@@ -739,7 +741,8 @@ module.exports = {
 
         } catch (error) {
             log.child('AUTOSWAP').error(`Error:`, error.msg || error.message || error);
-            const lang2 = context?.lang || 'en';
+            let lang2 = context?.lang || 'en';
+            try { const { getUserLanguage: gEL } = require('../../../../db/users'); const del = await gEL(String(context?.chatId || context?.msg?.chat?.id || userId)); if (del) lang2 = del; } catch(_){}
             let title = 'SWAP EXECUTION ERROR';
             let reasonLabel = 'Reason:';
             let hintMsg = 'Please verify your liquidity, balance, or try again later.';
