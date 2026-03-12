@@ -3952,6 +3952,40 @@ function createAiHandlers(deps) {
                 `chainIndex="${swapArgs.chainIndex || '196'}", fromTokenAddress="${swapArgs.fromTokenAddress}", toTokenAddress="${swapArgs.toTokenAddress}", amount="${swapArgs.amount}". ` +
                 `Do NOT ask for additional confirmation. Do NOT output this system text.]`
               );
+
+              // ── Multi-swap: check if original message has MORE swap lines ──
+              try {
+                const originalText = userPrompt || '';
+                // Split by newlines and detect swap patterns
+                const swapPatterns = /(?:đổi|swap|exchange|兑换|교환|обмен|tukar)\s+[\d.]+\s+\S+\s+(?:lấy|for|to|ra|换|으로|на|dengan)\s+\S+/gi;
+                const swapLines = originalText.match(swapPatterns) || [];
+                
+                if (swapLines.length > 1) {
+                  // Find which swap was just processed (by toToken)
+                  const processedTo = (swapArgs.toTokenAddress || '').toLowerCase();
+                  const remainingLines = swapLines.filter(line => {
+                    const parts = line.split(/\s+/);
+                    const lastToken = parts[parts.length - 1].toLowerCase();
+                    return lastToken !== processedTo;
+                  });
+
+                  if (remainingLines.length > 0) {
+                    log.child('FnCall').info(`Multi-swap detected: ${swapLines.length} total, ${remainingLines.length} remaining. Processing next...`);
+                    // Process remaining swaps by re-calling the AI handler with remaining text
+                    const remainingText = remainingLines.join('\n');
+                    const syntheticMsg = { ...msg, text: '/aib ' + remainingText };
+                    // Use setTimeout to avoid stack overflow, process after current returns
+                    // handleAiaCommand is in scope (same closure), no need for require
+                    setTimeout(async () => {
+                      try {
+                        await handleAiaCommand(syntheticMsg);
+                      } catch (e) { log.child('FnCall').warn('Multi-swap chain failed:', e.message); }
+                    }, 2000);
+                  }
+                }
+              } catch (multiSwapErr) {
+                log.child('FnCall').warn('Multi-swap detection error:', multiSwapErr.message);
+              }
             } else {
               // Data-fetching functions: results were displayed directly to the user
               // Tell AI that data is already shown, and it must call the function again for fresh data
