@@ -49,7 +49,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'get_swap_quote',
-                description: 'Get a swap quote BEFORE executing any swap. This MUST be called first — users must see and confirm the quote before execution. Auto-resolves token symbols, no need to call search_token first. Use when users say "swap", "đổi", "exchange", "báo giá".',
+                description: 'Get a swap quote BEFORE executing any swap. This MUST be called first — users must see and confirm the quote before execution. Auto-resolves token symbols, no need to call search_token first. Use when users say "swap", "đổi", "exchange", "báo giá". ⚠️ MULTIPLE SWAPS: If user requests multiple swaps in one message (e.g. "đổi X lấy A, đổi X lấy B"), you MUST call get_swap_quote SEPARATELY for EACH swap pair. Return ALL quotes so user can confirm each one.',
                 parameters: {
                     type: 'object',
                     properties: {

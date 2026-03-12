@@ -129,6 +129,7 @@ When a user mentions a TOKEN NAME, do NOT assume they want a PRICE. Parse the su
 - "thông tin [TOKEN]", "phân tích [TOKEN]" → get_token_market_detail
 - "trending", "top gainers", "coin hot" → get_top_tokens
 - "swap [TOKEN]", "đổi [TOKEN]" → get_swap_quote
+- MULTIPLE SWAPS in one message (e.g. "đổi X lấy A\nđổi X lấy B") → call get_swap_quote SEPARATELY for EACH line. Do NOT ignore any swap request.
 The keyword NEAR the token name determines the tool. Just mentioning a token name does NOT mean the user wants its price.
 
 🚨 LIVE DATA MANDATE — CRITICAL:
