@@ -237,6 +237,8 @@ function createChatRoutes() {
                     '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD (not Telegram). ' +
                     'Use Markdown formatting instead of HTML. Do NOT use Telegram-specific formatting (<b>, <i>, <code>). ' +
                     'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
+                    'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
+                    'Always display them in FULL (e.g. 0x16d91d1615fc55b76d5f92365bd60c069b46ef78, NOT 0x16d9...ef78). ' +
                     'Keep responses conversational and helpful.';
             } else {
                 // New session
@@ -260,6 +262,8 @@ function createChatRoutes() {
                         '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD (not Telegram). ' +
                         'Use Markdown formatting instead of HTML. Do NOT use Telegram-specific formatting (<b>, <i>, <code>). ' +
                         'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
+                        'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
+                        'Always display them in FULL (e.g. 0x16d91d1615fc55b76d5f92365bd60c069b46ef78, NOT 0x16d9...ef78). ' +
                         'Keep responses conversational and helpful.',
                 };
                 sessionHistory = [];
@@ -579,7 +583,9 @@ function createChatRoutes() {
                 const systemInstruction = await buildSystemInstruction(userId);
                 const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
                 session._systemInstruction = systemInstruction + '\n\n' + aiaPrompt +
-                    '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. Keep responses conversational and helpful.';
+                    '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
+                    'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
+                    'Always display them in FULL. Keep responses conversational and helpful.';
             } else {
                 const systemInstruction = await buildSystemInstruction(userId);
                 const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
@@ -588,7 +594,9 @@ function createChatRoutes() {
                     title: message.trim().substring(0, 60),
                     messages: [], createdAt: Date.now(), updatedAt: Date.now(),
                     _systemInstruction: systemInstruction + '\n\n' + aiaPrompt +
-                        '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. Keep responses conversational and helpful.',
+                        '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
+                        'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
+                        'Always display them in FULL. Keep responses conversational and helpful.',
                 };
                 sessionHistory = [];
             }
