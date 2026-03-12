@@ -94,7 +94,8 @@ module.exports = {
             try {
                 const userIdBal = context?.userId;
                 if (userIdBal && args.amount) {
-                    const userWallets = await db.getTradingWallets(userIdBal);
+                    const { dbAll: bpDbAll } = require('../../../../db/core');
+                    const userWallets = await bpDbAll('SELECT * FROM user_trading_wallets WHERE userId = ?', [String(userIdBal)]);
                     if (userWallets && userWallets.length > 0) {
                         const defWallet = userWallets.find(w => w.isDefault) || userWallets[0];
                         if (defWallet) {
@@ -198,7 +199,7 @@ module.exports = {
             const quoteResult = formatSwapQuoteResult(data, context?.lang);
             const msUserId = context?.userId;
             if (msUserId && global._pendingMultiSwaps?.has(msUserId)) {
-                const qSize = global._pendingMultiSwaps.get(msUserId).length;
+                const qSize = global._pendingMultiSwaps.get(msUserId).length + 1; // +1: current swap not yet queued
                 if (qSize > 1) {
                     const msI = {
                         en: `\n\n📋 <b>[${qSize} swaps queued]</b> — Reply "ok" to execute all.`,

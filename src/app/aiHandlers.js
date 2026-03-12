@@ -3967,12 +3967,13 @@ function createAiHandlers(deps) {
                 // Process remaining swaps sequentially
                 setTimeout(async () => {
                   try {
+                    const totalSwaps = totalRemaining + 1; // include already-executed first swap
                     for (let i = 0; i < totalRemaining; i++) {
                       const nextSwap = swapQueue[0]; // always take first
                       if (!nextSwap) break;
                       // Send progress
                       if (botRef && chatId) {
-                        try { await botRef.sendMessage(chatId, `⏳ ${pL.exec} swap ${i + 2}${pL.of}${totalRemaining + 1}...`, { disable_notification: true }); } catch(_){}
+                        try { await botRef.sendMessage(chatId, `⏳ ${pL.exec} swap ${i + 2} / ${totalSwaps}...`, { disable_notification: true }); } catch(_){}
                       }
                       // Build context for execute_swap
                       const swapContext = { ...context, userId, chatId, msg, lang: uLang };
@@ -3984,10 +3985,18 @@ function createAiHandlers(deps) {
                           amount: nextSwap.amount
                         }, swapContext);
                         results.push({ swap: nextSwap, success: true, result: swapResult });
-                        log.child('FnCall').info(`Multi-swap ${i+2}/${totalRemaining+1}: success`);
+                        log.child('FnCall').info(`Multi-swap ${i+2}/${totalSwaps}: success`);
+                        // Send success message to user (display tx hash, etc.)
+                        if (botRef && chatId && swapResult?.displayMessage) {
+                          try { await botRef.sendMessage(chatId, swapResult.displayMessage, { parse_mode: 'HTML', disable_web_page_preview: true }); } catch(_){}
+                        }
                       } catch (swapErr) {
                         results.push({ swap: nextSwap, success: false, error: swapErr.message });
-                        log.child('FnCall').warn(`Multi-swap ${i+2}/${totalRemaining+1}: failed:`, swapErr.message);
+                        log.child('FnCall').warn(`Multi-swap ${i+2}/${totalSwaps}: failed:`, swapErr.message);
+                        // Notify user of failure
+                        if (botRef && chatId) {
+                          try { await botRef.sendMessage(chatId, `❌ Swap ${i+2}/${totalSwaps} ${pL.fail}: ${swapErr.message}`, { disable_notification: true }); } catch(_){}
+                        }
                       }
                       swapQueue.shift(); // remove processed swap
                       // Brief pause between swaps
