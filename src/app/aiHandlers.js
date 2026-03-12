@@ -3830,7 +3830,6 @@ function createAiHandlers(deps) {
       // #7: Onboarding — check if new user
       try {
         const { dbGet: dbG7, dbRun: dbR7 } = require('../../db/core');
-        await dbR7("CREATE TABLE IF NOT EXISTS user_onboarded (userId TEXT PRIMARY KEY, onboardedAt TEXT DEFAULT (datetime('now')))");
         const onboarded = await dbG7('SELECT 1 FROM user_onboarded WHERE userId = ?', [String(msg.from.id)]);
         if (!onboarded) {
           await dbR7('INSERT OR IGNORE INTO user_onboarded (userId) VALUES (?)', [String(msg.from.id)]);
@@ -4495,6 +4494,17 @@ function createAiHandlers(deps) {
     getPersonaLabel
   };
 }
+
+// Initialize swap pollers and onboarding table
+try {
+  const { startSwapPollers } = require('../features/ai/onchain/swapPollers');
+  startSwapPollers();
+} catch(e) { console.warn('SwapPollers init warning:', e.message); }
+try {
+  const { dbRun: dbRI } = require('../../db/core');
+  dbRI("CREATE TABLE IF NOT EXISTS user_onboarded (userId TEXT PRIMARY KEY, onboardedAt TEXT DEFAULT (datetime(\'now\')))").catch(() => {});
+} catch(_) {}
+
 module.exports = {
   createAiHandlers,
   registerTokenSearchCallbacks,

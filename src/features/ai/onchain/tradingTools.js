@@ -247,7 +247,7 @@ module.exports = {
                 const qBtnLabels = { en: ['✅ Confirm Swap', '❌ Cancel'], vi: ['✅ Xác nhận Swap', '❌ Hủy'], zh: ['✅ 确认兑换', '❌ 取消'], ko: ['✅ 스왑 확인', '❌ 취소'], ru: ['✅ Подтвердить', '❌ Отмена'], id: ['✅ Konfirmasi', '❌ Batal'] };
                 const btnL = qBtnLabels[qlk2] || qBtnLabels.en;
                 const qConfirmId = 'sqc_' + (context?.userId || '0') + '_' + Date.now();
-                quoteResult.reply_markup = { inline_keyboard: [[ { text: btnL[0], callback_data: 'swapquote|confirm|' + qConfirmId }, { text: btnL[1], callback_data: 'swapquote|cancel|' + qConfirmId } ]] };
+                quoteResult.reply_markup = { inline_keyboard: [[ { text: btnL[0], callback_data: 'sq|y|' + qConfirmId }, { text: btnL[1], callback_data: 'sq|n|' + qConfirmId } ]] };
                 if (!global._pendingSwapQuoteConfirms) global._pendingSwapQuoteConfirms = new Map();
                 global._pendingSwapQuoteConfirms.set(qConfirmId, { fromTokenAddress, toTokenAddress, amount: args.amount, chainIndex, userId: context?.userId, chatId: context?.chatId || context?.msg?.chat?.id });
                 setTimeout(() => { global._pendingSwapQuoteConfirms?.delete(qConfirmId); }, 300000);
@@ -795,55 +795,42 @@ module.exports = {
             const balanceLabels = { en: '💰 Balance', vi: '💰 Số dư', zh: '💰 余额', ko: '💰 잔액', ru: '💰 Баланс', id: '💰 Saldo' };
             const historyLabels = { en: '📋 History', vi: '📋 Lịch sử', zh: '📋 历史', ko: '📋 기록', ru: '📋 История', id: '📋 Riwayat' };
             const alertLabels = { en: '🔔 Set Alert', vi: '🔔 Đặt cảnh báo', zh: '🔔 设置提醒', ko: '🔔 알림', ru: '🔔 Уведомл.', id: '🔔 Peringatan' };
+            // Store full params in Map, use short ID in callback (max 64 bytes)
+            if (!global._swapActionParams) global._swapActionParams = new Map();
+            const saId = 'sa' + Date.now().toString(36);
+            global._swapActionParams.set(saId, { f: fromTokenAddress, t: toTokenAddress, a: String(originalAmount||args.amount), c: chainIndex, fs: fromSym, ts: toSym });
+            setTimeout(() => { global._swapActionParams?.delete(saId); }, 3600000);
             const swapButtons = { inline_keyboard: [
                 [
-                    { text: reverseLabels[lk47], callback_data: `swapaction|reverse|${fromTokenAddress.slice(0,10)}|${toTokenAddress.slice(0,10)}|${chainIndex}` },
-                    { text: repeatLabels[lk47], callback_data: `swapaction|repeat|${fromTokenAddress.slice(0,10)}|${toTokenAddress.slice(0,10)}|${originalAmount||args.amount}|${chainIndex}` }
+                    { text: reverseLabels[lk47], callback_data: 'sa|rev|' + saId },
+                    { text: repeatLabels[lk47], callback_data: 'sa|rep|' + saId }
                 ],
                 [
-                    { text: priceLabels[lk47], callback_data: `swapaction|price|${toTokenAddress.slice(0,10)}|${chainIndex}` },
-                    { text: balanceLabels[lk47], callback_data: 'swapaction|balance' },
-                    { text: historyLabels[lk47], callback_data: 'swapaction|history' }
+                    { text: priceLabels[lk47], callback_data: 'sa|price|' + saId },
+                    { text: balanceLabels[lk47], callback_data: 'sa|bal' },
+                    { text: historyLabels[lk47], callback_data: 'sa|hist' }
                 ],
                 [
-                    { text: alertLabels[lk47], callback_data: `swapaction|alert|${toSym}|${toTokenAddress.slice(0,10)}` }
+                    { text: alertLabels[lk47], callback_data: 'sa|alert|' + saId }
                 ]
             ] };
 
-            // #6: Schedule price check 1h after swap
+            // #6: Schedule persistent price check 1h after swap (DB-based)
             try {
                 const toPrice6 = Number(routerResult.toToken?.tokenUnitPrice || 0);
                 if (toPrice6 > 0) {
                     const chatId6 = context?.chatId || context?.msg?.chat?.id;
                     if (chatId6) {
-                        setTimeout(async () => {
-                            try {
-                                let bot6; try { bot6 = require('../../../core/bot').bot; } catch(_){}
-                                if (!bot6) return;
-                                const newData = await onchainos.getTokenPrice([{ chainIndex, tokenContractAddress: toTokenAddress }]);
-                                const newPrice = Number(newData?.[0]?.price || newData?.[0]?.tokenUnitPrice || 0);
-                                if (newPrice > 0 && toPrice6 > 0) {
-                                    const change = ((newPrice - toPrice6) / toPrice6 * 100).toFixed(2);
-                                    const arrow = change >= 0 ? '📈' : '📉';
-                                    let pLang6 = 'en';
-                                    try { const { getUserLanguage: g6 } = require('../../../../db/users'); const dl6 = await g6(String(context?.userId)); if (dl6) pLang6 = dl6; } catch(_){}
-                                    const lk6 = ['zh-Hans','zh-cn'].includes(pLang6) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(pLang6) ? pLang6 : 'en');
-                                    const msgs6 = {
-                                        en: `${arrow} <b>Price Update</b> (1h after swap)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
-                                        vi: `${arrow} <b>Cập nhật giá</b> (1h sau swap)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
-                                        zh: `${arrow} <b>价格变化</b>（兑换1小时后）\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
-                                        ko: `${arrow} <b>가격 변동</b> (스왑 1시간 후)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
-                                        ru: `${arrow} <b>Изменение цены</b> (1ч после обмена)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
-                                        id: `${arrow} <b>Update Harga</b> (1j setelah swap)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`
-                                    };
-                                    await bot6.sendMessage(chatId6, msgs6[lk6] || msgs6.en, { parse_mode: 'HTML', disable_notification: true });
-                                }
-                            } catch(_){}
-                        }, 3600000); // 1 hour
+                        try {
+                            const { dbRun: dbR6 } = require('../../../../db/core');
+                            await dbR6("CREATE TABLE IF NOT EXISTS swap_price_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT, chatId TEXT, tokenAddress TEXT, tokenSymbol TEXT, priceAtSwap REAL, chainIndex TEXT, checkAfter TEXT, status TEXT DEFAULT 'pending')");
+                            const checkTime = new Date(Date.now() + 3600000).toISOString();
+                            await dbR6('INSERT INTO swap_price_checks (userId,chatId,tokenAddress,tokenSymbol,priceAtSwap,chainIndex,checkAfter) VALUES (?,?,?,?,?,?,?)',
+                                [String(context?.userId), String(chatId6), toTokenAddress, toSym, toPrice6, chainIndex, checkTime]);
+                        } catch(_) {}
                     }
                 }
             } catch(_) {}
-
             return {
                 action: true, success: txConfirmed, reply_markup: swapButtons,
                 displayMessage: `🟢 <b>${title}</b>\n` +
@@ -888,7 +875,7 @@ module.exports = {
             const retryLabels = { en: '🔄 Retry with higher slippage', vi: '🔄 Thử lại với slippage cao hơn', zh: '🔄 提高滑点重试', ko: '🔄 높은 슬리피지로 재시도', ru: '🔄 Повтор с выш. слиппейдж', id: '🔄 Coba lagi slippage tinggi' };
             const lk10 = ['zh-Hans','zh-cn'].includes(lang2) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang2) ? lang2 : 'en');
             const retryBtns = { inline_keyboard: [[
-                { text: retryLabels[lk10], callback_data: `swapaction|retry|${args?.fromTokenAddress?.slice(0,10)||''}|${args?.toTokenAddress?.slice(0,10)||''}|${args?.amount||''}|${args?.chainIndex||'196'}` }
+                { text: retryLabels[lk10], callback_data: (() => { if (!global._swapActionParams) global._swapActionParams = new Map(); const rid = 'sr' + Date.now().toString(36); global._swapActionParams.set(rid, { f: args?.fromTokenAddress||'', t: args?.toTokenAddress||'', a: args?.amount||'', c: args?.chainIndex||'196' }); setTimeout(() => { global._swapActionParams?.delete(rid); }, 3600000); return 'sa|retry|' + rid; })() }
             ]] };
             return {
                 reply_markup: retryBtns,
@@ -936,7 +923,7 @@ module.exports = {
             const btns = [];
             rows.forEach((r, i) => {
                 msg += `${i+1}. ${r.fromSymbol||'?'} ➔ ${r.toSymbol||'?'}${r.name ? ' ('+r.name+')' : ''}\n`;
-                btns.push({ text: `💱 ${r.fromSymbol} ➔ ${r.toSymbol}`, callback_data: `swapaction|favorite|${r.fromToken?.slice(0,10)||''}|${r.toToken?.slice(0,10)||''}|${r.chainIndex||'196'}` });
+                const fid = 'sf'+Date.now().toString(36)+i; if(!global._swapActionParams)global._swapActionParams=new Map(); global._swapActionParams.set(fid,{f:r.fromToken||'',t:r.toToken||'',c:r.chainIndex||'196',fs:r.fromSymbol||'?',ts:r.toSymbol||'?'}); btns.push({ text: `💱 ${r.fromSymbol} ➔ ${r.toSymbol}`, callback_data: 'sa|fav|'+fid });
             });
             const btnRows = [];
             for (let i = 0; i < btns.length; i += 2) btnRows.push(btns.slice(i, i+2));

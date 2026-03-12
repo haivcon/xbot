@@ -881,9 +881,9 @@ function registerBatchTransferCallbacks(bot, getLang) {
     const data = query.data || '';
 
     // ── #2: Swap quote inline confirm/cancel ──
-    if (data.startsWith('swapquote|')) {
+    if (data.startsWith('sq|')) {
       const parts = data.split('|');
-      const action = parts[1]; // confirm or cancel
+      const action = parts[1] === 'y' ? 'confirm' : 'cancel';
       const qcId = parts[2];
       const params = global._pendingSwapQuoteConfirms?.get(qcId);
       try { await bot.answerCallbackQuery(query.id); } catch(_){}
@@ -929,66 +929,40 @@ function registerBatchTransferCallbacks(bot, getLang) {
     }
 
     // ── #4/#7: Swap action buttons (reverse/repeat) ──
-    if (data.startsWith('swapaction|')) {
+    if (data.startsWith('sa|')) {
       const parts = data.split('|');
-      const action = parts[1]; // reverse or repeat
+      const action = parts[1]; // rev, rep, price, bal, hist, alert, fav, retry
       try { await bot.answerCallbackQuery(query.id); } catch(_){}
       const chatId = query.message.chat.id;
       const userId = query.from.id;
-      if (action === 'reverse') {
-        // Reverse: swap from↔to
-        const fromSnippet = parts[2] || '';
-        const toSnippet = parts[3] || '';
-        const chain = parts[4] || '196';
-        // Build synthetic prompt for reversed swap
-        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap from ' + toSnippet + ' to ' + fromSnippet + ' chainIndex ' + chain };
-        try {
-          const { handleAiaCommand } = require('./aiHandlers');
-          if (handleAiaCommand) await handleAiaCommand(syntheticMsg);
-        } catch(_){}
-      } else if (action === 'repeat') {
-        const fromSnippet = parts[2] || '';
-        const toSnippet = parts[3] || '';
-        const amt = parts[4] || '';
-        const chain = parts[5] || '196';
-        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap ' + amt + ' ' + fromSnippet + ' to ' + toSnippet + ' chainIndex ' + chain };
-        try {
-          const { handleAiaCommand } = require('./aiHandlers');
-          if (handleAiaCommand) await handleAiaCommand(syntheticMsg);
-        } catch(_){}
+      // Resolve full params from short ID
+      const paramId = parts[2] || '';
+      const sp = global._swapActionParams?.get(paramId) || {};
+      const { handleAiaCommand: hAC } = require('./aiHandlers');
+      if (action === 'rev') {
+        const synMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap from ' + (sp.t||'') + ' to ' + (sp.f||'') + ' chainIndex ' + (sp.c||'196') };
+        try { if (hAC) await hAC(synMsg); } catch(_){}
+      } else if (action === 'rep') {
+        const synMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap ' + (sp.a||'') + ' ' + (sp.f||'') + ' to ' + (sp.t||'') + ' chainIndex ' + (sp.c||'196') };
+        try { if (hAC) await hAC(synMsg); } catch(_){}
       } else if (action === 'price') {
-        // Quick price check
-        const tokenSnippet = parts[2] || '';
-        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib check price of ' + tokenSnippet };
-        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
-      } else if (action === 'balance') {
-        // Quick balance check
-        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib check my wallet balance' };
-        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
-      } else if (action === 'history') {
-        // Show swap history
-        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib show my swap history' };
-        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
+        const synMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib check price of ' + (sp.ts||'token') };
+        try { if (hAC) await hAC(synMsg); } catch(_){}
+      } else if (action === 'bal') {
+        const synMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib check my wallet balance' };
+        try { if (hAC) await hAC(synMsg); } catch(_){}
+      } else if (action === 'hist') {
+        const synMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib show my swap history' };
+        try { if (hAC) await hAC(synMsg); } catch(_){}
       } else if (action === 'alert') {
-        // Suggest setting price alert
-        const tokenSym = parts[2] || '';
-        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib set price alert for ' + tokenSym };
-        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
-      } else if (action === 'favorite') {
-        // Swap from favorite pair
-        const fToken = parts[2] || '';
-        const tToken = parts[3] || '';
-        const chain = parts[4] || '196';
-        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap from ' + fToken + ' to ' + tToken + ' on chain ' + chain };
-        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
+        const synMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib set price alert for ' + (sp.ts||'token') };
+        try { if (hAC) await hAC(synMsg); } catch(_){}
+      } else if (action === 'fav') {
+        const synMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap from ' + (sp.f||'') + ' to ' + (sp.t||'') + ' chainIndex ' + (sp.c||'196') };
+        try { if (hAC) await hAC(synMsg); } catch(_){}
       } else if (action === 'retry') {
-        // Retry swap with higher slippage
-        const fToken = parts[2] || '';
-        const tToken = parts[3] || '';
-        const amt = parts[4] || '';
-        const chain = parts[5] || '196';
-        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap ' + amt + ' ' + fToken + ' to ' + tToken + ' high slippage chain ' + chain };
-        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
+        const synMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap ' + (sp.a||'') + ' from  ' + (sp.f||'') + ' to ' + (sp.t||'') + ' high slippage chainIndex ' + (sp.c||'196') };
+        try { if (hAC) await hAC(synMsg); } catch(_){}
       }
       return;
     }
