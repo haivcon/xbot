@@ -3957,7 +3957,7 @@ function createAiHandlers(deps) {
               try {
                 const originalText = userPrompt || '';
                 // Split by newlines and detect swap patterns
-                const swapPatterns = /(?:đổi|swap|exchange|兑换|교환|обмен|tukar)\s+[\d.]+\s+\S+\s+(?:lấy|for|to|ra|换|으로|на|dengan)\s+\S+/gi;
+                const swapPatterns = /(?:đổi|swap|exchange|兑换|교환|обмен|tukar)\s+[\d.]+\s+\S+\s+(?:lấy|for|to|ra|sang|thành|换|으로|на|dengan)\s+\S+/gi;
                 const swapLines = originalText.match(swapPatterns) || [];
                 
                 if (swapLines.length > 1) {
