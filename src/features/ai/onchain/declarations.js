@@ -226,7 +226,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'batch_swap',
-                description: 'Execute token swap across multiple trading wallets simultaneously. Supports per-wallet amounts and swap-max mode. Use when user says "swap từ tất cả ví", "batch swap", "swap hàng loạt", "swap nhiều ví", "swap max tất cả".',
+                description: 'Execute SAME token pair swap across MULTIPLE trading wallets simultaneously. One fromToken→toToken pair, each wallet gets its own amount. Use when: "swap từ tất cả ví", "batch swap", "swap hàng loạt", "swap nhiều ví", "swap max tất cả", "모든 지갑에서 스왑", "所有钱包兑换", "обмен со всех кошельков", "swap semua dompet". ⚠️ For DIFFERENT token pairs (e.g. OKB→A and OKB→B), use get_swap_quote separately — NOT batch_swap.',
                 parameters: {
                     type: 'object',
                     properties: {

@@ -182,7 +182,22 @@ module.exports = {
                 reasonLabel = '原因:';
                 codeLabel = '错误代码:';
                 hintMsg = '请尝试其他数量或检查此代币的流动性。';
-            }
+                        } else if (errLang === 'ko') {
+                title = '스왑 견적 오류';
+                reasonLabel = '원인:';
+                codeLabel = '오류 코드:';
+                hintMsg = '다른 수량을 시도하거나 토큰 유동성을 확인하세요.';
+            } else if (errLang === 'ru') {
+                title = 'ОШИБКА КОТИРОВКИ';
+                reasonLabel = 'Причина:';
+                codeLabel = 'Код ошибки:';
+                hintMsg = 'Попробуйте другую сумму или проверьте ликвидность.';
+            } else if (errLang === 'id') {
+                title = 'ERROR KUOTASI SWAP';
+                reasonLabel = 'Alasan:';
+                codeLabel = 'Kode error:';
+                hintMsg = 'Coba jumlah lain atau periksa likuiditas token.';
+}
 
             return {
                 displayMessage: `❌ <b>${title}</b>\n` +
@@ -362,9 +377,20 @@ module.exports = {
                 const balCheck = await checkTokenBalance(provider, tw.address, fromTokenAddress, args.amount, chainIndex);
                 if (!balCheck.sufficient) {
                     const lang = context?.lang || 'en';
-                    const msg = lang === 'vi'
-                        ? `❌ <b>SỐ DƯ KHÔNG ĐỦ</b>\n━━━━━━━━━━━━━━━━━━\n💰 Số dư hiện tại: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 Cần: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>Vui lòng nạp thêm token hoặc giảm số lượng swap.</i>`
-                        : `❌ <b>INSUFFICIENT BALANCE</b>\n━━━━━━━━━━━━━━━━━━\n💰 Current: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 Required: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>Please deposit more tokens or reduce swap amount.</i>`;
+                    let msg;
+                    if (lang === 'vi') {
+                        msg = `❌ <b>SỐ DƯ KHÔNG ĐỦ</b>\n━━━━━━━━━━━━━━━━━━\n💰 Số dư hiện tại: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 Cần: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>Vui lòng nạp thêm token hoặc giảm số lượng swap.</i>`;
+                    } else if (lang === 'zh' || lang === 'zh-Hans' || lang === 'zh-cn') {
+                        msg = `❌ <b>余额不足</b>\n━━━━━━━━━━━━━━━━━━\n💰 当前余额: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 需要: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>请充值代币或减少兑换数量。</i>`;
+                    } else if (lang === 'ko') {
+                        msg = `❌ <b>잔액 부족</b>\n━━━━━━━━━━━━━━━━━━\n💰 현재: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 필요: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>토큰을 더 입금하거나 스왑 수량을 줄이세요.</i>`;
+                    } else if (lang === 'ru') {
+                        msg = `❌ <b>НЕДОСТАТОЧНЫЙ БАЛАНС</b>\n━━━━━━━━━━━━━━━━━━\n💰 Текущий: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 Необходимо: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>Пополните баланс или уменьшите сумму обмена.</i>`;
+                    } else if (lang === 'id') {
+                        msg = `❌ <b>SALDO TIDAK CUKUP</b>\n━━━━━━━━━━━━━━━━━━\n💰 Saat ini: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 Dibutuhkan: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>Silakan deposit lebih banyak token atau kurangi jumlah swap.</i>`;
+                    } else {
+                        msg = `❌ <b>INSUFFICIENT BALANCE</b>\n━━━━━━━━━━━━━━━━━━\n💰 Current: <code>${balCheck.balance}</code> ${balCheck.symbol}\n📊 Required: <code>${balCheck.required}</code> ${balCheck.symbol}\n\n<i>Please deposit more tokens or reduce swap amount.</i>`;
+                    }
                     return { displayMessage: msg };
                 }
             } catch (balErr) {
@@ -473,7 +499,25 @@ module.exports = {
                 walletLabel = '钱包:';
                 orderLabel = '订单 ID:';
                 linkLabel = '在区块浏览中查看';
-            }
+                        } else if (lang === 'ko') {
+                title = '스왑 성공';
+                swappedLabel = '교환:';
+                walletLabel = '지갑:';
+                orderLabel = '주문 ID:';
+                linkLabel = '탐색기에서 보기';
+            } else if (lang === 'ru') {
+                title = 'ОБМЕН ВЫПОЛНЕН';
+                swappedLabel = 'Обмен:';
+                walletLabel = 'Кошелёк:';
+                orderLabel = 'ID ордера:';
+                linkLabel = 'Посмотреть в обозревателе';
+            } else if (lang === 'id') {
+                title = 'SWAP BERHASIL';
+                swappedLabel = 'Ditukar:';
+                walletLabel = 'Dompet:';
+                orderLabel = 'ID Pesanan:';
+                linkLabel = 'Lihat di Explorer';
+}
 
             return {
                 displayMessage: `🟢 <b>${title}</b>\n` +
@@ -499,7 +543,19 @@ module.exports = {
                 title = '兑换执行错误';
                 reasonLabel = '原因:';
                 hintMsg = '请检查您的流动性、余额，或稍后重试。';
-            }
+                        } else if (lang2 === 'ko') {
+                title = '스왑 실행 오류';
+                reasonLabel = '원인:';
+                hintMsg = '유동성, 잔액을 확인하거나 나중에 다시 시도하세요.';
+            } else if (lang2 === 'ru') {
+                title = 'ОШИБКА ОБМЕНА';
+                reasonLabel = 'Причина:';
+                hintMsg = 'Проверьте ликвидность, баланс или попробуйте позже.';
+            } else if (lang2 === 'id') {
+                title = 'ERROR EKSEKUSI SWAP';
+                reasonLabel = 'Alasan:';
+                hintMsg = 'Periksa likuiditas, saldo, atau coba lagi nanti.';
+}
 
             return {
                 displayMessage: `❌ <b>${title}</b>\n` +
@@ -717,7 +773,7 @@ module.exports = {
             } catch (e) { log.child('BATCHSWAP').warn('Token info pre-resolve failed:', e.message); }
 
             if (resolvedSwaps.length > 5 && chatId) {
-                try { bot = require('../../../core/bot'); } catch (e) { /* no bot available */ }
+                try { bot = require('../../../core/bot').bot; } catch (e) { /* no bot available */ }
             }
             for (let i = 0; i < resolvedSwaps.length; i++) {
                 const swap = resolvedSwaps[i];
@@ -925,7 +981,7 @@ module.exports = {
             // Split: send header + groups of wallet blocks as separate messages
             let bot2 = null;
             const chatId2 = context?.chatId || context?.msg?.chat?.id;
-            try { bot2 = require('../../../core/bot'); } catch (e) { /* no bot */ }
+            try { bot2 = require('../../../core/bot').bot; } catch (e) { /* no bot */ }
 
             if (bot2 && chatId2) {
                 try { await bot2.sendMessage(chatId2, header, { parse_mode: 'HTML', disable_notification: true }).catch(() => { }); } catch (e) { /* ignore */ }
