@@ -75,7 +75,7 @@ module.exports = {
 
             // --- Phase 5 Auto-Decimal Resolution ---
             let originalAmount = args.amount;
-            if (originalAmount && !originalAmount.includes('00000000') && !originalAmount.includes('e+')) {
+            if (originalAmount && !originalAmount.includes('00000000') && !originalAmount.includes('e+') && originalAmount.length < 16) {
                 try {
                     const ethers = require('ethers');
                     const basicInfo = await onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress: fromTokenAddress }]);
@@ -116,7 +116,20 @@ module.exports = {
                                             const chatIdBal = context?.chatId || context?.msg?.chat?.id;
                                             if (chatIdBal) {
                                                 let bBot; try { bBot = require('../../../core/bot').bot; } catch(_){}
-                                                if (bBot) await bBot.sendMessage(chatIdBal, `⚠️ <b>Low Balance</b>\nWallet <code>${defWallet.address.slice(0,8)}...</code>: ${holdAmt} ${sym} (need ${reqAmt})`, { parse_mode: 'HTML', disable_notification: true });
+                                                if (bBot) {
+                                                let bpLang = 'en';
+                                                try { const { getUserLanguage: gBpL } = require('../../../../db/users'); const dbl = await gBpL(String(userIdBal)); if (dbl) bpLang = dbl; } catch(_){}
+                                                const bpLk = ['zh-Hans','zh-cn'].includes(bpLang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(bpLang) ? bpLang : 'en');
+                                                const bpTexts = {
+                                                    en: `⚠️ <b>Low Balance</b>\nWallet <code>${defWallet.address.slice(0,8)}...</code>: ${holdAmt} ${sym} (need ${reqAmt})`,
+                                                    vi: `⚠️ <b>Số dư thấp</b>\nVí <code>${defWallet.address.slice(0,8)}...</code>: ${holdAmt} ${sym} (cần ${reqAmt})`,
+                                                    zh: `⚠️ <b>余额不足</b>\n钱包 <code>${defWallet.address.slice(0,8)}...</code>: ${holdAmt} ${sym} (需要 ${reqAmt})`,
+                                                    ko: `⚠️ <b>잔액 부족</b>\n지갑 <code>${defWallet.address.slice(0,8)}...</code>: ${holdAmt} ${sym} (필요 ${reqAmt})`,
+                                                    ru: `⚠️ <b>Низкий баланс</b>\nКошелёк <code>${defWallet.address.slice(0,8)}...</code>: ${holdAmt} ${sym} (нужно ${reqAmt})`,
+                                                    id: `⚠️ <b>Saldo Rendah</b>\nDompet <code>${defWallet.address.slice(0,8)}...</code>: ${holdAmt} ${sym} (butuh ${reqAmt})`
+                                                };
+                                                await bBot.sendMessage(chatIdBal, bpTexts[bpLk] || bpTexts.en, { parse_mode: 'HTML', disable_notification: true });
+                                            }
                                             }
                                         }
                                     }
@@ -210,7 +223,7 @@ module.exports = {
                         id: `\n\n📋 <b>[${qSize} swap antrian]</b> — Balas "ok" untuk eksekusi.`
                     };
                     let ql = context?.lang || 'en';
-                    try { const { getLang } = require('../../../app/language'); if (context?.msg) ql = await getLang(context.msg); } catch(_) {}
+                    try { const { getUserLanguage: gUL4a } = require('../../../../db/users'); const dl4a = await gUL4a(String(context?.chatId || context?.msg?.chat?.id || context?.userId)); if (dl4a) ql = dl4a; } catch(_) {}
                     const qlk = ['zh-Hans','zh-cn'].includes(ql) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(ql) ? ql : 'en');
                     if (quoteResult.displayMessage) quoteResult.displayMessage += msI[qlk] || msI.en;
                 }
@@ -221,8 +234,8 @@ module.exports = {
             // Use DB language for reliable detection
             let errLang = lang;
             try {
-                const { getLang } = require('../../../app/language');
-                if (context?.msg) errLang = await getLang(context.msg);
+                const { getUserLanguage: gUL4b } = require('../../../../db/users');
+                const dl4b = await gUL4b(String(context?.chatId || context?.msg?.chat?.id || context?.userId)); if (dl4b) errLang = dl4b;
             } catch (e) { /* fallback */ }
             let title = 'SWAP QUOTE ERROR';
             let reasonLabel = 'Reason:';
@@ -373,7 +386,14 @@ module.exports = {
                         }
                     }
                 } catch (approveErr) {
-                    log.child('AUTOSWAP').error(`Approve error (continuing):`, approveErr.msg || approveErr.message);
+                    log.child('AUTOSWAP').error('Approve error:', approveErr.msg || approveErr.message);
+                    // Block swap if approve failed — tx will revert anyway
+                    let apLang = context?.lang || 'en';
+                    try { const { getUserLanguage: gApL } = require('../../../../db/users'); const dal = await gApL(String(context?.chatId || context?.msg?.chat?.id || userId)); if (dal) apLang = dal; } catch(_){}
+                    const apLk = ['zh-Hans','zh-cn'].includes(apLang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(apLang) ? apLang : 'en');
+                    const apTitles = { en: 'APPROVE FAILED', vi: 'PHÊ DUYỆT THẤT BẠI', zh: '授权失败', ko: '승인 실패', ru: 'ОШИБКА ОДОБРЕНИЯ', id: 'APPROVE GAGAL' };
+                    const apReasons = { en: 'Token approval failed. Swap cannot proceed.', vi: 'Phê duyệt token thất bại. Không thể tiếp tục swap.', zh: '代币授权失败，无法执行兑换。', ko: '토큰 승인 실패. 스왑 불가.', ru: 'Ошибка одобрения токена. Обмен невозможен.', id: 'Persetujuan token gagal. Swap tidak bisa dilanjutkan.' };
+                    return { displayMessage: `❌ <b>${apTitles[apLk]||apTitles.en}</b>\n━━━━━━━━━━━━━━━━━━\n⚠️ ${apReasons[apLk]||apReasons.en}\n💡 <i>${approveErr.msg||approveErr.message}</i>`, action: true, success: false };
                 }
             }
 
@@ -382,7 +402,7 @@ module.exports = {
 
             // --- Phase 5 Auto-Decimal Resolution for execution ---
             let originalAmount = args.amount;
-            if (originalAmount && !originalAmount.includes('00000000') && !originalAmount.includes('e+')) {
+            if (originalAmount && !originalAmount.includes('00000000') && !originalAmount.includes('e+') && originalAmount.length < 16) {
                 try {
                     const basicInfo = await onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress: fromTokenAddress }]);
                     if (basicInfo && basicInfo.length > 0) {
@@ -437,7 +457,7 @@ module.exports = {
                         let slipBot; try { slipBot = require('../../../core/bot').bot; } catch(_){}
                         if (slipBot) {
                             let slipLang = context?.lang || 'en';
-                            try { const { getLang } = require('../../../app/language'); if (context?.msg) slipLang = await getLang(context.msg); } catch(_){}
+                            try { const { getUserLanguage: gUL4c } = require('../../../../db/users'); const dl4c = await gUL4c(String(context?.chatId || context?.msg?.chat?.id || userId)); if (dl4c) slipLang = dl4c; } catch(_){}
                             const slk = ['zh-Hans','zh-cn'].includes(slipLang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(slipLang) ? slipLang : 'en');
                             const slipTexts = {
                                 en: `⚠️ <b>HIGH SLIPPAGE</b>\n📊 ${dynamicSlippage}% — You may lose up to ${dynamicSlippage}% of value.`,
@@ -636,13 +656,14 @@ module.exports = {
             const fromAmt = (Number(routerResult.fromTokenAmount || args.amount) / Math.pow(10, fromDec)).toLocaleString('en-US', { maximumFractionDigits: 6 });
             const toAmt = (Number(routerResult.toTokenAmount || 0) / Math.pow(10, toDec)).toLocaleString('en-US', { maximumFractionDigits: 6 });
 
-            log.child('AUTOSWAP').info(`✅ Success! TxHash: ${txHash}`);
-            // ── Save swap to history ──
+            // Log moved after receipt check
+            log.child('AUTOSWAP').info(`${txConfirmed ? '✅ Success' : '❌ Reverted'}! TxHash: ${txHash}`);
+            // ── Save swap to history (with status) ──
             try {
                 const { dbRun } = require('../../../../db/core');
-                await dbRun(`CREATE TABLE IF NOT EXISTS swap_history (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, walletAddress TEXT, chainIndex TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, fromAmount TEXT, toAmount TEXT, txHash TEXT, orderId TEXT, slippage REAL, createdAt TEXT DEFAULT (datetime('now')))`);
-                await dbRun('INSERT INTO swap_history (userId,walletAddress,chainIndex,fromToken,toToken,fromSymbol,toSymbol,fromAmount,toAmount,txHash,orderId,slippage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-                    [String(userId), tw.address, chainIndex, fromTokenAddress, toTokenAddress, fromSym||'?', toSym||'?', String(originalAmount||args.amount), String(routerResult.toTokenAmount||'0'), txHash, orderId, dynamicSlippage]);
+                await dbRun(`CREATE TABLE IF NOT EXISTS swap_history (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, walletAddress TEXT, chainIndex TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, fromAmount TEXT, toAmount TEXT, txHash TEXT, orderId TEXT, slippage REAL, status TEXT DEFAULT 'success', createdAt TEXT DEFAULT (datetime('now')))`);
+                await dbRun('INSERT INTO swap_history (userId,walletAddress,chainIndex,fromToken,toToken,fromSymbol,toSymbol,fromAmount,toAmount,txHash,orderId,slippage,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    [String(userId), tw.address, chainIndex, fromTokenAddress, toTokenAddress, fromSym||'?', toSym||'?', String(originalAmount||args.amount), String(routerResult.toTokenAmount||'0'), txHash, orderId, dynamicSlippage, txConfirmed ? 'success' : 'reverted']);
             } catch (dbErr) { log.child('AUTOSWAP').warn('Swap history save failed:', dbErr.message); }
 
 
@@ -693,6 +714,7 @@ module.exports = {
 }
 
             return {
+                action: true, success: txConfirmed,
                 displayMessage: `🟢 <b>${title}</b>\n` +
                     `━━━━━━━━━━━━━━━━━━\n` +
                     `💱 <b>${swappedLabel}</b> <code>${fromAmt}</code> ${fromSym} ➔ <code>${toAmt}</code> ${toSym}\n` +

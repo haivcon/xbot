@@ -3989,7 +3989,8 @@ function createAiHandlers(deps) {
                           toTokenAddress: nextSwap.toTokenAddress,
                           amount: nextSwap.amount
                         }, swapContext);
-                        results.push({ swap: nextSwap, success: true, result: swapResult });
+                        const swapOk = swapResult?.success !== false; // receipt verification may set success=false
+                        results.push({ swap: nextSwap, success: swapOk, result: swapResult });
                         log.child('FnCall').info(`Multi-swap ${i+2}/${totalSwaps}: success`);
                         // Delete progress msg then show success
                         if (progressMsgId && botRef && chatId) { try { await botRef.deleteMessage(chatId, progressMsgId); } catch(_){} progressMsgId = null; }
@@ -4007,13 +4008,14 @@ function createAiHandlers(deps) {
                       }
                       swapQueue.shift(); // remove processed swap
                       // Brief pause between swaps
-                      if (i < totalRemaining - 1) await new Promise(r => setTimeout(r, 2000));
+                      if (i < totalRemaining - 1) await new Promise(r => setTimeout(r, 5000)); // 5s to ensure previous tx is confirmed
                     }
                     // Final summary
                     if (botRef && chatId && results.length > 0) {
                       const successCount = results.filter(r => r.success).length;
                       const failCount = results.filter(r => !r.success).length;
                       let summary = `✅ <b>${pL.done}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+                      // +1 for first swap (handled by AI) — assume success since it passed receipt check before reaching here
                       summary += `📊 ${pL.success}: ${successCount + 1} | ${pL.fail}: ${failCount}\n`;
                       try { await botRef.sendMessage(chatId, summary, { parse_mode: 'HTML' }); } catch(_){}
                     }
@@ -4055,7 +4057,7 @@ function createAiHandlers(deps) {
               if (!global._pendingMultiSwaps.has(userId)) global._pendingMultiSwaps.set(userId, []);
               // Add this swap to the queue (avoid duplicates by toToken)
               const queue = global._pendingMultiSwaps.get(userId);
-              const alreadyQueued = queue.some(q => q.toTokenAddress?.toLowerCase() === swapArgs.toTokenAddress?.toLowerCase() && q.fromTokenAddress?.toLowerCase() === swapArgs.fromTokenAddress?.toLowerCase());
+              const alreadyQueued = queue.some(q => q.toTokenAddress?.toLowerCase() === swapArgs.toTokenAddress?.toLowerCase() && q.fromTokenAddress?.toLowerCase() === swapArgs.fromTokenAddress?.toLowerCase() && q.amount === swapArgs.amount);
               if (!alreadyQueued) {
                 queue.push({ ...swapArgs });
                 log.child('FnCall').info(`Multi-swap queue for user ${userId}: ${queue.length} pending`);
