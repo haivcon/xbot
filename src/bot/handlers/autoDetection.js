@@ -404,7 +404,12 @@ function registerAutoDetection(context) {
                             msg.caption = (msg.caption || '').replace(/XKO/gi, '0x');
                         }
                         // Route to AI directly and STOP — don't continue to gaming detection
-                        await handleAiaCommand(msg);
+                        const syntheticMsg = {
+                            ...msg,
+                            text: `/aib ${msg.text || msg.caption || extractedText}`,
+                            caption: undefined
+                        };
+                        await handleAiaCommand(syntheticMsg);
                         return;
                     } else {
                         // Ambiguous intent → show inline keyboard
