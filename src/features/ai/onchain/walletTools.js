@@ -968,26 +968,7 @@ module.exports = {
                 if (confirmed === 'cancel') {
                     return { displayMessage: `❌ ${cancelledTexts[lk] || cancelledTexts.en}`, action: true, success: false };
                 }
-                // 'confirm' or 'timeout' → proceed
-                // Send a small cancel button that stays visible during execution
-                const cancelMidBtnTexts = {
-                    en: '⛔ Cancel Batch', vi: '⛔ Hủy Batch',
-                    zh: '⛔ 取消批量', ko: '⛔ 배치 취소',
-                    ru: '⛔ Отменить', id: '⛔ Batalkan'
-                };
-                const runningTexts = {
-                    en: '🔄 Batch running...', vi: '🔄 Đang chạy batch...',
-                    zh: '🔄 批量执行中...', ko: '🔄 배치 실행중...',
-                    ru: '🔄 Выполнение...', id: '🔄 Batch berjalan...'
-                };
-                try {
-                    await bot.sendMessage(chatId, runningTexts[lk] || runningTexts.en, {
-                        disable_notification: true,
-                        reply_markup: { inline_keyboard: [[
-                            { text: cancelMidBtnTexts[lk] || cancelMidBtnTexts.en, callback_data: `batchconfirm|cancel_${batchId}` }
-                        ]] }
-                    });
-                } catch (e) { /* ignore */ }
+                // 'confirm' or 'timeout' → proceed (startup msg handles progress display)
             } catch (e) {
                 // If button send fails, just proceed
                 log.child('BATCHTRANSFER').warn('Confirm button send failed, proceeding:', e.message);
@@ -1532,25 +1513,27 @@ module.exports = {
             }
         }
 
-        // ── #10: Completion notification for long batches ──
-        const totalElapsed = Math.round((Date.now() - batchStartTime) / 1000);
-        if (totalElapsed > 30 && bot && chatId) {
-            const doneTexts = {
-                en: `🔔 <b>Batch Complete!</b>\n✅ ${successCount}/${results.length} transfers done in ${elapsedFmt}.`,
-                vi: `🔔 <b>Batch Hoàn Thành!</b>\n✅ ${successCount}/${results.length} giao dịch hoàn tất trong ${elapsedFmt}.`,
-                zh: `🔔 <b>批量完成!</b>\n✅ ${successCount}/${results.length} 笔转账完成, 耗时 ${elapsedFmt}.`,
-                ko: `🔔 <b>배치 완료!</b>\n✅ ${successCount}/${results.length}건 전송 완료 (${elapsedFmt}).`,
-                ru: `🔔 <b>Пакет завершён!</b>\n✅ ${successCount}/${results.length} транзакций за ${elapsedFmt}.`,
-                id: `🔔 <b>Batch Selesai!</b>\n✅ ${successCount}/${results.length} transfer selesai dalam ${elapsedFmt}.`
-            };
-            try {
-                await bot.sendMessage(chatId, doneTexts[lk] || doneTexts.en, { parse_mode: 'HTML', disable_notification: false });
-            } catch (e) { /* push notification is best-effort */ }
-        }
-
-        // ── Delete progress bar message ──
+        // ── Final: Edit progress to "✅ Complete", then auto-delete after 3s ──
         if (progressMsgId && bot && chatId) {
-            try { await bot.deleteMessage(chatId, progressMsgId).catch(() => { }); } catch (_) { }
+            try {
+                const elapsedTotal2 = Math.round((Date.now() - batchStartTime) / 1000);
+                const eFmt2 = elapsedTotal2 >= 60 ? `${Math.floor(elapsedTotal2 / 60)}m${elapsedTotal2 % 60}s` : `${elapsedTotal2}s`;
+                const doneBarTexts = {
+                    en: `✅ <b>Batch Complete!</b> ${successCount}/${results.length} done | ⏱ ${eFmt2}`,
+                    vi: `✅ <b>Batch hoàn thành!</b> ${successCount}/${results.length} xong | ⏱ ${eFmt2}`,
+                    zh: `✅ <b>批量完成!</b> ${successCount}/${results.length} 完成 | ⏱ ${eFmt2}`,
+                    ko: `✅ <b>배치 완료!</b> ${successCount}/${results.length} 완료 | ⏱ ${eFmt2}`,
+                    ru: `✅ <b>Завершено!</b> ${successCount}/${results.length} выполнено | ⏱ ${eFmt2}`,
+                    id: `✅ <b>Batch Selesai!</b> ${successCount}/${results.length} selesai | ⏱ ${eFmt2}`
+                };
+                await bot.editMessageText(doneBarTexts[lk] || doneBarTexts.en, {
+                    chat_id: chatId, message_id: progressMsgId, parse_mode: 'HTML'
+                }).catch(() => {});
+                // Auto-delete the completion message after 5 seconds
+                setTimeout(() => { bot.deleteMessage(chatId, progressMsgId).catch(() => {}); }, 5000);
+            } catch (_) {
+                try { bot.deleteMessage(chatId, progressMsgId).catch(() => {}); } catch(_2) {}
+            }
         }
 
         // ── Retry Failed Transfers ──

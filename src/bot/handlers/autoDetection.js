@@ -403,6 +403,9 @@ function registerAutoDetection(context) {
                         if (/XKO/i.test(msg.caption || '')) {
                             msg.caption = (msg.caption || '').replace(/XKO/gi, '0x');
                         }
+                        // Route to AI directly and STOP — don't continue to gaming detection
+                        await handleAiaCommand(msg);
+                        return;
                     } else {
                         // Ambiguous intent → show inline keyboard
                         log.child('AutoDetection').info(`✓ Multi-address (${addrCount}) with ambiguous intent, showing action picker`);
