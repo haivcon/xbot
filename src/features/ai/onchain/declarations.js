@@ -263,6 +263,25 @@ module.exports.ONCHAIN_TOOLS = [
                 }
             },
             {
+                name: 'save_favorite_pair',
+                description: 'Save a token pair as favorite for quick swapping. Use when user says "save pair", "lưu cặp", "收藏交易对", "페어 저장", "сохранить пару", "simpan pasangan".',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        pairName: { type: 'string', description: 'Display name (e.g. "OKB/banmao")' },
+                        fromToken: { type: 'string', description: 'From token symbol or address' },
+                        toToken: { type: 'string', description: 'To token symbol or address' },
+                        chainIndex: { type: 'string', description: 'Chain ID (default 196)' }
+                    },
+                    required: ['fromToken', 'toToken']
+                }
+            },
+            {
+                name: 'list_favorite_pairs',
+                description: 'List saved favorite token pairs. Use when user says "favorite pairs", "cặp yêu thích", "收藏的交易对", "즐겨찾기", "избранные пары", "pasangan favorit".',
+                parameters: { type: 'object', properties: {} }
+            },
+            {
                 name: 'get_swap_history',
                 description: 'View recent swap history for the user. Shows past swap transactions with pair, amount, time, and explorer link. Use when user says "lịch sử swap", "swap history", "兑换历史", "스왑 내역", "история обменов", "riwayat swap".',
                 parameters: {

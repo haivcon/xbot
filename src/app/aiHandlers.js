@@ -3966,6 +3966,14 @@ function createAiHandlers(deps) {
               const swapArgs = functionCall.args || {};
               // ── Store in pending multi-swap queue ──
               if (!global._pendingMultiSwaps) global._pendingMultiSwaps = new Map();
+              if (!global._pendingMultiSwapTimers) global._pendingMultiSwapTimers = new Map();
+              // TTL: Auto-clear queue after 5 minutes
+              if (global._pendingMultiSwapTimers.has(userId)) clearTimeout(global._pendingMultiSwapTimers.get(userId));
+              global._pendingMultiSwapTimers.set(userId, setTimeout(() => {
+                global._pendingMultiSwaps.delete(userId);
+                global._pendingMultiSwapTimers.delete(userId);
+                log.child('FnCall').info(`Multi-swap queue expired for user ${userId}`);
+              }, 300000));
               if (!global._pendingMultiSwaps.has(userId)) global._pendingMultiSwaps.set(userId, []);
               // Add this swap to the queue (avoid duplicates by toToken)
               const queue = global._pendingMultiSwaps.get(userId);

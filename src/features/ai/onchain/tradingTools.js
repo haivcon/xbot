@@ -90,6 +90,42 @@ module.exports = {
             }
             // ----------------------------------------
 
+            // ── #4: Balance pre-check before quote (soft warning) ──
+            try {
+                const userIdBal = context?.userId;
+                if (userIdBal && args.amount) {
+                    const userWallets = await db.getTradingWallets(userIdBal);
+                    if (userWallets && userWallets.length > 0) {
+                        const defWallet = userWallets.find(w => w.isDefault) || userWallets[0];
+                        if (defWallet) {
+                            try {
+                                const balData = await onchainos.getWalletBalance(defWallet.address, chainIndex);
+                                if (balData && Array.isArray(balData) && balData.length > 0) {
+                                    const assets = balData[0]?.tokenAssets || balData;
+                                    const fAddr = fromTokenAddress.toLowerCase();
+                                    const isNat = ['okb','eth','bnb','matic','avax'].includes(fAddr);
+                                    const match = isNat
+                                        ? assets.find(a => (a.tokenSymbol||'').toLowerCase() === fAddr)
+                                        : assets.find(a => (a.tokenContractAddress||'').toLowerCase() === fAddr);
+                                    if (match) {
+                                        const holdAmt = Number(match.holdingAmount || match.balance || 0);
+                                        const reqAmt = Number(originalAmount || args.amount);
+                                        if (reqAmt > 0 && holdAmt < reqAmt) {
+                                            const sym = match.tokenSymbol || fAddr;
+                                            const chatIdBal = context?.chatId || context?.msg?.chat?.id;
+                                            if (chatIdBal) {
+                                                let bBot; try { bBot = require('../../../core/bot').bot; } catch(_){}
+                                                if (bBot) await bBot.sendMessage(chatIdBal, `⚠️ <b>Low Balance</b>\nWallet <code>${defWallet.address.slice(0,8)}...</code>: ${holdAmt} ${sym} (need ${reqAmt})`, { parse_mode: 'HTML', disable_notification: true });
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (_) {}
+                        }
+                    }
+                }
+            } catch (bpErr) { log.child('SWAPQUOTE').warn('Balance pre-check:', bpErr.message); }
+
             let data;
             try {
                 data = await onchainos.getSwapQuote({
@@ -158,7 +194,27 @@ module.exports = {
                     [context?.userId, chainIndex, fromTokenAddress, toTokenAddress, quoteRouter.fromTokenSymbol || '?', quoteRouter.toTokenSymbol || '?', args.amount, quoteRouter.toTokenAmount || '0', quoteRouter.priceImpactPercentage || '0', Math.floor(Date.now() / 1000)]);
             } catch (dbErr) { log.child('SWAPQUOTE').warn('History log failed:', dbErr.message); }
 
-            return formatSwapQuoteResult(data, context?.lang);
+            // ── #2: Multi-swap combined indicator ──
+            const quoteResult = formatSwapQuoteResult(data, context?.lang);
+            const msUserId = context?.userId;
+            if (msUserId && global._pendingMultiSwaps?.has(msUserId)) {
+                const qSize = global._pendingMultiSwaps.get(msUserId).length;
+                if (qSize > 1) {
+                    const msI = {
+                        en: `\n\n📋 <b>[${qSize} swaps queued]</b> — Reply "ok" to execute all.`,
+                        vi: `\n\n📋 <b>[${qSize} swap đang chờ]</b> — Trả lời "ok" để thực hiện tất cả.`,
+                        zh: `\n\n📋 <b>[${qSize} 笔兑换排队中]</b> — 回复"ok"执行全部。`,
+                        ko: `\n\n📋 <b>[${qSize} 스왑 대기 중]</b> — "ok" 입력하여 모두 실행.`,
+                        ru: `\n\n📋 <b>[${qSize} обменов в очереди]</b> — "ok" для выполнения.`,
+                        id: `\n\n📋 <b>[${qSize} swap antrian]</b> — Balas "ok" untuk eksekusi.`
+                    };
+                    let ql = context?.lang || 'en';
+                    try { const { getLang } = require('../../../app/language'); if (context?.msg) ql = await getLang(context.msg); } catch(_) {}
+                    const qlk = ['zh-Hans','zh-cn'].includes(ql) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(ql) ? ql : 'en');
+                    if (quoteResult.displayMessage) quoteResult.displayMessage += msI[qlk] || msI.en;
+                }
+            }
+            return quoteResult;
         } catch (error) {
             const lang = context?.lang || 'en';
             // Use DB language for reliable detection
@@ -371,6 +427,30 @@ module.exports = {
             // Cap slippage at 50% max to prevent sandwich attacks
             dynamicSlippage = Math.min(50, dynamicSlippage);
             log.child('AUTOSWAP').info(`Calculated Slippage: ${dynamicSlippage}%`);
+
+            // ── #3: High slippage warning (>15%) ──
+            if (dynamicSlippage > 15) {
+                try {
+                    const slipChatId = context?.chatId || context?.msg?.chat?.id;
+                    if (slipChatId) {
+                        let slipBot; try { slipBot = require('../../../core/bot').bot; } catch(_){}
+                        if (slipBot) {
+                            let slipLang = context?.lang || 'en';
+                            try { const { getLang } = require('../../../app/language'); if (context?.msg) slipLang = await getLang(context.msg); } catch(_){}
+                            const slk = ['zh-Hans','zh-cn'].includes(slipLang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(slipLang) ? slipLang : 'en');
+                            const slipTexts = {
+                                en: `⚠️ <b>HIGH SLIPPAGE</b>\n📊 ${dynamicSlippage}% — You may lose up to ${dynamicSlippage}% of value.`,
+                                vi: `⚠️ <b>TRƯỢT GIÁ CAO</b>\n📊 ${dynamicSlippage}% — Có thể mất đến ${dynamicSlippage}% giá trị.`,
+                                zh: `⚠️ <b>高滑点</b>\n📊 ${dynamicSlippage}% — 可能损失 ${dynamicSlippage}% 价值。`,
+                                ko: `⚠️ <b>높은 슬리페지</b>\n📊 ${dynamicSlippage}% — 최대 ${dynamicSlippage}% 손실 가능.`,
+                                ru: `⚠️ <b>ВЫСОКИЙ СЛИППЕЙДЖ</b>\n📊 ${dynamicSlippage}% — Потеря до ${dynamicSlippage}%.`,
+                                id: `⚠️ <b>SLIPPAGE TINGGI</b>\n📊 ${dynamicSlippage}% — Kehilangan hingga ${dynamicSlippage}%.`
+                            };
+                            await slipBot.sendMessage(slipChatId, slipTexts[slk] || slipTexts.en, { parse_mode: 'HTML', disable_notification: true });
+                        }
+                    }
+                } catch (slipErr) { log.child('AUTOSWAP').warn('Slippage warn:', slipErr.message); }
+            }
 
             // ── Large Swap Confirmation (>$50 estimated value) ──
             try {
@@ -1687,6 +1767,44 @@ module.exports = {
                 msg += `<b>${i + 1}.</b> 💱 <code>${r.fromSymbol}</code> ➡ <code>${r.toSymbol}</code> | ${chain}\n   👛 <code>${addrShort}</code> | ⏰ ${timeStr}\n`;
                 if (r.txHash && r.txHash !== 'pending') msg += `   🔗 <a href="${explorerBase}/tx/${r.txHash}">Tx</a>\n`;
                 msg += '\n';
+            });
+            return { displayMessage: msg.trim() };
+        } catch (err) { return `❌ Error: ${err.message}`; }
+    },
+
+    // ── #6: Favorite Token Pairs ──
+    async save_favorite_pair(args, context) {
+        const userId = context?.userId;
+        if (!userId) return '❌ User not identified.';
+        try {
+            const { dbRun } = require('../../../../db/core');
+            await dbRun(`CREATE TABLE IF NOT EXISTS favorite_pairs (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, pairName TEXT, fromToken TEXT, toToken TEXT, chainIndex TEXT DEFAULT '196', createdAt TEXT DEFAULT (datetime('now')), UNIQUE(userId, fromToken, toToken))`);
+            const name = args.pairName || `${args.fromToken || '?'}/${args.toToken || '?'}`;
+            await dbRun('INSERT OR REPLACE INTO favorite_pairs (userId, pairName, fromToken, toToken, chainIndex) VALUES (?,?,?,?,?)',
+                [String(userId), name, args.fromToken || '', args.toToken || '', args.chainIndex || '196']);
+            const saveTexts = { en: 'Saved', vi: 'Đã lưu', zh: '已收藏', ko: '저장됨', ru: 'Сохранено', id: 'Tersimpan' };
+            let lang = context?.lang || 'en';
+            try { const { getLang } = require('../../../app/language'); if (context?.msg) lang = await getLang(context.msg); } catch(_){}
+            const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+            return { displayMessage: `⭐ ${saveTexts[lk] || saveTexts.en}: <b>${name}</b>` };
+        } catch (err) { return `❌ Error: ${err.message}`; }
+    },
+
+    async list_favorite_pairs(args, context) {
+        const userId = context?.userId;
+        if (!userId) return '❌ User not identified.';
+        try {
+            const { dbAll, dbRun } = require('../../../../db/core');
+            await dbRun(`CREATE TABLE IF NOT EXISTS favorite_pairs (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, pairName TEXT, fromToken TEXT, toToken TEXT, chainIndex TEXT DEFAULT '196', createdAt TEXT DEFAULT (datetime('now')), UNIQUE(userId, fromToken, toToken))`);
+            const rows = await dbAll('SELECT * FROM favorite_pairs WHERE userId = ? ORDER BY id DESC', [String(userId)]);
+            if (!rows || rows.length === 0) return { displayMessage: '📭 No favorite pairs saved.' };
+            let lang = context?.lang || 'en';
+            try { const { getLang } = require('../../../app/language'); if (context?.msg) lang = await getLang(context.msg); } catch(_){}
+            const titles = { en: 'FAVORITE PAIRS', vi: 'CẶP YÊU THÍCH', zh: '收藏交易对', ko: '즐겨찾기', ru: 'ИЗБРАННЫЕ', id: 'FAVORIT' };
+            const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+            let msg = `⭐ <b>${titles[lk] || titles.en}</b>\n━━━━━━━━━━━━━━━━━━\n\n`;
+            rows.forEach((r, i) => {
+                msg += `<b>${i+1}.</b> 💱 <code>${r.pairName}</code>\n   From: <code>${r.fromToken}</code> → To: <code>${r.toToken}</code>\n\n`;
             });
             return { displayMessage: msg.trim() };
         } catch (err) { return `❌ Error: ${err.message}`; }

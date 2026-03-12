@@ -175,7 +175,7 @@ function formatSwapQuoteResult(data, lang = 'en') {
     let impactStr = 'Price Impact:';
     let estGasStr = 'Est. Gas:';
     let feeStr = 'Trade Fee:';
-    let confirmStr = 'Confirm swap? Reply "ok" or "yes" to proceed.';
+    let confirmStr = 'Confirm swap? Reply "ok"/"yes" to proceed. Say "refresh" for updated quote.';
     let compStr = 'DEX Comparison:';
 
     if (lang === 'vi') {
@@ -192,7 +192,7 @@ function formatSwapQuoteResult(data, lang = 'en') {
         impactStr = 'Price Impact:';
         estGasStr = 'Phí Gas (ước tính):';
         feeStr = 'Phí Giao dịch:';
-        confirmStr = 'Xác nhận swap? Trả lời "ok" hoặc "có" để tiếp tục.';
+        confirmStr = 'Xác nhận swap? Trả lời "ok"/"có" để tiếp. Nói "làm mới" để cập nhật giá.';
         compStr = 'So sánh DEX:';
     } else if (lang === 'zh' || lang === 'zh-cn' || lang === 'zh-Hans') {
         honeyWarning1 = '🚨 蜜罐警告：目标代币有貔貅盘（蜜罐）特征！您购买后可能无法卖出。切勿继续操作！';

@@ -130,6 +130,7 @@ When a user mentions a TOKEN NAME, do NOT assume they want a PRICE. Parse the su
 - "trending", "top gainers", "coin hot" → get_top_tokens
 - "swap [TOKEN]", "đổi [TOKEN]" → get_swap_quote
 - MULTIPLE SWAPS in one message (e.g. "đổi X lấy A\nđổi X lấy B") → call get_swap_quote SEPARATELY for EACH line. Do NOT ignore any swap request.
+- "refresh"/"làm mới"/"刷新"/"새로고침" after a swap quote → call get_swap_quote again with SAME parameters from session history
 - "swap [TOKEN] từ tất cả ví", "swap nhiều ví", "swap all wallets" → batch_swap (SAME pair, multiple wallets)
 - DIFFERENT pairs + DIFFERENT wallets → call get_swap_quote SEPARATELY for each pair. Do NOT use batch_swap for different pairs.
 - "swap [TOKEN] từ tất cả ví", "swap nhiều ví", "swap all wallets" → batch_swap (SAME pair, multiple wallets)
