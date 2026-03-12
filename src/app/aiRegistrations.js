@@ -881,6 +881,20 @@ function registerBatchTransferCallbacks(bot, getLang) {
     const data = query.data || '';
     if (!data.startsWith('batchconfirm|')) return;
 
+            // ── Swap confirmation handler ──
+            if (data.startsWith('swapconfirm|')) {
+                const parts = data.split('|');
+                const action = parts[1];
+                const key = 'swapconfirm_' + action.replace(/^(yes|no)_/, '');
+                if (global._pendingSwapConfirms && global._pendingSwapConfirms.has(key)) {
+                    const resolve = global._pendingSwapConfirms.get(key);
+                    global._pendingSwapConfirms.delete(key);
+                    resolve(action.startsWith('yes') ? 'confirm' : 'cancel');
+                }
+                try { await bot.answerCallbackQuery(query.id); } catch (_) {}
+                return;
+            }
+
     const payload = data.slice('batchconfirm|'.length);
     const isConfirm = payload.startsWith('confirm_');
     const isCancel = payload.startsWith('cancel_');

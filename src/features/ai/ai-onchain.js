@@ -132,6 +132,8 @@ When a user mentions a TOKEN NAME, do NOT assume they want a PRICE. Parse the su
 - MULTIPLE SWAPS in one message (e.g. "đổi X lấy A\nđổi X lấy B") → call get_swap_quote SEPARATELY for EACH line. Do NOT ignore any swap request.
 - "swap [TOKEN] từ tất cả ví", "swap nhiều ví", "swap all wallets" → batch_swap (SAME pair, multiple wallets)
 - DIFFERENT pairs + DIFFERENT wallets → call get_swap_quote SEPARATELY for each pair. Do NOT use batch_swap for different pairs.
+- "swap [TOKEN] từ tất cả ví", "swap nhiều ví", "swap all wallets" → batch_swap (SAME pair, multiple wallets)
+- DIFFERENT pairs + DIFFERENT wallets → call get_swap_quote SEPARATELY for each pair. Do NOT use batch_swap for different pairs.
 The keyword NEAR the token name determines the tool. Just mentioning a token name does NOT mean the user wants its price.
 
 🚨 LIVE DATA MANDATE — CRITICAL:

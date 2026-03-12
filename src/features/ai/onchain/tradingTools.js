@@ -372,6 +372,59 @@ module.exports = {
             dynamicSlippage = Math.min(50, dynamicSlippage);
             log.child('AUTOSWAP').info(`Calculated Slippage: ${dynamicSlippage}%`);
 
+            // ── Large Swap Confirmation (>$50 estimated value) ──
+            try {
+                const chatId = context?.chatId || context?.msg?.chat?.id;
+                if (chatId && quote?.routerResult) {
+                    let usdValue = 0;
+                    try {
+                        const fromTokenPrice = Number(quote.routerResult.fromToken?.tokenUnitPrice || 0);
+                        const fromAmount = Number(originalAmount || args.amount);
+                        usdValue = fromTokenPrice * fromAmount;
+                        if (usdValue > 1e10) {
+                            const dec = Number(quote.routerResult.fromToken?.decimal || 18);
+                            usdValue = fromTokenPrice * (fromAmount / Math.pow(10, dec));
+                        }
+                    } catch (_) {}
+                    if (usdValue > 50) {
+                        let confirmBot;
+                        try { confirmBot = require('../../../core/bot').bot; } catch (_) {}
+                        if (confirmBot) {
+                            let lang = context?.lang || 'en';
+                            try { const { getLang } = require('../../../app/language'); if (context?.msg) lang = await getLang(context.msg); } catch (_) {}
+                            const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+                            const confirmTexts = {
+                                en: `⚠️ <b>Large Swap Confirmation</b>\n━━━━━━━━━━━━━━━━━━\n💱 <b>Amount:</b> <code>${originalAmount}</code> ${quote.routerResult.fromTokenSymbol || '?'}\n💰 <b>Est. Value:</b> ~$${usdValue.toFixed(2)}\n📊 <b>Slippage:</b> ${dynamicSlippage}%\n\n<i>Confirm?</i>`,
+                                vi: `⚠️ <b>Xác Nhận Swap Lớn</b>\n━━━━━━━━━━━━━━━━━━\n💱 <b>Số lượng:</b> <code>${originalAmount}</code> ${quote.routerResult.fromTokenSymbol || '?'}\n💰 <b>Giá trị:</b> ~$${usdValue.toFixed(2)}\n📊 <b>Trượt giá:</b> ${dynamicSlippage}%\n\n<i>Xác nhận?</i>`,
+                                zh: `⚠️ <b>大额兑换确认</b>\n━━━━━━━━━━━━━━━━━━\n💱 <b>数量:</b> <code>${originalAmount}</code> ${quote.routerResult.fromTokenSymbol || '?'}\n💰 <b>估值:</b> ~$${usdValue.toFixed(2)}\n📊 <b>滑点:</b> ${dynamicSlippage}%\n\n<i>确认?</i>`,
+                                ko: `⚠️ <b>대량 스왑 확인</b>\n━━━━━━━━━━━━━━━━━━\n💱 <b>수량:</b> <code>${originalAmount}</code> ${quote.routerResult.fromTokenSymbol || '?'}\n💰 <b>가치:</b> ~$${usdValue.toFixed(2)}\n📊 <b>슬리페지:</b> ${dynamicSlippage}%\n\n<i>확인?</i>`,
+                                ru: `⚠️ <b>Подтверждение обмена</b>\n━━━━━━━━━━━━━━━━━━\n💱 <b>Сумма:</b> <code>${originalAmount}</code> ${quote.routerResult.fromTokenSymbol || '?'}\n💰 <b>Стоимость:</b> ~$${usdValue.toFixed(2)}\n📊 <b>Слиппейдж:</b> ${dynamicSlippage}%\n\n<i>Подтвердить?</i>`,
+                                id: `⚠️ <b>Konfirmasi Swap Besar</b>\n━━━━━━━━━━━━━━━━━━\n💱 <b>Jumlah:</b> <code>${originalAmount}</code> ${quote.routerResult.fromTokenSymbol || '?'}\n💰 <b>Estimasi:</b> ~$${usdValue.toFixed(2)}\n📊 <b>Slippage:</b> ${dynamicSlippage}%\n\n<i>Konfirmasi?</i>`
+                            };
+                            const btnTexts = { en: ['✅ Confirm', '❌ Cancel'], vi: ['✅ Xác nhận', '❌ Hủy'], zh: ['✅ 确认', '❌ 取消'], ko: ['✅ 확인', '❌ 취소'], ru: ['✅ Да', '❌ Отмена'], id: ['✅ Konfirmasi', '❌ Batal'] };
+                            const swapConfirmId = `swapconfirm_${userId}_${Date.now()}`;
+                            try {
+                                const confirmMsg = await confirmBot.sendMessage(chatId, confirmTexts[lk] || confirmTexts.en, {
+                                    parse_mode: 'HTML',
+                                    reply_markup: { inline_keyboard: [[ { text: (btnTexts[lk] || btnTexts.en)[0], callback_data: `swapconfirm|yes_${swapConfirmId}` }, { text: (btnTexts[lk] || btnTexts.en)[1], callback_data: `swapconfirm|no_${swapConfirmId}` } ]] }
+                                });
+                                const confirmed = await new Promise(resolve => {
+                                    const key = `swapconfirm_${swapConfirmId}`;
+                                    if (!global._pendingSwapConfirms) global._pendingSwapConfirms = new Map();
+                                    global._pendingSwapConfirms.set(key, resolve);
+                                    setTimeout(() => { if (global._pendingSwapConfirms.has(key)) { global._pendingSwapConfirms.delete(key); resolve('timeout'); } }, 60000);
+                                });
+                                try { await confirmBot.deleteMessage(chatId, confirmMsg.message_id); } catch (_) {}
+                                if (confirmed === 'cancel') {
+                                    const cancelTexts = { en: 'Swap cancelled.', vi: 'Đã hủy swap.', zh: '已取消。', ko: '취소됨.', ru: 'Отменён.', id: 'Dibatalkan.' };
+                                    return { displayMessage: `❌ ${cancelTexts[lk] || cancelTexts.en}`, action: true, success: false };
+                                }
+                            } catch (confirmErr) { log.child('AUTOSWAP').warn('Swap confirm failed, proceeding:', confirmErr.message); }
+                        }
+                    }
+                }
+            } catch (confirmSetupErr) { log.child('AUTOSWAP').warn('Swap confirm error, proceeding:', confirmSetupErr.message); }
+
             // Enhancement #3: Balance pre-check before calling OKX API
             try {
                 const balCheck = await checkTokenBalance(provider, tw.address, fromTokenAddress, args.amount, chainIndex);
@@ -474,6 +527,14 @@ module.exports = {
             const toAmt = (Number(routerResult.toTokenAmount || 0) / Math.pow(10, toDec)).toLocaleString('en-US', { maximumFractionDigits: 6 });
 
             log.child('AUTOSWAP').info(`✅ Success! TxHash: ${txHash}`);
+            // ── Save swap to history ──
+            try {
+                const { dbRun } = require('../../../../db/core');
+                await dbRun(`CREATE TABLE IF NOT EXISTS swap_history (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, walletAddress TEXT, chainIndex TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, fromAmount TEXT, toAmount TEXT, txHash TEXT, orderId TEXT, slippage REAL, createdAt TEXT DEFAULT (datetime('now')))`);
+                await dbRun('INSERT INTO swap_history (userId,walletAddress,chainIndex,fromToken,toToken,fromSymbol,toSymbol,fromAmount,toAmount,txHash,orderId,slippage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                    [String(userId), tw.address, chainIndex, fromTokenAddress, toTokenAddress, fromSym||'?', toSym||'?', String(originalAmount||args.amount), String(routerResult.toTokenAmount||'0'), txHash, orderId, dynamicSlippage]);
+            } catch (dbErr) { log.child('AUTOSWAP').warn('Swap history save failed:', dbErr.message); }
+
 
             // Use the user's actual DB-stored language preference (not prompt-detected lang which fails on "ok")
             let lang = context?.lang || 'en';
@@ -772,9 +833,11 @@ module.exports = {
                 }
             } catch (e) { log.child('BATCHSWAP').warn('Token info pre-resolve failed:', e.message); }
 
-            if (resolvedSwaps.length > 5 && chatId) {
+            if (chatId) {
                 try { bot = require('../../../core/bot').bot; } catch (e) { /* no bot available */ }
             }
+            let progressMsgId = null; // batch swap progress
+            const batchStartTime = Date.now();
             for (let i = 0; i < resolvedSwaps.length; i++) {
                 const swap = resolvedSwaps[i];
                 if (swap.error) { results.push({ id: swap.walletId, address: swap.tw?.address || 'N/A', status: '❌', reason: swap.error }); continue; }
@@ -843,18 +906,74 @@ module.exports = {
                         slippage: dynamicSlippage
                     });
                 } catch (err) {
-                    results.push({ id: swap.walletId, address: tw.address, status: '❌', reason: (err.msg || err.message || '').slice(0, 80) });
+                    // ── Auto-retry for network errors ──
+                    const errMsg = err.msg || err.message || '';
+                    const isNetworkError = /ETIMEDOUT|ECONNRESET|ENOTFOUND|ECONNREFUSED|socket hang up|network|timeout|EFATAL/i.test(errMsg);
+                    if (isNetworkError && !swap._retried) {
+                        log.child('BATCHSWAP').warn(`Network error wallet ${tw.address.slice(0, 8)}, retrying in 3s`);
+                        swap._retried = true;
+                        i--;
+                        await new Promise(r => setTimeout(r, 3000));
+                    } else {
+                        results.push({ id: swap.walletId, address: tw.address, status: '❌', reason: errMsg.slice(0, 80) });
+                    }
                 }
                 // Send progress update for large batches
-                if (bot && chatId && resolvedSwaps.length > 5 && (i + 1) % 5 === 0 && (i + 1) < resolvedSwaps.length) {
+                // ── Visual progress bar (edit in-place) ──
+                if (bot && chatId) {
+                    const total = resolvedSwaps.length;
+                    const done = i + 1;
+                    const pct = Math.round(done / total * 100);
+                    const filled = Math.round(done / total * 10);
+                    const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+                    const elapsed = Math.round((Date.now() - batchStartTime) / 1000);
+                    const eFmt = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m${elapsed % 60}s` : `${elapsed}s`;
+                    const barMsg = `📊 ${progressTexts[lk] || progressTexts.en}\n[${bar}] ${done}/${total} (${pct}%) | ⏱ ${eFmt}`;
                     try {
-                        await bot.sendMessage(chatId, `⏳ ${progressTexts[lk]}... ${i + 1}/${resolvedSwaps.length}`, { disable_notification: true }).catch(() => { });
+                        if (!progressMsgId) {
+                            const pmsg = await bot.sendMessage(chatId, barMsg, { parse_mode: 'HTML', disable_notification: true });
+                            if (pmsg) progressMsgId = pmsg.message_id;
+                        } else {
+                            await bot.editMessageText(barMsg, { chat_id: chatId, message_id: progressMsgId, parse_mode: 'HTML' }).catch(() => {});
+                        }
                     } catch (e) { /* ignore */ }
                 }
             }
 
-            // Build summary
             const successCount = results.filter(r => r.status === '✅').length;
+
+            // ── Edit progress to "Complete" then auto-delete ──
+            if (progressMsgId && bot && chatId) {
+                const elapsedFinal = Math.round((Date.now() - batchStartTime) / 1000);
+                const eFmtF = elapsedFinal >= 60 ? `${Math.floor(elapsedFinal / 60)}m${elapsedFinal % 60}s` : `${elapsedFinal}s`;
+                const doneTexts = {
+                    en: `✅ <b>Batch Swap Complete!</b> ${successCount}/${resolvedSwaps.length} done | ⏱ ${eFmtF}`,
+                    vi: `✅ <b>Batch Swap hoàn thành!</b> ${successCount}/${resolvedSwaps.length} xong | ⏱ ${eFmtF}`,
+                    zh: `✅ <b>批量兑换完成!</b> ${successCount}/${resolvedSwaps.length} 完成 | ⏱ ${eFmtF}`,
+                    ko: `✅ <b>배치 스왑 완료!</b> ${successCount}/${resolvedSwaps.length} 완료 | ⏱ ${eFmtF}`,
+                    ru: `✅ <b>Обмен завершён!</b> ${successCount}/${resolvedSwaps.length} выполнено | ⏱ ${eFmtF}`,
+                    id: `✅ <b>Batch Swap Selesai!</b> ${successCount}/${resolvedSwaps.length} selesai | ⏱ ${eFmtF}`
+                };
+                try { await bot.editMessageText(doneTexts[lk] || doneTexts.en, { chat_id: chatId, message_id: progressMsgId, parse_mode: 'HTML' }).catch(() => {}); setTimeout(() => { bot.deleteMessage(chatId, progressMsgId).catch(() => {}); }, 5000); } catch (_) { try { bot.deleteMessage(chatId, progressMsgId).catch(() => {}); } catch (__) {} }
+            }
+
+            // ── CSV Export ──
+            if (results.length >= 3 && bot && chatId) {
+                try {
+                    const csvHeader = 'Wallet ID,Address,Status,From Amount,From Token,To Amount,To Token,Slippage%,Tx Hash';
+                    const csvRows = results.map(r => `${r.id},${r.address},${r.status === '✅' ? 'Success' : 'Failed'},${r.fromAmt?.toFixed(6) || ''},${r.fromSym || ''},${r.toAmt?.toFixed(6) || ''},${r.toSym || ''},${r.slippage || ''},${r.txHash || r.reason || ''}`);
+                    const csvContent = csvHeader + '\n' + csvRows.join('\n');
+                    const tmpDir = path.join(process.cwd(), 'tmp');
+                    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+                    const csvPath = path.join(tmpDir, `batch_swap_${userId}_${Date.now()}.csv`);
+                    fs.writeFileSync(csvPath, csvContent, 'utf8');
+                    await bot.sendDocument(chatId, csvPath, { caption: `📊 Batch Swap CSV — ${results.length} wallets`, disable_notification: true });
+                    setTimeout(() => { try { fs.unlinkSync(csvPath); } catch (_) {} }, 30000);
+                } catch (csvErr) { log.child('BATCHSWAP').warn('CSV export failed:', csvErr.message); }
+            }
+
+            // Build summary
+            
             // Localized labels
             let headerLabel = 'BATCH SWAP RESULTS';
             let successStr = 'success';
@@ -1544,4 +1663,32 @@ module.exports = {
         return i.invalid_action;
     },
 
+
+    async get_swap_history(args, context) {
+        const userId = context?.userId;
+        if (!userId) return '❌ User not identified.';
+        try {
+            const { dbAll, dbRun } = require('../../../../db/core');
+            await dbRun('CREATE TABLE IF NOT EXISTS swap_history (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, walletAddress TEXT, chainIndex TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, fromAmount TEXT, toAmount TEXT, txHash TEXT, orderId TEXT, slippage REAL, createdAt TEXT DEFAULT (datetime(\'now\')))');
+            const limit = parseInt(args.limit) || 10;
+            const rows = await dbAll('SELECT * FROM swap_history WHERE userId = ? ORDER BY id DESC LIMIT ?', [String(userId), limit]);
+            if (!rows || rows.length === 0) return { displayMessage: '📭 No swap history found.' };
+            let lang = context?.lang || 'en';
+            try { const { getLang } = require('../../../app/language'); if (context?.msg) lang = await getLang(context.msg); } catch (_) {}
+            const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
+            const titles = { en: 'SWAP HISTORY', vi: 'LỊCH SỬ SWAP', zh: '兑换历史', ko: '스왑 내역', ru: 'ИСТОРИЯ ОБМЕНОВ', id: 'RIWAYAT SWAP' };
+            const chainNames = { '1': 'ETH', '56': 'BSC', '196': 'XLayer', '137': 'Polygon', '42161': 'Arb', '8453': 'Base' };
+            let msg = `📋 <b>${titles[lk] || titles.en}</b> (Last ${rows.length})\n━━━━━━━━━━━━━━━━━━\n\n`;
+            rows.forEach((r, i) => {
+                const chain = chainNames[r.chainIndex] || r.chainIndex;
+                const explorerBase = _getExplorerUrl(r.chainIndex || '196');
+                const timeStr = r.createdAt ? new Date(r.createdAt + 'Z').toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '?';
+                const addrShort = r.walletAddress ? `${r.walletAddress.slice(0, 6)}...${r.walletAddress.slice(-4)}` : '?';
+                msg += `<b>${i + 1}.</b> 💱 <code>${r.fromSymbol}</code> ➡ <code>${r.toSymbol}</code> | ${chain}\n   👛 <code>${addrShort}</code> | ⏰ ${timeStr}\n`;
+                if (r.txHash && r.txHash !== 'pending') msg += `   🔗 <a href="${explorerBase}/tx/${r.txHash}">Tx</a>\n`;
+                msg += '\n';
+            });
+            return { displayMessage: msg.trim() };
+        } catch (err) { return `❌ Error: ${err.message}`; }
+    },
 };

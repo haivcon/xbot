@@ -263,6 +263,16 @@ module.exports.ONCHAIN_TOOLS = [
                 }
             },
             {
+                name: 'get_swap_history',
+                description: 'View recent swap history for the user. Shows past swap transactions with pair, amount, time, and explorer link. Use when user says "lịch sử swap", "swap history", "兑换历史", "스왑 내역", "история обменов", "riwayat swap".',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        limit: { type: 'number', description: 'Number of recent swaps to show. Default 10, max 50.' }
+                    }
+                }
+            },
+            {
                 name: 'simulate_batch_swap',
                 description: 'Dry-run simulate a batch swap BEFORE executing it. Returns estimated gas, slippage impact, and success predictions for each wallet. Use when user has many wallets or large amounts. Vietnamese: "mô phỏng batch swap", "kiểm tra trước khi swap nhiều ví"',
                 parameters: {
