@@ -355,9 +355,9 @@ module.exports = {
                                     to: fromTokenAddress.toLowerCase(), // send to TOKEN contract
                                     data: infiniteApproveData,
                                     value: 0n,
-                                    gasLimit: BigInt(approval.gasLimit || '100000'),
+                                    gasLimit: BigInt(approval.gasLimit || '150000'), // Increased from 100k for complex tokens
                                     gasPrice: BigInt(approval.gasPrice || '1000000000'),
-                                    nonce: await provider.getTransactionCount(wallet.address),
+                                    nonce: await provider.getTransactionCount(wallet.address, 'pending'),
                                     chainId: chainIdNum
                                 });
                                 const approveResult = await onchainos.broadcastTransaction(approveTx, chainIndex, tw.address);
@@ -492,7 +492,7 @@ module.exports = {
                         try { confirmBot = require('../../../core/bot').bot; } catch (_) {}
                         if (confirmBot) {
                             let lang = context?.lang || 'en';
-                            try { const { getLang } = require('../../../app/language'); if (context?.msg) lang = await getLang(context.msg); } catch (_) {}
+                            try { const { getUserLanguage: gUL5c } = require('../../../../db/users'); const dl5c = await gUL5c(String(context?.chatId || context?.msg?.chat?.id || userId)); if (dl5c) lang = dl5c; } catch (_) {}
                             const lk = ['zh-Hans', 'zh-cn'].includes(lang) ? 'zh' : (['en', 'vi', 'zh', 'ko', 'ru', 'id'].includes(lang) ? lang : 'en');
                             const confirmTexts = {
                                 en: `⚠️ <b>Large Swap Confirmation</b>\n━━━━━━━━━━━━━━━━━━\n💱 <b>Amount:</b> <code>${originalAmount}</code> ${quote.routerResult.fromTokenSymbol || '?'}\n💰 <b>Est. Value:</b> ~$${usdValue.toFixed(2)}\n📊 <b>Slippage:</b> ${dynamicSlippage}%\n\n<i>Confirm?</i>`,
@@ -576,7 +576,7 @@ module.exports = {
                 value: BigInt(tx.value || '0'),
                 gasLimit: BigInt(tx.gas || tx.gasLimit || '300000'),
                 gasPrice: BigInt(tx.gasPrice || '1000000000'),
-                nonce: await provider.getTransactionCount(wallet.address),
+                nonce: await provider.getTransactionCount(wallet.address, 'pending'),
                 chainId: chainIdNum
             });
 
@@ -713,11 +713,25 @@ module.exports = {
                 linkLabel = 'Lihat di Explorer';
 }
 
+            // Calculate USD value for display
+            let usdLine = '';
+            try {
+                const fromPrice = Number(routerResult.fromToken?.tokenUnitPrice || 0);
+                const toPrice = Number(routerResult.toToken?.tokenUnitPrice || 0);
+                const fromUsd = Number(routerResult.fromTokenAmount || args.amount) / Math.pow(10, fromDec) * fromPrice;
+                const toUsd = Number(routerResult.toTokenAmount || 0) / Math.pow(10, toDec) * toPrice;
+                const displayUsd = toUsd > 0 ? toUsd : fromUsd;
+                if (displayUsd > 0.001) {
+                    const usdLabels = { en: 'Value', vi: 'Giá trị', zh: '价值', ko: '가치', ru: 'Стоимость', id: 'Nilai' };
+                    const lk3 = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+                    usdLine = `\n💰 <b>${usdLabels[lk3] || usdLabels.en}:</b> ~${displayUsd.toFixed(displayUsd < 1 ? 6 : 2)}`;
+                }
+            } catch(_) {}
             return {
                 action: true, success: txConfirmed,
                 displayMessage: `🟢 <b>${title}</b>\n` +
                     `━━━━━━━━━━━━━━━━━━\n` +
-                    `💱 <b>${swappedLabel}</b> <code>${fromAmt}</code> ${fromSym} ➔ <code>${toAmt}</code> ${toSym}\n` +
+                    `💱 <b>${swappedLabel}</b> <code>${fromAmt}</code> ${fromSym} ➔ <code>${toAmt}</code> ${toSym}${usdLine}\n` +
                     `👛 <b>${walletLabel}</b> <code>${tw.address}</code>\n` +
                     `🏷️ <b>${orderLabel}</b> <code>${orderId}</code>\n\n` +
                     `🔗 <a href="${explorerLink}">${linkLabel}</a>`
@@ -904,7 +918,7 @@ module.exports = {
                                         const approveTx = await wallet.signTransaction({
                                             to: fromTokenAddress.toLowerCase(), data: infiniteApproveData, value: 0n,
                                             gasLimit: BigInt(approveData[0].gasLimit || '100000'), gasPrice: BigInt(approveData[0].gasPrice || '1000000000'),
-                                            nonce: await provider.getTransactionCount(wallet.address), chainId: chainIdNum
+                                            nonce: await provider.getTransactionCount(wallet.address, 'pending'), chainId: chainIdNum
                                         });
                                         await onchainos.broadcastTransaction(approveTx, chainIndex, s.tw.address);
                                         log.child('BATCHSWAP').info(`✅ Approve INFINITE sent for wallet ${s.tw.address.slice(0, 8)}`);

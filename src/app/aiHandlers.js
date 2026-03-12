@@ -3938,6 +3938,17 @@ function createAiHandlers(deps) {
           // These functions trigger native commands which handle their own responses
           if (functionResult.success && functionResult.action) {
             // ── Auto-execute remaining multi-swaps after execute_swap ──
+            // Improvement 6: Execution lock — prevent double "ok"
+            if (resolvedFnName === 'execute_swap') {
+              if (!global._swapExecutionLocks) global._swapExecutionLocks = new Set();
+              if (global._swapExecutionLocks.has(userId)) {
+                log.child('FnCall').warn('Double-ok blocked for user ' + userId);
+                return; // silently ignore duplicate execution
+              }
+              global._swapExecutionLocks.add(userId);
+              // Auto-release lock after 120s max
+              setTimeout(() => { global._swapExecutionLocks?.delete(userId); }, 120000);
+            }
             if (resolvedFnName === 'execute_swap' && global._pendingMultiSwaps?.has(userId)) {
               const swapQueue = global._pendingMultiSwaps.get(userId);
               // Remove the just-executed swap (first in queue)
@@ -3991,7 +4002,15 @@ function createAiHandlers(deps) {
                         }, swapContext);
                         const swapOk = swapResult?.success !== false; // receipt verification may set success=false
                         results.push({ swap: nextSwap, success: swapOk, result: swapResult });
-                        log.child('FnCall').info(`Multi-swap ${i+2}/${totalSwaps}: success`);
+                        log.child('FnCall').info(`Multi-swap ${i+2}/${totalSwaps}: ${swapOk ? 'success' : 'reverted'}`);
+                        // Stop if swap reverted on-chain (Improvement #1)
+                        if (!swapOk) {
+                          if (progressMsgId && botRef && chatId) { try { await botRef.deleteMessage(chatId, progressMsgId); } catch(_){} progressMsgId = null; }
+                          if (botRef && chatId && swapResult?.displayMessage) {
+                            try { await botRef.sendMessage(chatId, swapResult.displayMessage, { parse_mode: 'HTML', disable_web_page_preview: true }); } catch(_){}
+                          }
+                          break;
+                        }
                         // Delete progress msg then show success
                         if (progressMsgId && botRef && chatId) { try { await botRef.deleteMessage(chatId, progressMsgId); } catch(_){} progressMsgId = null; }
                         if (botRef && chatId && swapResult?.displayMessage) {
@@ -4000,11 +4019,15 @@ function createAiHandlers(deps) {
                       } catch (swapErr) {
                         results.push({ swap: nextSwap, success: false, error: swapErr.message });
                         log.child('FnCall').warn(`Multi-swap ${i+2}/${totalSwaps}: failed:`, swapErr.message);
-                        // Delete progress + notify failure
+                        // Delete progress + notify failure with retry hint
                         if (progressMsgId && botRef && chatId) { try { await botRef.deleteMessage(chatId, progressMsgId); } catch(_){} progressMsgId = null; }
                         if (botRef && chatId) {
-                          try { await botRef.sendMessage(chatId, `❌ Swap ${i+2}/${totalSwaps} ${pL.fail}: ${swapErr.message}`, { disable_notification: true }); } catch(_){}
+                          const retryHints = { en: 'Possible causes: slippage, liquidity, or token limit.', vi: 'Nguyên nhân: trượt giá, thanh khoản, hoặc giới hạn token.', zh: '原因：滑点、流动性或代币限制。', ko: '원인: 슬리피지, 유동성 또는 토큰 제한.', ru: 'Причины: слиппейдж, ликвидность или лимит токена.', id: 'Penyebab: slippage, likuiditas, atau batas token.' };
+                          const stopMsgs = { en: '⏹️ Remaining swaps stopped.', vi: '⏹️ Đã dừng các swap còn lại.', zh: '⏹️ 已停止剩余兑换。', ko: '⏹️ 나머지 스왑 중단.', ru: '⏹️ Остальные обмены остановлены.', id: '⏹️ Swap sisa dihentikan.' };
+                          try { await botRef.sendMessage(chatId, `❌ Swap ${i+2}/${totalSwaps} ${pL.fail}\n⚠️ ${swapErr.message}\n💡 <i>${retryHints[uLk] || retryHints.en}</i>\n\n${stopMsgs[uLk] || stopMsgs.en}`, { parse_mode: 'HTML', disable_notification: true }); } catch(_){}
                         }
+                        // Stop remaining swaps on failure (Improvement #1)
+                        break;
                       }
                       swapQueue.shift(); // remove processed swap
                       // Brief pause between swaps
@@ -4022,6 +4045,7 @@ function createAiHandlers(deps) {
                   } catch (batchErr) { log.child('FnCall').warn('Multi-swap batch failed:', batchErr.message); }
                   // Clean up
                   global._pendingMultiSwaps.delete(userId);
+                   global._swapExecutionLocks?.delete(userId);
                   if (global._pendingMultiSwapTimers?.has(userId)) {
                     clearTimeout(global._pendingMultiSwapTimers.get(userId));
                     global._pendingMultiSwapTimers.delete(userId);
@@ -4029,10 +4053,13 @@ function createAiHandlers(deps) {
                 }, 3000);
               } else {
                 global._pendingMultiSwaps.delete(userId);
+                   global._swapExecutionLocks?.delete(userId);
                 if (global._pendingMultiSwapTimers?.has(userId)) {
                   clearTimeout(global._pendingMultiSwapTimers.get(userId));
                   global._pendingMultiSwapTimers.delete(userId);
                 }
+                // Release execution lock
+                global._swapExecutionLocks?.delete(userId);
               }
             }
 
@@ -4051,6 +4078,7 @@ function createAiHandlers(deps) {
               if (global._pendingMultiSwapTimers.has(userId)) clearTimeout(global._pendingMultiSwapTimers.get(userId));
               global._pendingMultiSwapTimers.set(userId, setTimeout(() => {
                 global._pendingMultiSwaps.delete(userId);
+                   global._swapExecutionLocks?.delete(userId);
                 global._pendingMultiSwapTimers.delete(userId);
                 log.child('FnCall').info(`Multi-swap queue expired for user ${userId}`);
               }, 300000));
