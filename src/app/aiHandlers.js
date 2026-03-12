@@ -4083,13 +4083,9 @@ function createAiHandlers(deps) {
                 const swapLines = originalText.match(swapPatterns) || [];
                 
                 if (swapLines.length > 1) {
-                  // Find which swap was just processed (by toToken)
-                  const processedTo = (swapArgs.toTokenAddress || '').toLowerCase();
-                  const remainingLines = swapLines.filter(line => {
-                    const parts = line.split(/\s+/);
-                    const lastToken = parts[parts.length - 1].toLowerCase();
-                    return lastToken !== processedTo;
-                  });
+                  // Remove the first swap line (AI processes in order)
+                  // NOTE: Can't filter by toToken because all swaps may target the same token (e.g., all→OKB)
+                  const remainingLines = swapLines.slice(1);
 
                   if (remainingLines.length > 0) {
                     log.child('FnCall').info(`Multi-swap detected: ${swapLines.length} total, ${remainingLines.length} remaining. Processing next...`);
