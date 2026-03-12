@@ -35,8 +35,8 @@ const startVideoFileIds = (() => {
 })();
 const ownerPasswordMaxAttempts = 3;
 const API_PORT = (() => {
-    const value = Number(process.env.API_PORT || 3001);
-    return Number.isFinite(value) && value > 0 ? value : 3001;
+    const value = Number(process.env.API_PORT || 3000);
+    return Number.isFinite(value) && value > 0 ? value : 3000;
 })();
 const defaultLang = (process.env.DEFAULT_LANG || 'vi').toLowerCase();
 const DEVICE_TARGET_PREFIX = 'device:';

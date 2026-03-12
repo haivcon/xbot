@@ -30,7 +30,7 @@ npm run build
 cd .. && pm2 start index.js --name xbot
 
 # 4. Open in browser
-# http://localhost:3001/dashboard/
+# http://localhost:3000/dashboard/
 
 # 5. In Telegram, type /dashboard to get an auto-login link
 ```
@@ -70,7 +70,7 @@ Add these to your `.env` file in the project root:
 
 ```env
 # Required
-API_PORT=3001
+API_PORT=3000
 
 # Required for VPS/Production (replace with your domain)
 PUBLIC_BASE_URL=https://yourdomain.com
@@ -92,7 +92,7 @@ PUBLIC_BASE_URL=https://yourdomain.com
 cd dashboard
 npm run dev
 # → Opens at http://localhost:5173
-# → API proxied to http://localhost:3001
+# → API proxied to http://localhost:3000
 ```
 
 ### Production (With Bot)
@@ -100,7 +100,7 @@ npm run dev
 ```bash
 cd dashboard && npm run build
 cd .. && pm2 restart xbot
-# → Dashboard at http://localhost:3001/dashboard/
+# → Dashboard at http://localhost:3000/dashboard/
 ```
 
 ### Login Methods
@@ -244,7 +244,7 @@ server {
     server_name yourdomain.com www.yourdomain.com;
 
     location / {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
