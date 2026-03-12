@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import api from '@/api/client';
+import useAuthStore from '@/stores/authStore';
 import {
     MessageSquare, Send, Trash2, Plus, ChevronLeft, Bot, User, Loader2,
     Sparkles, X, ArrowDown, ChevronDown, ChevronRight, Wrench, Copy, RefreshCw, Check,
     Wallet, TrendingUp, BarChart3, Zap, Shield, Globe, Coins, ArrowLeftRight,
     HelpCircle, BookOpen, Star, Bell, Search, Activity, ArrowUpDown, Eye,
     Download, Pin, PinOff, Keyboard, Mic, MicOff, Paperclip, Image,
-    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge
+    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home
 } from 'lucide-react';
 import { hapticImpact, hapticNotification } from '@/utils/telegram';
 
@@ -19,7 +21,9 @@ function renderMarkdown(text) {
         .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
         .replace(/javascript\s*:/gi, '')
-        .replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
+        .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+        // Strip internal [Used: tool_name] metadata from display
+        .replace(/\n?\[Used: [\w, ]+\]/g, '');
 
     // Process code blocks first (protect from further parsing)
     const codeBlocks = [];
@@ -74,8 +78,20 @@ function renderMarkdown(text) {
         .replace(/^> (.+)$/gm, '<blockquote class="chat-blockquote">$1</blockquote>')
         .replace(/^### (.+)$/gm, '<h4 class="chat-h4">$1</h4>')
         .replace(/^## (.+)$/gm, '<h3 class="chat-h3">$1</h3>')
-        .replace(/^# (.+)$/gm, '<h2 class="chat-h2">$1</h2>')
-        .replace(/\n/g, '<br/>');
+        .replace(/^# (.+)$/gm, '<h2 class="chat-h2">$1</h2>');
+
+    // Auto-link standalone 0x addresses to OKX Web3 Explorer (no lookbehind for Safari compat)
+    safe = safe.replace(/(^|[\s(])0x([a-fA-F0-9]{40,42})(?=[\s,.)}<]|$)/gm, (_, pre, hex) => {
+        const addr = '0x' + hex;
+        const short = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+        return `${pre}<a href="https://www.okx.com/web3/explorer/xlayer/address/${addr}" target="_blank" rel="noopener" class="chat-link">${short}</a>`;
+    });
+
+    // Collapse long repeated character sequences (prevent horizontal overflow)
+    safe = safe.replace(/[_\-=~.·]{10,}/g, '<hr class="chat-hr"/>');
+
+    // Newlines to <br>
+    safe = safe.replace(/\n/g, '<br/>');
 
     // Restore code blocks
     codeBlocks.forEach((block, i) => { safe = safe.replace(`%%CODEBLOCK_${i}%%`, block); });
@@ -245,6 +261,23 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
     );
 }
 
+/* ─── Loading skeleton for conversation switch ─── */
+function ChatSkeleton() {
+    return (
+        <div className="space-y-4 animate-pulse">
+            {[1, 2, 3].map(i => (
+                <div key={i} className={`flex gap-3 ${i % 2 === 0 ? 'flex-row-reverse' : ''}`}>
+                    <div className="w-8 h-8 rounded-full bg-surface-800/60 flex-shrink-0" />
+                    <div className={`rounded-2xl px-4 py-3 ${i % 2 === 0 ? 'bg-brand-500/10 w-48' : 'bg-surface-800/40 w-64'}`}>
+                        <div className="h-3 bg-surface-700/50 rounded w-full mb-2" />
+                        <div className="h-3 bg-surface-700/50 rounded w-3/4" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
 /* ─── Typing indicator ─── */
 function TypingIndicator() {
     return (
@@ -268,14 +301,14 @@ function TypingIndicator() {
 
 // Token autocomplete data (outside component to avoid re-creation)
 const KNOWN_TOKEN_LIST = ['BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'OKB', 'BANMAO', 'PEPE', 'DOGE', 'SHIB', 'ARB', 'OP', 'AVAX', 'MATIC', 'DOT', 'ADA', 'XRP', 'LINK', 'UNI', 'AAVE'];
-const MODEL_OPTIONS = [
-    { id: 'gemini-2.5-flash-preview-05-20', label: 'Flash (Fast)', desc: 'Quick responses' },
-    { id: 'gemini-2.5-pro-preview-05-06', label: 'Pro (Smart)', desc: 'Better reasoning' },
+const FALLBACK_MODELS = [
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Powerful multimodal & agentic', icon: '🚀' },
 ];
 
 /* ─── Main ChatPage ─── */
 export default function ChatPage() {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -293,9 +326,19 @@ export default function ChatPage() {
     const [isListening, setIsListening] = useState(false);
     const [imagePreview, setImagePreview] = useState(null);
     const [messageFeedback, setMessageFeedback] = useState({});
-    const [selectedModel, setSelectedModel] = useState(MODEL_OPTIONS[0].id);
+    const [selectedModel, setSelectedModel] = useState('gemini-3-flash-preview');
     const [showModelPicker, setShowModelPicker] = useState(false);
+    const [modelOptions, setModelOptions] = useState(FALLBACK_MODELS);
+    const [modelMeta, setModelMeta] = useState({ hasPersonalKey: false, hasServerKey: false, isOwner: false });
+    const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+    const [apiKeyInput, setApiKeyInput] = useState('');
+    const [userApiKeys, setUserApiKeys] = useState([]);
+    const [apiKeyLoading, setApiKeyLoading] = useState(false);
+    const [apiKeyError, setApiKeyError] = useState('');
     const [isDragging, setIsDragging] = useState(false);
+    const [loadingConv, setLoadingConv] = useState(false);
+    const [inputShake, setInputShake] = useState(false);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const recognitionRef = useRef(null);
     const imageInputRef = useRef(null);
     const messagesEndRef = useRef(null);
@@ -308,6 +351,62 @@ export default function ChatPage() {
     }, []);
 
     useEffect(() => { scrollToBottom(); }, [messages, loading, scrollToBottom]);
+
+    // ── Responsive: detect mobile ──
+    useEffect(() => {
+        const onResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+
+    // ── Load available models from backend ──
+    const loadModels = useCallback(async () => {
+        try {
+            const viewMode = useAuthStore.getState().viewMode;
+            const data = await api.request(`/ai/models?viewMode=${viewMode || ''}`);
+            if (data?.models?.length) {
+                setModelOptions(data.models);
+                setModelMeta({ hasPersonalKey: data.hasPersonalKey, hasServerKey: data.hasServerKey, isOwner: data.isOwner });
+                if (data.defaultModel && !data.models.find(m => m.id === selectedModel)) {
+                    setSelectedModel(data.defaultModel);
+                }
+            }
+        } catch { /* fallback to FALLBACK_MODELS */ }
+    }, []);
+    useEffect(() => { loadModels(); }, [loadModels]);
+
+    // ── API key management helpers ──
+    const loadApiKeys = useCallback(async () => {
+        try {
+            const data = await api.request('/ai/keys');
+            setUserApiKeys(data?.keys || []);
+        } catch { setUserApiKeys([]); }
+    }, []);
+
+    const addApiKey = useCallback(async () => {
+        if (!apiKeyInput.trim()) return;
+        setApiKeyLoading(true);
+        setApiKeyError('');
+        try {
+            await api.request('/ai/keys', { method: 'POST', body: JSON.stringify({ apiKey: apiKeyInput.trim() }) });
+            setApiKeyInput('');
+            await loadApiKeys();
+            await loadModels(); // Refresh model list
+            hapticNotification('success');
+        } catch (err) {
+            setApiKeyError(err.message || 'Failed to add key');
+            hapticNotification('error');
+        } finally { setApiKeyLoading(false); }
+    }, [apiKeyInput, loadApiKeys, loadModels]);
+
+    const deleteApiKey = useCallback(async (keyId) => {
+        try {
+            await api.request('/ai/keys', { method: 'DELETE', body: JSON.stringify({ keyId }) });
+            await loadApiKeys();
+            await loadModels();
+            hapticNotification('success');
+        } catch { hapticNotification('error'); }
+    }, [loadApiKeys, loadModels]);
     useEffect(() => { inputRef.current?.focus(); }, []);
 
     // Keyboard shortcuts
@@ -342,6 +441,7 @@ export default function ChatPage() {
     useEffect(() => { loadConversations(); }, [loadConversations]);
 
     const loadConversation = async (convId) => {
+        setLoadingConv(true);
         try {
             const data = await api.getChatMessages(convId);
             setMessages(data.messages || []);
@@ -349,7 +449,9 @@ export default function ChatPage() {
             setSidebarOpen(false);
             setPinnedMessages([]);
             setFollowUpSuggestions([]);
-        } catch { /* ignore */ }
+        } catch { /* ignore */ } finally {
+            setLoadingConv(false);
+        }
     };
 
     const startNewChat = () => {
@@ -496,6 +598,12 @@ export default function ChatPage() {
     const handleKeyDown = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
+            if (!input.trim()) {
+                // Shake animation feedback for empty input
+                setInputShake(true);
+                setTimeout(() => setInputShake(false), 500);
+                return;
+            }
             sendMessage();
         }
     };
@@ -837,11 +945,17 @@ export default function ChatPage() {
     ];
 
     return (
-        <div className="flex h-[calc(100vh-4rem)] overflow-hidden rounded-2xl border border-white/5 bg-surface-900/50">
+        <div className={`flex overflow-hidden bg-surface-900/50 ${isMobile ? 'chat-page-mobile h-[100dvh]' : 'h-full rounded-2xl border border-white/5'}`}>
             {/* Sidebar */}
-            <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-                fixed md:relative z-20 w-72 h-full bg-surface-900 border-r border-white/5
-                flex flex-col transition-transform duration-200`}>
+            <div className={`${sidebarOpen ? (isMobile ? 'chat-sidebar-sheet bottom-sheet-enter' : 'translate-x-0') : (isMobile ? 'translate-y-full' : '-translate-x-full md:translate-x-0')}
+                ${isMobile ? 'fixed bottom-0 left-0 right-0 z-50 w-full max-h-[70vh] rounded-t-2xl' : 'fixed md:relative z-20 w-72 h-full'}
+                bg-surface-900 border-r border-white/5 flex flex-col transition-transform duration-300`}>
+                {/* Mobile bottom sheet handle */}
+                {isMobile && sidebarOpen && (
+                    <div className="flex justify-center py-2" onClick={() => setSidebarOpen(false)}>
+                        <div className="w-10 h-1 rounded-full bg-white/20" />
+                    </div>
+                )}
 
                 <div className="p-4 border-b border-white/5 flex items-center justify-between">
                     <h2 className="text-sm font-semibold text-surface-100 flex items-center gap-2">
@@ -900,7 +1014,10 @@ export default function ChatPage() {
                 </div>
             </div>
 
-            {sidebarOpen && (
+            {sidebarOpen && isMobile && (
+                <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setSidebarOpen(false)} />
+            )}
+            {sidebarOpen && !isMobile && (
                 <div className="fixed inset-0 bg-black/50 z-10 md:hidden" onClick={() => setSidebarOpen(false)} />
             )}
 
@@ -908,6 +1025,11 @@ export default function ChatPage() {
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-white/5 flex items-center gap-3 bg-surface-900/80 backdrop-blur-sm">
+                    <button onClick={() => navigate('/')}
+                        className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/50 hover:text-brand-400 transition-colors md:hidden"
+                        title="Home">
+                        <Home size={16} />
+                    </button>
                     <button onClick={() => setSidebarOpen(true)}
                         className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/50 md:hidden">
                         <ChevronLeft size={16} />
@@ -929,24 +1051,53 @@ export default function ChatPage() {
                                 className="p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-brand-400 transition-colors flex items-center gap-1"
                                 title="Model">
                                 <Settings size={12} />
-                                <span className="hidden sm:inline text-[10px]">{MODEL_OPTIONS.find(m => m.id === selectedModel)?.label || 'Flash'}</span>
+                                <span className="hidden sm:inline text-[10px]">{modelOptions.find(m => m.id === selectedModel)?.label || 'Flash'}</span>
                             </button>
                             {showModelPicker && (
                                 <>
-                                    <div className="fixed inset-0 z-10" onClick={() => setShowModelPicker(false)} />
-                                    <div className="absolute right-0 top-full mt-1 w-52 bg-surface-800 border border-white/10 rounded-xl shadow-xl z-20 overflow-hidden">
-                                    {MODEL_OPTIONS.map(m => (
+                                    <div className={`fixed inset-0 ${isMobile ? 'bg-black/50 z-40' : 'z-10'}`} onClick={() => setShowModelPicker(false)} />
+                                    <div className={`${isMobile
+                                        ? 'fixed bottom-0 left-0 right-0 z-50 w-full rounded-t-2xl bottom-sheet-enter'
+                                        : 'absolute right-0 top-full mt-1 w-56 rounded-xl'
+                                    } bg-surface-800 border border-white/10 shadow-xl overflow-hidden`}
+                                    onClick={e => e.stopPropagation()}>
+                                    {/* Mobile handle */}
+                                    {isMobile && (
+                                        <div className="flex justify-center py-2">
+                                            <div className="w-10 h-1 rounded-full bg-white/20" />
+                                        </div>
+                                    )}
+                                    <div className={`${isMobile ? 'px-2 pb-safe' : ''}`}>
+                                    {modelOptions.map(m => (
                                         <button key={m.id} onClick={() => { setSelectedModel(m.id); setShowModelPicker(false); }}
-                                            className={`w-full text-left px-3 py-2.5 text-xs transition-colors flex items-center justify-between ${
+                                            className={`w-full text-left ${isMobile ? 'px-4 py-3.5' : 'px-3 py-2.5'} text-xs transition-colors flex items-center justify-between ${
                                                 selectedModel === m.id ? 'bg-brand-500/10 text-brand-400' : 'text-surface-200/70 hover:bg-white/5'
-                                            }`}>
+                                            } ${isMobile ? 'rounded-xl mb-1' : ''}`}>
                                             <div>
-                                                <span className="font-medium">{m.label}</span>
-                                                <span className="block text-[10px] text-surface-200/40">{m.desc}</span>
+                                                <span className={`font-medium ${isMobile ? 'text-sm' : ''}`}>{m.icon} {m.label}</span>
+                                                <span className={`block ${isMobile ? 'text-xs' : 'text-[10px]'} text-surface-200/40`}>{m.desc}</span>
                                             </div>
-                                            {selectedModel === m.id && <Check size={12} className="text-brand-400" />}
+                                            {selectedModel === m.id && <Check size={isMobile ? 16 : 12} className="text-brand-400" />}
                                         </button>
                                     ))}
+                                    {/* Divider + API key section */}
+                                    <div className="border-t border-white/5 mt-1">
+                                        {modelMeta.hasPersonalKey ? (
+                                            <div className={`${isMobile ? 'px-4 py-3' : 'px-3 py-2'} text-[10px] text-emerald-400/70 flex items-center gap-1`}>
+                                                <Key size={10} /> Personal API key active
+                                            </div>
+                                        ) : !modelMeta.isOwner ? (
+                                            <button onClick={() => { setShowModelPicker(false); setShowApiKeyModal(true); loadApiKeys(); }}
+                                                className={`w-full text-left ${isMobile ? 'px-4 py-3.5 text-sm' : 'px-3 py-2.5 text-xs'} text-amber-400/80 hover:bg-amber-500/10 transition-colors flex items-center gap-1.5`}>
+                                                <Key size={11} /> Add API Key to unlock all models
+                                            </button>
+                                        ) : (
+                                            <div className={`${isMobile ? 'px-4 py-3' : 'px-3 py-2'} text-[10px] text-brand-400/70 flex items-center gap-1`}>
+                                                <Settings size={10} /> Owner: all models unlocked
+                                            </div>
+                                        )}
+                                    </div>
+                                    </div>
                                     </div>
                                 </>
                             )}
@@ -1086,7 +1237,9 @@ export default function ChatPage() {
                         </div>
                     )}
 
-                    {messages.length === 0 && !showHelp ? (
+                    {loadingConv ? (
+                        <ChatSkeleton />
+                    ) : messages.length === 0 && !showHelp ? (
                         /* ─── Empty state with quick suggestions ─── */
                         <div className="flex flex-col items-center justify-center h-full gap-6 animate-fadeIn">
                             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500/20 to-emerald-500/20 border border-white/5 flex items-center justify-center">
@@ -1143,7 +1296,10 @@ export default function ChatPage() {
                                     </div>
                                 </div>
                             )}
-                            {messages.map((msg, i) => (
+                            {messages.map((msg, i) => {
+                                // Skip empty assistant messages (streaming placeholder before text arrives)
+                                if (msg.role === 'assistant' && !msg.content && (!msg.toolCalls || msg.toolCalls.length === 0)) return null;
+                                return (
                                 <div key={i} id={`msg-${i}`}>
                                     {msg.toolCalls && msg.toolCalls.length > 0 && (
                                         <div className="ml-11 mb-2 space-y-1.5">
@@ -1165,8 +1321,21 @@ export default function ChatPage() {
                                         feedback={messageFeedback[i]}
                                         onEdit={msg.role === 'user' ? () => editMessage(i) : undefined}
                                     />
+                                    {/* Always-visible retry button on error messages */}
+                                    {msg.role === 'assistant' && msg.content?.startsWith('\u274c') && (
+                                        <div className="ml-11 mt-1.5 animate-fadeIn">
+                                            <button onClick={retryLastMessage}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px]
+                                                    bg-amber-500/10 text-amber-400 border border-amber-500/20
+                                                    hover:bg-amber-500/20 transition-all">
+                                                <RefreshCw size={11} />
+                                                {t('dashboard.chatPage.retry', 'Retry')}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
+                                );
+                            })}
                             {loading && <TypingIndicator />}
                             <div ref={messagesEndRef} />
                             {/* Follow-up suggestions */}
@@ -1189,14 +1358,34 @@ export default function ChatPage() {
                 {/* Scroll button */}
                 {showScroll && (
                     <button onClick={scrollToBottom}
-                        className="absolute bottom-24 right-8 w-8 h-8 rounded-full bg-brand-500/20 border border-brand-500/30
-                            flex items-center justify-center text-brand-400 hover:bg-brand-500/30 transition-colors shadow-lg">
+                        className={`absolute ${isMobile ? 'bottom-20 right-4' : 'bottom-24 right-8'} w-8 h-8 rounded-full bg-brand-500/20 border border-brand-500/30
+                            flex items-center justify-center text-brand-400 hover:bg-brand-500/30 transition-colors shadow-lg`}>
                         <ArrowDown size={14} />
                     </button>
                 )}
 
                 {/* Input */}
-                <div className="p-3 border-t border-white/5 bg-surface-900/80 backdrop-blur-sm">
+                <div className={`p-3 border-t border-white/5 bg-surface-900/80 backdrop-blur-sm ${isMobile ? 'chat-input-safe' : ''}`}>
+                    {/* Quick action chips (new/empty chat only) */}
+                    {messages.length === 0 && !loading && (
+                        <div className="flex flex-wrap gap-1.5 mb-2 animate-fadeIn">
+                            {[
+                                { label: '💰 Balance', cmd: 'Check my wallet balance' },
+                                { label: '📈 Top tokens', cmd: 'Show top trending tokens' },
+                                { label: '🔄 Swap', cmd: 'I want to swap tokens' },
+                                { label: '📊 Analyze', cmd: 'Analyze OKB token' },
+                                { label: '📡 Signals', cmd: 'Show whale buy signals' },
+                            ].map(chip => (
+                                <button key={chip.cmd}
+                                    onClick={() => sendMessage(chip.cmd)}
+                                    className={`${isMobile ? 'px-3 py-2 text-xs' : 'px-2.5 py-1.5 text-[11px]'} rounded-full
+                                        bg-brand-500/8 text-brand-400/80 border border-brand-500/15
+                                        hover:bg-brand-500/15 hover:text-brand-400 transition-all active:scale-95`}>
+                                    {chip.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     {/* Image preview */}
                     {imagePreview && (
                         <div className="mb-2 flex items-center gap-2">
@@ -1243,7 +1432,8 @@ export default function ChatPage() {
                                 className={`w-full px-4 py-2.5 rounded-xl bg-surface-800/60 border
                                     text-sm text-surface-100 placeholder:text-surface-200/25
                                     focus:outline-none focus:border-brand-500/30 focus:ring-1 focus:ring-brand-500/20
-                                    resize-none transition-all ${isListening ? 'border-red-500/40 ring-1 ring-red-500/20' : 'border-white/5'}`}
+                                    resize-none transition-all ${isListening ? 'border-red-500/40 ring-1 ring-red-500/20' : 'border-white/5'}
+                                    ${inputShake ? 'animate-[shake_0.4s_ease-in-out]' : ''}`}
                                 style={{ maxHeight: '120px', minHeight: '40px' }}
                                 onInput={(e) => {
                                     e.target.style.height = '40px';
@@ -1264,8 +1454,15 @@ export default function ChatPage() {
                             </button>
                         )}
                         <button
-                            onClick={() => sendMessage()}
-                            disabled={!input.trim() || loading}
+                            onClick={() => {
+                                if (!input.trim()) {
+                                    setInputShake(true);
+                                    setTimeout(() => setInputShake(false), 500);
+                                    return;
+                                }
+                                sendMessage();
+                            }}
+                            disabled={loading}
                             className={`p-2.5 rounded-xl transition-all flex-shrink-0 ${input.trim() && !loading
                                     ? 'bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/25'
                                     : 'bg-surface-800/40 text-surface-200/20 cursor-not-allowed'
@@ -1281,6 +1478,98 @@ export default function ChatPage() {
                     </p>
                 </div>
             </div>
+
+            {/* ── API Key Management Modal ── */}
+            {showApiKeyModal && (
+                <>
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setShowApiKeyModal(false)} />
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <div className="w-full max-w-md bg-surface-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                            {/* Header */}
+                            <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+                                        <Key size={16} className="text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-surface-100">Google AI API Key</h3>
+                                        <p className="text-[10px] text-surface-200/50">Unlock all AI models with your own key</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowApiKeyModal(false)} className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/40 transition-colors">
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            {/* Body */}
+                            <div className="px-5 py-4 space-y-4">
+                                {/* Existing keys */}
+                                {userApiKeys.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-medium text-surface-200/60">Your Keys</p>
+                                        {userApiKeys.map(k => (
+                                            <div key={k.id} className="flex items-center justify-between bg-surface-800/60 rounded-lg px-3 py-2">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <Key size={12} className="text-emerald-400 flex-shrink-0" />
+                                                    <span className="text-xs text-surface-200/70 truncate font-mono">{k.maskedKey}</span>
+                                                </div>
+                                                <button onClick={() => deleteApiKey(k.id)}
+                                                    className="p-1 rounded hover:bg-red-500/20 text-surface-200/30 hover:text-red-400 transition-colors flex-shrink-0"
+                                                    title="Delete key">
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Add key form */}
+                                <div className="space-y-2">
+                                    <p className="text-xs font-medium text-surface-200/60">{userApiKeys.length > 0 ? 'Add Another Key' : 'Add Your API Key'}</p>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="password"
+                                            value={apiKeyInput}
+                                            onChange={e => { setApiKeyInput(e.target.value); setApiKeyError(''); }}
+                                            placeholder="AIzaSy..."
+                                            className="flex-1 bg-surface-800/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-surface-100 placeholder-surface-200/30 focus:outline-none focus:border-brand-400/50 font-mono"
+                                            onKeyDown={e => { if (e.key === 'Enter') addApiKey(); }}
+                                        />
+                                        <button onClick={addApiKey} disabled={apiKeyLoading || !apiKeyInput.trim()}
+                                            className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                                apiKeyLoading || !apiKeyInput.trim()
+                                                    ? 'bg-surface-800/40 text-surface-200/20 cursor-not-allowed'
+                                                    : 'bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/25'
+                                            }`}>
+                                            {apiKeyLoading ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                                            Add
+                                        </button>
+                                    </div>
+                                    {apiKeyError && (
+                                        <p className="text-[10px] text-red-400 flex items-center gap-1">
+                                            <X size={10} /> {apiKeyError}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Info */}
+                                <div className="bg-amber-500/5 border border-amber-500/10 rounded-lg px-3 py-2.5 space-y-1.5">
+                                    <p className="text-[11px] text-amber-400/80 font-medium">How to get a free API key:</p>
+                                    <p className="text-[10px] text-surface-200/50 leading-relaxed">
+                                        1. Visit Google AI Studio → Create API Key<br />
+                                        2. Copy the key and paste it above<br />
+                                        3. All AI models will be unlocked instantly
+                                    </p>
+                                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors mt-1">
+                                        <ExternalLink size={10} /> Get your free key →
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

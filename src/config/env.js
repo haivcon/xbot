@@ -206,7 +206,7 @@ const GROQ_API_KEYS = (() => {
 
     return Array.from(new Set(keys));
 })();
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3-flash-preview';
 
 // Gemini Model Families - for model selection feature
 // Each model has specific capabilities, see comments for details

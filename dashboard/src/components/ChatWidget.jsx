@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import api from '@/api/client';
 import {
     Bot, Send, Loader2, Sparkles, X, Minus, Maximize2, Minimize2,
@@ -12,7 +13,8 @@ function renderMd(text) {
         .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
         .replace(/javascript\s*:/gi, '')
-        .replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
+        .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+        .replace(/\n?\[Used: [\w, ]+\]/g, '');
     const codeBlocks = [];
     safe = safe.replace(/```([\w]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
         const idx = codeBlocks.length;
@@ -36,8 +38,19 @@ function renderMd(text) {
         .replace(/^> (.+)$/gm, '<blockquote class="chat-blockquote">$1</blockquote>')
         .replace(/^### (.+)$/gm, '<h4 class="chat-h4">$1</h4>')
         .replace(/^## (.+)$/gm, '<h3 class="chat-h3">$1</h3>')
-        .replace(/^# (.+)$/gm, '<h2 class="chat-h2">$1</h2>')
-        .replace(/\n/g, '<br/>');
+        .replace(/^# (.+)$/gm, '<h2 class="chat-h2">$1</h2>');
+
+    // Auto-link standalone 0x addresses to OKX Web3 Explorer
+    safe = safe.replace(/(^|[\s(])0x([a-fA-F0-9]{40,42})(?=[\s,.)}<]|$)/gm, (_, pre, hex) => {
+        const addr = '0x' + hex;
+        const short = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+        return `${pre}<a href="https://www.okx.com/web3/explorer/xlayer/address/${addr}" target="_blank" rel="noopener" class="chat-link">${short}</a>`;
+    });
+
+    // Collapse long repeated characters (prevent horizontal overflow)
+    safe = safe.replace(/[_\-=~.·]{10,}/g, '<hr class="chat-hr"/>');
+
+    safe = safe.replace(/\n/g, '<br/>');
     codeBlocks.forEach((block, i) => { safe = safe.replace(`%%CB_${i}%%`, block); });
     return safe;
 }
@@ -126,7 +139,14 @@ const SUGGESTIONS = [
    Main Floating Chat Widget
    ═══════════════════════════════════════ */
 export default function ChatWidget() {
+    const location = useLocation();
+    const isChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
     const [open, setOpen] = useState(false);
+
+    // Auto-close widget when navigating to full chat page
+    useEffect(() => {
+        if (isChatRoute) setOpen(false);
+    }, [isChatRoute]);
     const [expanded, setExpanded] = useState(false);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -156,21 +176,65 @@ export default function ChatWidget() {
         setLoading(true);
 
         try {
-            const data = await api.sendChatMessage(msg, conversationId);
-            if (controller.signal.aborted) return;
-            setConversationId(data.conversationId);
-            const reply = {
-                role: 'assistant',
-                content: data.reply,
-                toolCalls: data.toolCalls
-            };
-            setMessages(prev => [...prev, reply]);
+            let fullText = '';
+            const streamToolCalls = [];
+            // Add placeholder assistant message for streaming
+            const assistantIdx = { current: -1 };
+            setMessages(prev => {
+                assistantIdx.current = prev.length;
+                return [...prev, { role: 'assistant', content: '', toolCalls: [] }];
+            });
+
+            await api.streamChatMessage(msg, conversationId, {
+                signal: controller.signal,
+                onTextDelta: (text) => {
+                    fullText += text;
+                    setMessages(prev => {
+                        const copy = [...prev];
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], content: fullText };
+                        return copy;
+                    });
+                },
+                onToolStart: (data) => {
+                    streamToolCalls.push({ name: data.name, args: data.args, result: '...' });
+                    setMessages(prev => {
+                        const copy = [...prev];
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], toolCalls: [...streamToolCalls] };
+                        return copy;
+                    });
+                },
+                onToolResult: (data) => {
+                    const tc = streamToolCalls.find(t => t.name === data.name && t.result === '...');
+                    if (tc) tc.result = data.result;
+                    setMessages(prev => {
+                        const copy = [...prev];
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], toolCalls: [...streamToolCalls] };
+                        return copy;
+                    });
+                },
+                onDone: (data) => {
+                    setConversationId(data.conversationId);
+                    if (!open) setUnread(prev => prev + 1);
+                },
+                onError: (data) => {
+                    setMessages(prev => {
+                        const copy = [...prev];
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], content: `❌ ${data.error || 'Stream failed'}` };
+                        return copy;
+                    });
+                },
+            });
         } catch (err) {
             if (controller.signal.aborted) return;
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: `❌ ${err.message || 'Failed to get response'}`
-            }]);
+            setMessages(prev => {
+                const copy = [...prev];
+                const lastIdx = copy.length - 1;
+                if (lastIdx >= 0 && copy[lastIdx].role === 'assistant' && !copy[lastIdx].content) {
+                    copy[lastIdx] = { ...copy[lastIdx], content: `❌ ${err.message || 'Failed to get response'}` };
+                    return copy;
+                }
+                return [...prev, { role: 'assistant', content: `❌ ${err.message || 'Failed to get response'}` }];
+            });
         } finally {
             if (!controller.signal.aborted) {
                 setLoading(false);
@@ -198,13 +262,16 @@ export default function ChatWidget() {
         ? 'fixed inset-4 sm:inset-8 z-[60]'
         : 'fixed bottom-20 right-4 sm:right-6 w-[360px] sm:w-[400px] h-[520px] sm:h-[560px] z-[60]';
 
+    // Hide entirely on /chat page
+    if (isChatRoute) return null;
+
     return (
         <>
             {/* ── Floating Bubble ── */}
             {!open && (
                 <button
                     onClick={() => setOpen(true)}
-                    className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-[59]
+                    className="fixed bottom-8 right-5 sm:bottom-10 sm:right-6 z-[59]
                         w-14 h-14 rounded-full
                         bg-gradient-to-br from-brand-500 to-emerald-500
                         shadow-xl shadow-brand-500/30

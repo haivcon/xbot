@@ -10,6 +10,7 @@ export default function Layout() {
     const location = useLocation();
     const { theme } = useThemeStore();
     const { connect, disconnect } = useWsStore();
+    const isChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
 
     // Auto-connect WebSocket on mount
     useEffect(() => {
@@ -37,13 +38,21 @@ export default function Layout() {
 
             {/* Main content */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                <Header onMenuClick={() => setSidebarOpen(true)} />
-                <main className={`flex-1 overflow-auto p-4 md:p-6 lg:p-8 transition-colors duration-300 ${theme === 'light' ? 'bg-slate-50' : ''}`}>
-                    <div key={location.pathname} className="max-w-7xl mx-auto page-enter">
+                {/* Header — hidden on mobile when on full-screen chat */}
+                {!isChatRoute && <Header onMenuClick={() => setSidebarOpen(true)} />}
+                <main className={`flex-1 min-h-0 transition-colors duration-300 ${
+                    isChatRoute ? 'overflow-hidden' : 'p-4 md:p-6 lg:p-8 overflow-auto'
+                } ${theme === 'light' ? 'bg-slate-50' : ''}`}>
+                    {isChatRoute ? (
                         <Outlet />
-                    </div>
+                    ) : (
+                        <div key={location.pathname} className="max-w-7xl mx-auto page-enter">
+                            <Outlet />
+                        </div>
+                    )}
                 </main>
             </div>
+
         </div>
     );
 }

@@ -371,4 +371,58 @@
   .chat-content tr:hover td {
     background: rgba(255, 255, 255, 0.02);
   }
+
+  /* === Bottom Sheet === */
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes slideDown {
+    from { transform: translateY(0); }
+    to { transform: translateY(100%); }
+  }
+  .bottom-sheet-enter {
+    animation: slideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /* === Floating Chat Bubble === */
+  @keyframes float-pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3); }
+    50% { transform: scale(1.05); box-shadow: 0 6px 30px rgba(99, 102, 241, 0.45); }
+  }
+  .floating-chat-btn {
+    animation: float-pulse 3s ease-in-out infinite;
+  }
+  .floating-chat-btn:hover {
+    animation: none;
+    transform: scale(1.1);
+  }
+
+  /* === Chat Page Mobile Overrides === */
+  @media (max-width: 767px) {
+    /* Full-bleed chat on mobile */
+    .chat-page-mobile {
+      margin: -1rem !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      border-radius: 0 !important;
+      border: none !important;
+    }
+    /* Safe area bottom padding for input */
+    .chat-input-safe {
+      padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    }
+    /* Chat sidebar as bottom sheet on mobile */
+    .chat-sidebar-sheet {
+      position: fixed !important;
+      top: auto !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      width: 100% !important;
+      max-height: 70vh !important;
+      border-radius: 1.25rem 1.25rem 0 0 !important;
+      z-index: 50 !important;
+    }
+  }
 }

@@ -2,7 +2,7 @@
  * Swap Pollers — Limit Order Executor + Price Compare Notifier
  * Runs every 5 minutes via setInterval
  */
-const log = require('../../utils/logger');
+const log = require('../../../core/logger');
 
 let _pollerStarted = false;
 
@@ -24,7 +24,7 @@ function startSwapPollers() {
 }
 
 async function checkLimitOrders() {
-    const { dbAll, dbRun } = require('../../db/core');
+    const { dbAll, dbRun } = require('../../../db/core');
     try {
         await dbRun("CREATE TABLE IF NOT EXISTS swap_limit_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, chatId TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, amount TEXT, targetPrice REAL, chainIndex TEXT DEFAULT '196', status TEXT DEFAULT 'active', createdAt TEXT DEFAULT (datetime('now')))");
     } catch(_) { return; }
@@ -33,7 +33,7 @@ async function checkLimitOrders() {
     if (!orders || orders.length === 0) return;
 
     const onchainos = require('onchainos');
-    let bot; try { bot = require('../../core/bot').bot; } catch(_) { return; }
+    let bot; try { bot = require('../../../core/bot').bot; } catch(_) { return; }
 
     for (const order of orders) {
         try {
@@ -65,7 +65,7 @@ async function checkLimitOrders() {
 
             if (bot && order.chatId) {
                 let lang = 'en';
-                try { const { getUserLanguage: gL } = require('../../db/users'); const dl = await gL(String(order.userId)); if (dl) lang = dl; } catch(_) {}
+                try { const { getUserLanguage: gL } = require('../../../db/users'); const dl = await gL(String(order.userId)); if (dl) lang = dl; } catch(_) {}
                 const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
                 const titles = { en: 'LIMIT ORDER EXECUTED', vi: 'LỆNH GIỚI HẠN ĐÃ THỰC HIỆN', zh: '限价单已执行', ko: '지정가 주문 실행됨', ru: 'ЛИМИТНЫЙ ОРДЕР ВЫПОЛНЕН', id: 'LIMIT ORDER DIEKSEKUSI' };
                 let notifMsg = `📌 <b>${titles[lk]}</b>\n${order.fromSymbol} ➔ ${order.toSymbol}\n🎯 $${currentPrice} (target $${target})`;
@@ -74,7 +74,7 @@ async function checkLimitOrders() {
             }
         } catch (orderErr) {
             log.child('SwapPoller').warn(`Limit order #${order.id} error:`, orderErr.message);
-            try { const { dbRun: dR } = require('../../db/core'); await dR("UPDATE swap_limit_orders SET status = 'error' WHERE id = ?", [order.id]); } catch(_) {}
+            try { const { dbRun: dR } = require('../../../db/core'); await dR("UPDATE swap_limit_orders SET status = 'error' WHERE id = ?", [order.id]); } catch(_) {}
         }
     }
 }
@@ -104,7 +104,7 @@ async function checkPriceCompares() {
             const arrow = change >= 0 ? '📈' : '📉';
 
             let lang = 'en';
-            try { const { getUserLanguage: gP } = require('../../db/users'); const dp = await gP(String(check.userId)); if (dp) lang = dp; } catch(_) {}
+            try { const { getUserLanguage: gP } = require('../../../db/users'); const dp = await gP(String(check.userId)); if (dp) lang = dp; } catch(_) {}
             const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
             const msgs = {
                 en: `${arrow} <b>Price Update</b> (1h after swap)\n${check.tokenSymbol}: $${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,

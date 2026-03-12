@@ -9,7 +9,7 @@ const { Router } = require('express');
 const { GoogleGenAI } = require('@google/genai');
 const logger = require('../core/logger');
 const log = logger.child('WebChat');
-const { GEMINI_API_KEYS, GEMINI_MODEL } = require('../config/env');
+const { GEMINI_API_KEYS, GEMINI_MODEL, GEMINI_MODEL_FAMILIES } = require('../config/env');
 const { ONCHAIN_TOOLS, executeToolCall, buildSystemInstruction } = require('../features/ai/ai-onchain');
 const { WEB_TOOL_DECLARATIONS, executeWebToolCall } = require('./webToolExecutor');
 const { buildAIAPrompt } = require('../config/prompts');
@@ -157,14 +157,14 @@ function htmlToMarkdown(html) {
         .replace(/<\/?[^>]+(>|$)/g, '');
 }
 
-// ── Build tool declarations for Gemini ───────────────────
+// ── Build tool declarations for Gemini (cached at startup) ─
+let _cachedToolDeclarations = null;
 function getToolDeclarations() {
-    // Flatten ONCHAIN_TOOLS declarations and merge with WEB_TOOL_DECLARATIONS
+    if (_cachedToolDeclarations) return _cachedToolDeclarations;
     const onchainDecls = [];
     for (const toolObj of ONCHAIN_TOOLS) {
         if (toolObj?.functionDeclarations) onchainDecls.push(...toolObj.functionDeclarations);
     }
-    // Deduplicate by name (web tools take priority)
     const seen = new Set();
     const merged = [];
     for (const decl of WEB_TOOL_DECLARATIONS) {
@@ -173,8 +173,9 @@ function getToolDeclarations() {
     for (const decl of onchainDecls) {
         if (decl?.name && !seen.has(decl.name)) { seen.add(decl.name); merged.push(decl); }
     }
+    _cachedToolDeclarations = [{ functionDeclarations: merged }];
     log.info(`[Tools] Merged: ${merged.length} declarations (${WEB_TOOL_DECLARATIONS.length} web + ${onchainDecls.length} onchain, deduped)`);
-    return [{ functionDeclarations: merged }];
+    return _cachedToolDeclarations;
 }
 
 // ── Create chat routes ───────────────────────────────────
@@ -190,14 +191,21 @@ function createChatRoutes() {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
-        // Per-user rate limit
-        if (!chatRateLimit(userId)) {
-            return res.status(429).json({ error: 'Too many messages. Please wait a moment.' });
-        }
-
         const { message, conversationId } = req.body;
+        // Validate input BEFORE rate limiting (don't burn quota on bad requests)
         if (!message || typeof message !== 'string' || !message.trim()) {
             return res.status(400).json({ error: 'Message is required' });
+        }
+        if (message.length > 10000) {
+            return res.status(400).json({ error: 'Message too long (max 10,000 characters)' });
+        }
+        // Validate conversationId format (prevent injection)
+        if (conversationId && !conversationId.startsWith(`web_${userId}_`)) {
+            return res.status(400).json({ error: 'Invalid conversation ID' });
+        }
+
+        if (!chatRateLimit(userId)) {
+            return res.status(429).json({ error: 'Too many messages. Please wait a moment.' });
         }
 
         const apiKey = await resolveGeminiKey(userId);
@@ -266,7 +274,7 @@ function createChatRoutes() {
             }
 
             // Call Gemini with function calling
-            const model = GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20';
+            const model = GEMINI_MODEL || 'gemini-3-flash-preview';
             const toolCalls = [];
             let finalResponse = '';
             let currentHistory = [...sessionHistory];
@@ -285,6 +293,7 @@ function createChatRoutes() {
                         tools: mergedTools,
                         temperature: 0.7,
                         maxOutputTokens: 8192,
+                        timeout: 60000,
                     }
                 });
 
@@ -344,14 +353,25 @@ function createChatRoutes() {
                         result = { error: err.message };
                     }
 
-                    // Convert result to string if needed
+                    // Convert result to string for logging, but pass object to Gemini
                     const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
                     toolCalls.push({ name: fc.name, args: fc.args, result: resultStr.substring(0, 2000) });
+
+                    // Ensure response is an object (Gemini API requires Struct, not string/array)
+                    let safeResult = result || { error: 'No result' };
+                    if (typeof safeResult === 'string') safeResult = { result: safeResult };
+                    if (Array.isArray(safeResult)) safeResult = { items: safeResult };
+                    // Strip displayMessage (UI-only, too long for Struct)
+                    if (safeResult.displayMessage) {
+                        const summary = typeof safeResult.displayMessage === 'string'
+                            ? safeResult.displayMessage.substring(0, 2000) : '[display content]';
+                        safeResult = { ...safeResult, displayMessage: summary };
+                    }
 
                     functionResponseParts.push({
                         functionResponse: {
                             name: fc.name,
-                            response: { result: resultStr }
+                            response: safeResult
                         }
                     });
                 }
@@ -360,12 +380,31 @@ function createChatRoutes() {
             }
 
             // Save updated history to DB
-            session.messages = currentHistory.slice(-SESSION_MAX_MESSAGES)
+            // Serialize: merge tool metadata into model messages, skip pure function-response entries
+            const rawEntries = currentHistory.slice(-SESSION_MAX_MESSAGES)
                 .filter(h => h.role === 'user' || h.role === 'model')
-                .map(h => ({
-                    role: h.role === 'model' ? 'assistant' : h.role,
-                    content: h.parts?.map(p => p.text).filter(Boolean).join('') || '',
-                }));
+                .map(h => {
+                    const textContent = h.parts?.map(p => p.text).filter(Boolean).join('') || '';
+                    const fcParts = h.parts?.filter(p => p.functionCall) || [];
+                    const hasFR = h.parts?.some(p => p.functionResponse);
+                    // Pure function-response entry (role=user) — skip entirely
+                    if (!textContent && hasFR) return null;
+                    // Model message with function calls — append tool names as context
+                    let content = textContent;
+                    if (fcParts.length > 0) {
+                        const toolNames = fcParts.map(p => p.functionCall.name).join(', ');
+                        content = content
+                            ? `${content}\n[Used: ${toolNames}]`
+                            : `[Used: ${toolNames}]`;
+                    }
+                    const msg = { role: h.role === 'model' ? 'assistant' : h.role, content };
+                    if (fcParts.length > 0) {
+                        msg.toolCalls = fcParts.map(p => ({ name: p.functionCall.name, args: p.functionCall.args }));
+                    }
+                    return msg;
+                })
+                .filter(Boolean);
+            session.messages = rawEntries;
             session.updatedAt = Date.now();
             await saveSession(session);
 
@@ -377,11 +416,11 @@ function createChatRoutes() {
             });
 
             // #8 Auto-rename: generate a smart title after first exchange
-            if (session.messages.length <= 2 && session.title === message.trim().substring(0, 60)) {
+            if (session.messages.length <= 4 && session.title === message.trim().substring(0, 60)) {
                 (async () => {
                     try {
                         const titleResp = await client.models.generateContent({
-                            model: GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20',
+                            model: GEMINI_MODEL || 'gemini-3-flash-preview',
                             contents: [{ role: 'user', parts: [{ text: `Summarize this chat in max 5 words as a title. Just the title, no quotes, no explanation.\n\nUser: ${message}\nAI: ${(finalResponse || '').substring(0, 300)}` }] }],
                             config: { maxOutputTokens: 30, temperature: 0.3 }
                         });
@@ -442,7 +481,15 @@ function createChatRoutes() {
         const session = await getSession(conversationId, userId);
         if (!session) return res.status(404).json({ error: 'Conversation not found' });
 
-        res.json({ conversationId, messages: session.messages || [] });
+        // Filter out empty messages and legacy tool summaries from old sessions
+        const displayMessages = (session.messages || []).filter(m => {
+            if (!m.content || !m.content.trim()) return false;
+            const c = m.content.trim();
+            // Backward compat: skip legacy [Called X] / [Result from X] entries
+            if (/^(\[(Called|Result from) [\w]+\]\s*)+$/.test(c)) return false;
+            return true;
+        });
+        res.json({ conversationId, messages: displayMessages });
     });
 
     /**
@@ -484,14 +531,21 @@ function createChatRoutes() {
     router.post('/chat/stream', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
-        if (!chatRateLimit(userId)) return res.status(429).json({ error: 'Rate limited' });
 
         const { message, conversationId, image, model: requestedModel } = req.body;
+        // Validate input BEFORE rate limiting
         if (!message?.trim()) return res.status(400).json({ error: 'Message required' });
+        if (message.length > 10000) return res.status(400).json({ error: 'Message too long' });
+        if (image && image.length > 5_000_000) return res.status(400).json({ error: 'Image too large' });
+        if (conversationId && !conversationId.startsWith(`web_${userId}_`)) {
+            return res.status(400).json({ error: 'Invalid conversation ID' });
+        }
+
+        if (!chatRateLimit(userId)) return res.status(429).json({ error: 'Rate limited' });
 
         // Validate model selection (allow-list)
-        const ALLOWED_MODELS = ['gemini-2.5-flash-preview-05-20', 'gemini-2.5-pro-preview-05-06'];
-        const useModel = ALLOWED_MODELS.includes(requestedModel) ? requestedModel : (GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20');
+        const ALLOWED_MODELS = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
+        const useModel = ALLOWED_MODELS.includes(requestedModel) ? requestedModel : (GEMINI_MODEL || 'gemini-3-flash-preview');
 
         // SSE headers
         res.writeHead(200, {
@@ -502,9 +556,10 @@ function createChatRoutes() {
         });
         const sendEvent = (event, data) => { try { if (!res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {} };
 
-        // Handle client abort
+        // Handle client abort — use res.on('close'), NOT req.on('close')
+        // req 'close' fires prematurely on Windows after POST body is received
         let aborted = false;
-        req.on('close', () => { aborted = true; });
+        res.on('close', () => { aborted = true; });
 
         try {
             const apiKey = await resolveGeminiKey(userId);
@@ -520,9 +575,11 @@ function createChatRoutes() {
                     role: m.role === 'assistant' ? 'model' : m.role,
                     parts: [{ text: m.content || '' }]
                 }));
-                if (!session._systemInstruction) {
-                    session._systemInstruction = 'You are an AI trading assistant on a web dashboard. Use Markdown formatting. Keep responses conversational and helpful.';
-                }
+                // Always rebuild the full system instruction (it's not persisted to DB)
+                const systemInstruction = await buildSystemInstruction(userId);
+                const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
+                session._systemInstruction = systemInstruction + '\n\n' + aiaPrompt +
+                    '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. Keep responses conversational and helpful.';
             } else {
                 const systemInstruction = await buildSystemInstruction(userId);
                 const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
@@ -552,31 +609,50 @@ function createChatRoutes() {
             let currentHistory = [...sessionHistory];
             let round = 0;
 
+            log.info(`[Stream] Starting: model=${model}, history=${currentHistory.length} msgs, tools=${mergedTools[0]?.functionDeclarations?.length || 0}`);
+
             while (round < MAX_TOOL_ROUNDS) {
-                if (aborted) break; // Client disconnected, stop processing
+                if (aborted) break;
                 round++;
-                const response = await client.models.generateContentStream({
-                    model,
-                    contents: currentHistory,
-                    systemInstruction: session._systemInstruction,
-                    config: { tools: mergedTools, temperature: 0.7, maxOutputTokens: 8192 }
-                });
+                let response;
+                try {
+                    response = await client.models.generateContentStream({
+                        model,
+                        contents: currentHistory,
+                        systemInstruction: session._systemInstruction,
+                        config: { tools: mergedTools, temperature: 0.7, maxOutputTokens: 8192 }
+                    });
+                } catch (apiErr) {
+                    log.error(`[Stream][Round ${round}] API error: ${apiErr?.message}`);
+                    sendEvent('error', { error: apiErr?.message || 'API call failed' });
+                    res.end();
+                    return;
+                }
 
                 let roundText = '';
                 let functionCallParts = [];
                 let allParts = [];
 
-                for await (const chunk of response) {
-                    const parts = chunk?.candidates?.[0]?.content?.parts || [];
-                    for (const part of parts) {
-                        allParts.push(part);
-                        if (part.text) {
-                            roundText += part.text;
-                            sendEvent('text-delta', { text: part.text });
+                try {
+                    for await (const chunk of response) {
+                        const parts = chunk?.candidates?.[0]?.content?.parts || [];
+                        for (const part of parts) {
+                            allParts.push(part);
+                            if (part.text) {
+                                roundText += part.text;
+                                sendEvent('text-delta', { text: part.text });
+                            }
+                            if (part.functionCall) functionCallParts.push(part);
                         }
-                        if (part.functionCall) functionCallParts.push(part);
                     }
+                } catch (streamErr) {
+                    log.error(`[Stream][Round ${round}] Stream error: ${streamErr?.message}`);
+                    sendEvent('error', { error: streamErr?.message || 'Stream iteration failed' });
+                    res.end();
+                    return;
                 }
+
+                log.info(`[Stream][Round ${round}] text=${roundText.length} chars, tools=${functionCallParts.length}`);
 
                 if (functionCallParts.length === 0) {
                     finalResponse = roundText.trim();
@@ -590,10 +666,9 @@ function createChatRoutes() {
                 for (const part of functionCallParts) {
                     const fc = part.functionCall;
                     sendEvent('tool-start', { name: fc.name, args: fc.args });
-                    const context = { userId, chatId: userId, lang: req.dashboardUser?.lang || 'en', isWebChat: true };
+                    const context = { userId, chatId: userId, lang: req.dashboardUser?.lang || 'en', isWeb: true };
 
                     let result;
-                    const { executeWebToolCall } = require('./webToolExecutor');
                     result = await executeWebToolCall(fc, context);
                     if (!result) {
                         // Fallback to onchain tools safely (same as main endpoint)
@@ -602,17 +677,47 @@ function createChatRoutes() {
                     if (!result) result = { error: `Tool ${fc.name} not available via web.` };
                     if (result?.displayMessage) result.displayMessage = htmlToMarkdown(result.displayMessage);
 
+                    // Handle special actions (e.g. clear_session from delete_chat_history)
+                    if (result?.action === 'clear_session') {
+                        session.messages = [];
+                        currentHistory = [{ role: 'user', parts: userParts }];
+                    }
+
                     toolCalls.push({ name: fc.name, args: fc.args, result: typeof result === 'string' ? result : JSON.stringify(result)?.substring(0, 500) });
                     sendEvent('tool-result', { name: fc.name, result: typeof result === 'string' ? result : JSON.stringify(result)?.substring(0, 500) });
-                    functionResponseParts.push({ functionResponse: { name: fc.name, response: result || { error: 'No result' } } });
+                    // Ensure response is an object (Gemini API requires Struct, not string/array)
+                    let safeResult = result || { error: 'No result' };
+                    if (typeof safeResult === 'string') safeResult = { result: safeResult };
+                    if (Array.isArray(safeResult)) safeResult = { items: safeResult };
+                    // Truncate displayMessage (too long for Struct payload)
+                    if (safeResult.displayMessage && typeof safeResult.displayMessage === 'string' && safeResult.displayMessage.length > 2000) {
+                        safeResult = { ...safeResult, displayMessage: safeResult.displayMessage.substring(0, 2000) };
+                    }
+                    functionResponseParts.push({ functionResponse: { name: fc.name, response: safeResult } });
                 }
                 currentHistory.push({ role: 'user', parts: functionResponseParts });
             }
 
-            // Save session
+            // Serialize: merge tool metadata, skip pure function-response entries
             session.messages = currentHistory.slice(-SESSION_MAX_MESSAGES)
                 .filter(h => h.role === 'user' || h.role === 'model')
-                .map(h => ({ role: h.role === 'model' ? 'assistant' : h.role, content: h.parts?.map(p => p.text).filter(Boolean).join('') || '' }));
+                .map(h => {
+                    const textContent = h.parts?.map(p => p.text).filter(Boolean).join('') || '';
+                    const fcParts = h.parts?.filter(p => p.functionCall) || [];
+                    const hasFR = h.parts?.some(p => p.functionResponse);
+                    if (!textContent && hasFR) return null;
+                    let content = textContent;
+                    if (fcParts.length > 0) {
+                        const toolNames = fcParts.map(p => p.functionCall.name).join(', ');
+                        content = content ? `${content}\n[Used: ${toolNames}]` : `[Used: ${toolNames}]`;
+                    }
+                    const msg = { role: h.role === 'model' ? 'assistant' : h.role, content };
+                    if (fcParts.length > 0) {
+                        msg.toolCalls = fcParts.map(p => ({ name: p.functionCall.name, args: p.functionCall.args }));
+                    }
+                    return msg;
+                })
+                .filter(Boolean);
             session.updatedAt = Date.now();
             await saveSession(session);
 
@@ -627,8 +732,8 @@ function createChatRoutes() {
                             model, contents: [{ role: 'user', parts: [{ text: `Summarize this chat in max 5 words as a title. Just the title, no quotes.\n\nUser: ${message}\nAI: ${(finalResponse || '').substring(0, 300)}` }] }],
                             config: { maxOutputTokens: 30, temperature: 0.3 }
                         });
-                        const t = titleResp?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                        if (t && t.length > 2 && t.length < 80) { session.title = t; await saveSession(session); }
+                        const newTitle = titleResp?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                        if (newTitle && newTitle.length > 2 && newTitle.length < 80) { session.title = newTitle; await saveSession(session); }
                     } catch {}
                 })();
             }
@@ -636,6 +741,115 @@ function createChatRoutes() {
             log.error(`Stream error: ${err.message}`);
             sendEvent('error', { error: err.message || 'Stream failed' });
             res.end();
+        }
+    });
+
+    // ── GET /ai/models — Available models for current user ─────
+    router.get('/models', async (req, res) => {
+        try {
+            const userId = req.dashboardUser?.userId;
+            const jwtRole = req.dashboardUser?.role;
+            // Respect viewMode: owner in 'user' mode is treated as regular user
+            const viewMode = req.query.viewMode;
+            const isOwner = jwtRole === 'owner' && viewMode !== 'user';
+            const db = require('../../db');
+            const userKeys = userId ? await db.listUserAiKeys(userId) : [];
+            const hasPersonalKey = userKeys.some(k =>
+                ['google', 'gemini'].includes((k.provider || '').toLowerCase()) && k.apiKey
+            );
+            const hasServerKey = GEMINI_API_KEYS && GEMINI_API_KEYS.length > 0;
+
+            // Build model list based on user permissions
+            const allModels = [
+                { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', desc: 'Best reasoning & complex tasks', icon: '🧠', tier: 'pro' },
+                { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Powerful multimodal & agentic', icon: '🚀', tier: 'free' },
+                { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Lite', desc: 'Fastest, lowest cost', icon: '💨', tier: 'free' },
+            ];
+
+            let models;
+            if (isOwner || hasPersonalKey) {
+                // Owner or user with personal key: can use all models
+                models = allModels;
+            } else {
+                // Regular user with server key only: default model only
+                models = allModels.filter(m => m.id === GEMINI_MODEL);
+            }
+
+            res.json({
+                models,
+                defaultModel: GEMINI_MODEL,
+                hasPersonalKey,
+                hasServerKey,
+                isOwner,
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── GET /ai/keys — List user's Google AI keys ────────────
+    router.get('/keys', async (req, res) => {
+        try {
+            const userId = req.dashboardUser?.userId;
+            if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+            const db = require('../../db');
+            const keys = await db.listUserAiKeys(userId);
+            const googleKeys = keys
+                .filter(k => ['google', 'gemini'].includes((k.provider || '').toLowerCase()))
+                .map(k => ({
+                    id: k.id || k.rowid,
+                    name: k.name || k.label || 'Google AI',
+                    provider: k.provider || 'google',
+                    maskedKey: k.apiKey ? `${k.apiKey.slice(0, 6)}...${k.apiKey.slice(-4)}` : '***',
+                    createdAt: k.createdAt,
+                }));
+            res.json({ keys: googleKeys });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── POST /ai/keys — Add a Google AI key ──────────────────
+    router.post('/keys', async (req, res) => {
+        try {
+            const userId = req.dashboardUser?.userId;
+            if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+            const { apiKey, name } = req.body;
+            if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 10) {
+                return res.status(400).json({ error: 'Invalid API key' });
+            }
+
+            // Quick validation: try listing models with the key
+            try {
+                const testClient = new GoogleGenAI({ apiKey: apiKey.trim() });
+                await testClient.models.get({ model: 'gemini-3-flash-preview' });
+            } catch (testErr) {
+                return res.status(400).json({ error: `Invalid key: ${testErr?.message?.substring(0, 100) || 'validation failed'}` });
+            }
+
+            const db = require('../../db');
+            const result = await db.addUserAiKey(userId, name || 'Google AI', apiKey.trim(), 'google');
+            res.json({ success: true, added: result?.added !== false });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── DELETE /ai/keys — Remove a user's API key ────────────
+    router.delete('/keys', async (req, res) => {
+        try {
+            const userId = req.dashboardUser?.userId;
+            if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+            const { keyId } = req.body;
+            const db = require('../../db');
+            if (keyId) {
+                await db.deleteUserAiKey(userId, keyId);
+            } else {
+                await db.deleteUserAiKeys(userId, 'google');
+            }
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
         }
     });
 
