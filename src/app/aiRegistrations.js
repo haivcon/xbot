@@ -879,21 +879,22 @@ function registerBatchTransferCallbacks(bot, getLang) {
   // batchconfirm|confirm_xxx or batchconfirm|cancel_xxx
   bot.on('callback_query', async (query) => {
     const data = query.data || '';
-    if (!data.startsWith('batchconfirm|')) return;
 
-            // ── Swap confirmation handler ──
-            if (data.startsWith('swapconfirm|')) {
-                const parts = data.split('|');
-                const action = parts[1];
-                const key = 'swapconfirm_' + action.replace(/^(yes|no)_/, '');
-                if (global._pendingSwapConfirms && global._pendingSwapConfirms.has(key)) {
-                    const resolve = global._pendingSwapConfirms.get(key);
-                    global._pendingSwapConfirms.delete(key);
-                    resolve(action.startsWith('yes') ? 'confirm' : 'cancel');
-                }
-                try { await bot.answerCallbackQuery(query.id); } catch (_) {}
-                return;
-            }
+    // ── Swap confirmation handler (must be BEFORE batchconfirm guard) ──
+    if (data.startsWith('swapconfirm|')) {
+      const parts = data.split('|');
+      const action = parts[1];
+      const key = 'swapconfirm_' + action.replace(/^(yes|no)_/, '');
+      if (global._pendingSwapConfirms && global._pendingSwapConfirms.has(key)) {
+        const resolve = global._pendingSwapConfirms.get(key);
+        global._pendingSwapConfirms.delete(key);
+        resolve(action.startsWith('yes') ? 'confirm' : 'cancel');
+      }
+      try { await bot.answerCallbackQuery(query.id); } catch (_) {}
+      return;
+    }
+
+    if (!data.startsWith('batchconfirm|')) return;
 
     const payload = data.slice('batchconfirm|'.length);
     const isConfirm = payload.startsWith('confirm_');
