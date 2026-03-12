@@ -572,6 +572,35 @@ module.exports = {
             const explorerBase = _getExplorerUrl(chainIndex);
             const explorerLink = `${explorerBase}/tx/${txHash}`;
 
+            // 6b. Verify transaction receipt on-chain
+            let txConfirmed = true;
+            if (txHash && txHash !== 'pending') {
+                try {
+                    log.child('AUTOSWAP').info('Waiting for tx receipt...');
+                    const receipt = await provider.waitForTransaction(txHash, 1, 30000); // 1 confirmation, 30s timeout
+                    if (receipt && receipt.status === 0) {
+                        txConfirmed = false;
+                        log.child('AUTOSWAP').warn('❌ Transaction REVERTED on-chain: ' + txHash);
+                        // Return failure with explorer link
+                        let lang = context?.lang || 'en';
+                        try { const { getUserLanguage: gUL } = require('../../../../db/users'); const dl = await gUL(String(context?.chatId || context?.msg?.chat?.id || userId)); if (dl) lang = dl; } catch(_){}
+                        const failTitles = { en: 'SWAP FAILED', vi: 'SWAP THẤT BẠI', zh: '兑换失败', ko: '스왑 실패', ru: 'ОБМЕН НЕ УДАЛСЯ', id: 'SWAP GAGAL' };
+                        const failReasons = { en: 'Transaction reverted on-chain', vi: 'Giao dịch bị revert trên blockchain', zh: '交易在链上回滚', ko: '트랜잭션 되돌림', ru: 'Транзакция отменена', id: 'Transaksi gagal on-chain' };
+                        const failHints = { en: 'Possible causes: slippage too low, insufficient liquidity, or token restrictions.', vi: 'Nguyên nhân: slippage thấp, thanh khoản không đủ, hoặc token bị hạn chế.', zh: '可能原因：滑点过低、流动性不足或代币限制。', ko: '원인: 슬리피지 부족, 유동성 부족, 또는 토큰 제한.', ru: 'Причины: низкий слиппейдж, недостаточная ликвидность или ограничения токена.', id: 'Penyebab: slippage rendah, likuiditas kurang, atau batasan token.' };
+                        const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+                        return {
+                            displayMessage: `❌ <b>${failTitles[lk] || failTitles.en}</b>\n━━━━━━━━━━━━━━━━━━\n⚠️ ${failReasons[lk] || failReasons.en}\n💡 <i>${failHints[lk] || failHints.en}</i>\n\n🔗 <a href="${explorerLink}">TxHash: ${txHash.slice(0,18)}...</a>`,
+                            action: true, success: false
+                        };
+                    } else {
+                        log.child('AUTOSWAP').info('✅ Transaction confirmed on-chain!');
+                    }
+                } catch (receiptErr) {
+                    // Timeout or error — log but don't block (tx might still be pending)
+                    log.child('AUTOSWAP').warn('Receipt check timeout/error (tx may still be pending):', receiptErr.message);
+                }
+            }
+
             // 7. Parse result amounts
             const routerResult = txRaw.routerResult || {};
             let fromSym = routerResult.fromTokenSymbol;
