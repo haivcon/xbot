@@ -3943,19 +3943,81 @@ function createAiHandlers(deps) {
               // Remove the just-executed swap (first in queue)
               if (swapQueue.length > 0) swapQueue.shift();
               if (swapQueue.length > 0) {
-                const nextSwap = swapQueue[0];
-                log.child('FnCall').info(`Multi-swap: ${swapQueue.length} remaining. Auto-executing next: ${nextSwap.fromTokenAddress}→${nextSwap.toTokenAddress}`);
-                // Call execute_swap directly for the next swap
+                log.child('FnCall').info(`Multi-swap: ${swapQueue.length} remaining swaps in queue`);
+                // Execute ALL remaining swaps directly (not via AI) — preserves language + handles 3+ pairs
+                const tradingTools = require('../features/ai/onchain/tradingTools');
+                const chatId = msg?.chat?.id;
+                let botRef; try { botRef = require('../core/bot').bot; } catch(_){}
+                // Detect user language for progress messages
+                let uLang = 'vi';
+                try { const { getLang } = require('./language'); uLang = await getLang(msg); } catch(_){}
+                const uLk = ['zh-Hans','zh-cn'].includes(uLang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(uLang) ? uLang : 'en');
+                const progressLabels = {
+                  en: { exec: 'Executing', of: 'of', done: 'BATCH SWAP COMPLETE', success: 'Success', fail: 'Failed' },
+                  vi: { exec: 'Đang thực hiện', of: '/', done: 'HOÀN TẤT SWAP HÀNG LOẠT', success: 'Thành công', fail: 'Thất bại' },
+                  zh: { exec: '执行中', of: '/', done: '批量兑换完成', success: '成功', fail: '失败' },
+                  ko: { exec: '실행 중', of: '/', done: '배치 스왑 완료', success: '성공', fail: '실패' },
+                  ru: { exec: 'Выполняется', of: 'из', done: 'ОБМЕН ЗАВЕРШЁН', success: 'Успех', fail: 'Ошибка' },
+                  id: { exec: 'Mengeksekusi', of: '/', done: 'BATCH SWAP SELESAI', success: 'Berhasil', fail: 'Gagal' }
+                };
+                const pL = progressLabels[uLk] || progressLabels.en;
+                const totalRemaining = swapQueue.length;
+                const results = [];
+
+                // Process remaining swaps sequentially
                 setTimeout(async () => {
                   try {
-                    const syntheticMsg2 = { ...msg, text: `/aib swap ${nextSwap.amount} ${nextSwap.fromTokenAddress} to ${nextSwap.toTokenAddress}` };
-                    await handleAiaCommand(syntheticMsg2);
-                  } catch (e) { log.child('FnCall').warn('Multi-swap auto-exec failed:', e.message); }
-                }, 2000);
+                    for (let i = 0; i < totalRemaining; i++) {
+                      const nextSwap = swapQueue[0]; // always take first
+                      if (!nextSwap) break;
+                      // Send progress
+                      if (botRef && chatId) {
+                        try { await botRef.sendMessage(chatId, `⏳ ${pL.exec} swap ${i + 2}${pL.of}${totalRemaining + 1}...`, { disable_notification: true }); } catch(_){}
+                      }
+                      // Build context for execute_swap
+                      const swapContext = { ...context, userId, chatId, msg, lang: uLang };
+                      try {
+                        const swapResult = await tradingTools.execute_swap({
+                          chainIndex: nextSwap.chainIndex || '196',
+                          fromTokenAddress: nextSwap.fromTokenAddress,
+                          toTokenAddress: nextSwap.toTokenAddress,
+                          amount: nextSwap.amount
+                        }, swapContext);
+                        results.push({ swap: nextSwap, success: true, result: swapResult });
+                        log.child('FnCall').info(`Multi-swap ${i+2}/${totalRemaining+1}: success`);
+                      } catch (swapErr) {
+                        results.push({ swap: nextSwap, success: false, error: swapErr.message });
+                        log.child('FnCall').warn(`Multi-swap ${i+2}/${totalRemaining+1}: failed:`, swapErr.message);
+                      }
+                      swapQueue.shift(); // remove processed swap
+                      // Brief pause between swaps
+                      if (i < totalRemaining - 1) await new Promise(r => setTimeout(r, 2000));
+                    }
+                    // Final summary
+                    if (botRef && chatId && results.length > 0) {
+                      const successCount = results.filter(r => r.success).length;
+                      const failCount = results.filter(r => !r.success).length;
+                      let summary = `✅ <b>${pL.done}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+                      summary += `📊 ${pL.success}: ${successCount + 1} | ${pL.fail}: ${failCount}\n`;
+                      try { await botRef.sendMessage(chatId, summary, { parse_mode: 'HTML' }); } catch(_){}
+                    }
+                  } catch (batchErr) { log.child('FnCall').warn('Multi-swap batch failed:', batchErr.message); }
+                  // Clean up
+                  global._pendingMultiSwaps.delete(userId);
+                  if (global._pendingMultiSwapTimers?.has(userId)) {
+                    clearTimeout(global._pendingMultiSwapTimers.get(userId));
+                    global._pendingMultiSwapTimers.delete(userId);
+                  }
+                }, 3000);
               } else {
-                global._pendingMultiSwaps.delete(userId); // Clean up
+                global._pendingMultiSwaps.delete(userId);
+                if (global._pendingMultiSwapTimers?.has(userId)) {
+                  clearTimeout(global._pendingMultiSwapTimers.get(userId));
+                  global._pendingMultiSwapTimers.delete(userId);
+                }
               }
             }
+
             log.child('FnCall').info(`✓ Function ${resolvedFnName} triggered command, returning`);
             // Save history BEFORE returning so context is preserved for next conversation
             await addToSessionHistory(userId, 'user', userPrompt);
