@@ -73,6 +73,45 @@
   :root:not(.dark) .border-white\/10 { border-color: rgba(15, 23, 42, 0.15) !important; }
   :root:not(.dark) .border-white\/20 { border-color: rgba(15, 23, 42, 0.2) !important; }
 
+  /* Light mode — ChatPage specific overrides */
+  :root:not(.dark) .text-surface-200\/90 { color: rgba(51, 65, 85, 0.95) !important; }
+  :root:not(.dark) .text-surface-200\/25 { color: rgba(51, 65, 85, 0.35) !important; }
+  :root:not(.dark) .text-surface-100 { color: #0f172a !important; }
+  :root:not(.dark) .bg-surface-900\/50 { background-color: rgba(248, 250, 252, 0.8) !important; }
+  :root:not(.dark) .bg-surface-900\/80 { background-color: rgba(248, 250, 252, 0.95) !important; }
+  :root:not(.dark) .bg-surface-800\/20 { background-color: rgba(241, 245, 249, 0.5) !important; }
+  :root:not(.dark) .bg-surface-800\/30 { background-color: rgba(241, 245, 249, 0.6) !important; }
+  :root:not(.dark) .bg-surface-800\/40 { background-color: rgba(241, 245, 249, 0.7) !important; }
+  :root:not(.dark) .bg-surface-900\/50 { background-color: rgba(248, 250, 252, 0.8) !important; }
+  :root:not(.dark) [class*="hover\:bg-white\/5"]:hover { background-color: rgba(15, 23, 42, 0.05) !important; }
+
+  /* Light mode — Chat content (markdown rendered) */
+  :root:not(.dark) .chat-content { color: #334155 !important; }
+  :root:not(.dark) .chat-content strong { color: #0f172a !important; }
+  :root:not(.dark) .chat-content em { color: #475569 !important; }
+  :root:not(.dark) .chat-content th {
+    color: #0f172a !important;
+    background: rgba(15, 23, 42, 0.03) !important;
+    border-bottom-color: rgba(15, 23, 42, 0.1) !important;
+  }
+  :root:not(.dark) .chat-content th:hover {
+    background: rgba(15, 23, 42, 0.06) !important;
+    color: #0f172a !important;
+  }
+  :root:not(.dark) .chat-content td {
+    color: #475569 !important;
+    border-bottom-color: rgba(15, 23, 42, 0.05) !important;
+  }
+  :root:not(.dark) .chat-content tr:hover td { background: rgba(15, 23, 42, 0.02) !important; }
+  :root:not(.dark) .chat-code-block { background: #f1f5f9 !important; color: #334155 !important; }
+  :root:not(.dark) .chat-code-wrapper { background: #f1f5f9 !important; }
+  :root:not(.dark) .chat-inline-code { background: rgba(99, 102, 241, 0.08) !important; color: #4f46e5 !important; }
+  :root:not(.dark) .chat-blockquote { border-left-color: #6366f1 !important; color: #475569 !important; background: rgba(99, 102, 241, 0.04) !important; }
+  :root:not(.dark) .chat-link { color: #4f46e5 !important; }
+  :root:not(.dark) .chat-h2, :root:not(.dark) .chat-h3, :root:not(.dark) .chat-h4 { color: #0f172a !important; }
+  :root:not(.dark) .chat-hr { border-color: rgba(15, 23, 42, 0.1) !important; }
+  :root:not(.dark) .chat-list li { color: #475569 !important; }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
