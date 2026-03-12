@@ -4363,7 +4363,37 @@ function createAiHandlers(deps) {
       await sendReply(msg, menuText, { reply_markup: await buildPersonaKeyboard(lang, userId) });
       return;
     }
-    await processAibRequest(msg, userPrompt);
+    // ── Pre-processor: rewrite grouped swap patterns ──
+    // Detects: "đổi 100 banmao / đổi 50 niuma / tất cả lấy okb"
+    // Rewrites to: "đổi 100 banmao lấy okb\nđổi 50 niuma lấy okb"
+    let processedPrompt = userPrompt;
+    try {
+      const lines = userPrompt.split(/\n/).map(l => l.trim()).filter(Boolean);
+      // Find a "shared target" line like "tất cả lấy X" / "all to X" / "全部换X"
+      const sharedTargetPattern = /^(?:tất cả|all|toàn bộ|全部|모두|все|semua)\s+(?:lấy|sang|thành|to|for|换|으로|на|ke)\s+(\S+)$/i;
+      // Find "incomplete" swap lines like "đổi 100 banmao" (no target)
+      const incompleteSwapPattern = /^(?:đổi|swap|exchange|兑换|교환|обмен|tukar)\s+[\d.]+\s+\S+$/i;
+      const sharedTargetLine = lines.find(l => sharedTargetPattern.test(l));
+      if (sharedTargetLine) {
+        const targetMatch = sharedTargetLine.match(sharedTargetPattern);
+        const sharedToken = targetMatch[1];
+        const rewrittenLines = [];
+        for (const line of lines) {
+          if (sharedTargetPattern.test(line)) continue; // skip the "tất cả lấy X" line
+          if (incompleteSwapPattern.test(line)) {
+            // Add target: "đổi 100 banmao" → "đổi 100 banmao lấy okb"
+            rewrittenLines.push(line + ' lấy ' + sharedToken);
+          } else {
+            rewrittenLines.push(line); // keep complete lines as-is
+          }
+        }
+        if (rewrittenLines.length > 0) {
+          processedPrompt = rewrittenLines.join('\n');
+          log.child('FnCall').info('Grouped swap rewritten: ' + processedPrompt.replace(/\n/g, ' | '));
+        }
+      }
+    } catch (preErr) { /* ignore pre-processing errors */ }
+    await processAibRequest(msg, processedPrompt);
   }
 
   // ── AIB inline button callbacks (from signal list, etc.) ──
