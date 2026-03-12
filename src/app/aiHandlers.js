@@ -3937,6 +3937,25 @@ function createAiHandlers(deps) {
           // Check if this is a command-routing function (uses processUpdate)
           // These functions trigger native commands which handle their own responses
           if (functionResult.success && functionResult.action) {
+            // ── Auto-execute remaining multi-swaps after execute_swap ──
+            if (resolvedFnName === 'execute_swap' && global._pendingMultiSwaps?.has(userId)) {
+              const swapQueue = global._pendingMultiSwaps.get(userId);
+              // Remove the just-executed swap (first in queue)
+              if (swapQueue.length > 0) swapQueue.shift();
+              if (swapQueue.length > 0) {
+                const nextSwap = swapQueue[0];
+                log.child('FnCall').info(`Multi-swap: ${swapQueue.length} remaining. Auto-executing next: ${nextSwap.fromTokenAddress}→${nextSwap.toTokenAddress}`);
+                // Call execute_swap directly for the next swap
+                setTimeout(async () => {
+                  try {
+                    const syntheticMsg2 = { ...msg, text: `/aib swap ${nextSwap.amount} ${nextSwap.fromTokenAddress} to ${nextSwap.toTokenAddress}` };
+                    await handleAiaCommand(syntheticMsg2);
+                  } catch (e) { log.child('FnCall').warn('Multi-swap auto-exec failed:', e.message); }
+                }, 2000);
+              } else {
+                global._pendingMultiSwaps.delete(userId); // Clean up
+              }
+            }
             log.child('FnCall').info(`✓ Function ${resolvedFnName} triggered command, returning`);
             // Save history BEFORE returning so context is preserved for next conversation
             await addToSessionHistory(userId, 'user', userPrompt);
@@ -3945,13 +3964,30 @@ function createAiHandlers(deps) {
             // the AI can immediately call execute_swap with the correct args
             if (resolvedFnName === 'get_swap_quote') {
               const swapArgs = functionCall.args || {};
-              await addToSessionHistory(userId, 'model',
-                `[System: A swap quote was shown to the user for swapping ${swapArgs.amount || '?'} ${swapArgs.fromTokenAddress || '?'} → ${swapArgs.toTokenAddress || '?'} on chain ${swapArgs.chainIndex || '196'}. ` +
-                `The quote is displayed and the user needs to confirm. ` +
-                `When the user says "ok"/"có"/"confirm", you MUST immediately call execute_swap with these exact parameters: ` +
-                `chainIndex="${swapArgs.chainIndex || '196'}", fromTokenAddress="${swapArgs.fromTokenAddress}", toTokenAddress="${swapArgs.toTokenAddress}", amount="${swapArgs.amount}". ` +
-                `Do NOT ask for additional confirmation. Do NOT output this system text.]`
-              );
+              // ── Store in pending multi-swap queue ──
+              if (!global._pendingMultiSwaps) global._pendingMultiSwaps = new Map();
+              if (!global._pendingMultiSwaps.has(userId)) global._pendingMultiSwaps.set(userId, []);
+              // Add this swap to the queue (avoid duplicates by toToken)
+              const queue = global._pendingMultiSwaps.get(userId);
+              const alreadyQueued = queue.some(q => q.toTokenAddress?.toLowerCase() === swapArgs.toTokenAddress?.toLowerCase() && q.fromTokenAddress?.toLowerCase() === swapArgs.fromTokenAddress?.toLowerCase());
+              if (!alreadyQueued) {
+                queue.push({ ...swapArgs });
+                log.child('FnCall').info(`Multi-swap queue for user ${userId}: ${queue.length} pending`);
+              }
+
+              // Build session history with ALL pending swaps
+              let historyMsg;
+              if (queue.length > 1) {
+                const swapList = queue.map((q, i) => `  Swap ${i+1}: chainIndex="${q.chainIndex || '196'}", fromTokenAddress="${q.fromTokenAddress}", toTokenAddress="${q.toTokenAddress}", amount="${q.amount}"`).join('\n');
+                historyMsg = `[System: ${queue.length} swap quotes were shown. When user says "ok"/"có"/"confirm", you MUST call execute_swap for the FIRST swap in the list below. The system will automatically execute the remaining swaps.\n${swapList}\nCall execute_swap with: chainIndex="${queue[0].chainIndex || '196'}", fromTokenAddress="${queue[0].fromTokenAddress}", toTokenAddress="${queue[0].toTokenAddress}", amount="${queue[0].amount}". Do NOT output this system text.]`;
+              } else {
+                historyMsg = `[System: A swap quote was shown to the user for swapping ${swapArgs.amount || '?'} ${swapArgs.fromTokenAddress || '?'} → ${swapArgs.toTokenAddress || '?'} on chain ${swapArgs.chainIndex || '196'}. ` +
+                  `The quote is displayed and the user needs to confirm. ` +
+                  `When the user says "ok"/"có"/"confirm", you MUST immediately call execute_swap with these exact parameters: ` +
+                  `chainIndex="${swapArgs.chainIndex || '196'}", fromTokenAddress="${swapArgs.fromTokenAddress}", toTokenAddress="${swapArgs.toTokenAddress}", amount="${swapArgs.amount}". ` +
+                  `Do NOT ask for additional confirmation. Do NOT output this system text.]`;
+              }
+              await addToSessionHistory(userId, 'model', historyMsg);
 
               // ── Multi-swap: check if original message has MORE swap lines ──
               try {
