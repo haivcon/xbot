@@ -791,10 +791,58 @@ module.exports = {
             const reverseLabels = { en: '🔄 Reverse', vi: '🔄 Đổi ngược', zh: '🔄 反向', ko: '🔄 역방향', ru: '🔄 Обратно', id: '🔄 Balik' };
             const repeatLabels = { en: '🔁 Repeat', vi: '🔁 Lặp lại', zh: '🔁 重复', ko: '🔁 반복', ru: '🔁 Повтор', id: '🔁 Ulangi' };
             const lk47 = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
-            const swapButtons = { inline_keyboard: [[
-                { text: reverseLabels[lk47], callback_data: `swapaction|reverse|${fromTokenAddress.slice(0,10)}|${toTokenAddress.slice(0,10)}|${chainIndex}` },
-                { text: repeatLabels[lk47], callback_data: `swapaction|repeat|${fromTokenAddress.slice(0,10)}|${toTokenAddress.slice(0,10)}|${originalAmount||args.amount}|${chainIndex}` }
-            ]] };
+            const priceLabels = { en: '📊 Price', vi: '📊 Giá', zh: '📊 价格', ko: '📊 가격', ru: '📊 Цена', id: '📊 Harga' };
+            const balanceLabels = { en: '💰 Balance', vi: '💰 Số dư', zh: '💰 余额', ko: '💰 잔액', ru: '💰 Баланс', id: '💰 Saldo' };
+            const historyLabels = { en: '📋 History', vi: '📋 Lịch sử', zh: '📋 历史', ko: '📋 기록', ru: '📋 История', id: '📋 Riwayat' };
+            const alertLabels = { en: '🔔 Set Alert', vi: '🔔 Đặt cảnh báo', zh: '🔔 设置提醒', ko: '🔔 알림', ru: '🔔 Уведомл.', id: '🔔 Peringatan' };
+            const swapButtons = { inline_keyboard: [
+                [
+                    { text: reverseLabels[lk47], callback_data: `swapaction|reverse|${fromTokenAddress.slice(0,10)}|${toTokenAddress.slice(0,10)}|${chainIndex}` },
+                    { text: repeatLabels[lk47], callback_data: `swapaction|repeat|${fromTokenAddress.slice(0,10)}|${toTokenAddress.slice(0,10)}|${originalAmount||args.amount}|${chainIndex}` }
+                ],
+                [
+                    { text: priceLabels[lk47], callback_data: `swapaction|price|${toTokenAddress.slice(0,10)}|${chainIndex}` },
+                    { text: balanceLabels[lk47], callback_data: 'swapaction|balance' },
+                    { text: historyLabels[lk47], callback_data: 'swapaction|history' }
+                ],
+                [
+                    { text: alertLabels[lk47], callback_data: `swapaction|alert|${toSym}|${toTokenAddress.slice(0,10)}` }
+                ]
+            ] };
+
+            // #6: Schedule price check 1h after swap
+            try {
+                const toPrice6 = Number(routerResult.toToken?.tokenUnitPrice || 0);
+                if (toPrice6 > 0) {
+                    const chatId6 = context?.chatId || context?.msg?.chat?.id;
+                    if (chatId6) {
+                        setTimeout(async () => {
+                            try {
+                                let bot6; try { bot6 = require('../../../core/bot').bot; } catch(_){}
+                                if (!bot6) return;
+                                const newData = await onchainos.getTokenPrice([{ chainIndex, tokenContractAddress: toTokenAddress }]);
+                                const newPrice = Number(newData?.[0]?.price || newData?.[0]?.tokenUnitPrice || 0);
+                                if (newPrice > 0 && toPrice6 > 0) {
+                                    const change = ((newPrice - toPrice6) / toPrice6 * 100).toFixed(2);
+                                    const arrow = change >= 0 ? '📈' : '📉';
+                                    let pLang6 = 'en';
+                                    try { const { getUserLanguage: g6 } = require('../../../../db/users'); const dl6 = await g6(String(context?.userId)); if (dl6) pLang6 = dl6; } catch(_){}
+                                    const lk6 = ['zh-Hans','zh-cn'].includes(pLang6) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(pLang6) ? pLang6 : 'en');
+                                    const msgs6 = {
+                                        en: `${arrow} <b>Price Update</b> (1h after swap)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
+                                        vi: `${arrow} <b>Cập nhật giá</b> (1h sau swap)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
+                                        zh: `${arrow} <b>价格变化</b>（兑换1小时后）\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
+                                        ko: `${arrow} <b>가격 변동</b> (스왑 1시간 후)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
+                                        ru: `${arrow} <b>Изменение цены</b> (1ч после обмена)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`,
+                                        id: `${arrow} <b>Update Harga</b> (1j setelah swap)\n${toSym}: ${newPrice < 0.01 ? newPrice.toFixed(8) : newPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${change}%)`
+                                    };
+                                    await bot6.sendMessage(chatId6, msgs6[lk6] || msgs6.en, { parse_mode: 'HTML', disable_notification: true });
+                                }
+                            } catch(_){}
+                        }, 3600000); // 1 hour
+                    }
+                }
+            } catch(_) {}
 
             return {
                 action: true, success: txConfirmed, reply_markup: swapButtons,
@@ -836,13 +884,90 @@ module.exports = {
                 hintMsg = 'Periksa likuiditas, saldo, atau coba lagi nanti.';
 }
 
+            // #10: Retry button on error
+            const retryLabels = { en: '🔄 Retry with higher slippage', vi: '🔄 Thử lại với slippage cao hơn', zh: '🔄 提高滑点重试', ko: '🔄 높은 슬리피지로 재시도', ru: '🔄 Повтор с выш. слиппейдж', id: '🔄 Coba lagi slippage tinggi' };
+            const lk10 = ['zh-Hans','zh-cn'].includes(lang2) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang2) ? lang2 : 'en');
+            const retryBtns = { inline_keyboard: [[
+                { text: retryLabels[lk10], callback_data: `swapaction|retry|${args?.fromTokenAddress?.slice(0,10)||''}|${args?.toTokenAddress?.slice(0,10)||''}|${args?.amount||''}|${args?.chainIndex||'196'}` }
+            ]] };
             return {
+                reply_markup: retryBtns,
                 displayMessage: `❌ <b>${title}</b>\n` +
                     `━━━━━━━━━━━━━━━━━━\n` +
                     `<b>${reasonLabel}</b> ${error.msg || error.message || 'Unknown error'}\n\n` +
                     `<i>${hintMsg}</i>`
             };
         }
+    },
+
+    // ── #4: Swap Favorites ──
+    async save_swap_favorite(args, context) {
+        try {
+            const userId = context?.userId;
+            if (!userId) return { displayMessage: '❌ User not identified.' };
+            const { dbRun } = require('../../../../db/core');
+            await dbRun("CREATE TABLE IF NOT EXISTS swap_favorites (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, name TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, chainIndex TEXT DEFAULT '196', createdAt TEXT DEFAULT (datetime('now')))");
+            await dbRun('INSERT INTO swap_favorites (userId,name,fromToken,toToken,fromSymbol,toSymbol,chainIndex) VALUES (?,?,?,?,?,?,?)',
+                [String(userId), args.name || '', args.fromTokenAddress || '', args.toTokenAddress || '', args.fromSymbol || '?', args.toSymbol || '?', args.chainIndex || '196']);
+            let lang = context?.lang || 'en';
+            try { const { getUserLanguage: gFL } = require('../../../../db/users'); const dfl = await gFL(String(userId)); if (dfl) lang = dfl; } catch(_){}
+            const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+            const msgs = { en: 'Saved swap favorite!', vi: 'Đã lưu cặp swap yêu thích!', zh: '已保存收藏兑换对！', ko: '즐겨찾기 저장!', ru: 'Избранное сохранено!', id: 'Favorit tersimpan!' };
+            return { displayMessage: `⭐ ${msgs[lk]} ${args.fromSymbol||'?'} ➔ ${args.toSymbol||'?'}` };
+        } catch (err) { return { displayMessage: '❌ ' + err.message }; }
+    },
+
+    async get_swap_favorites(args, context) {
+        try {
+            const userId = context?.userId;
+            if (!userId) return { displayMessage: '❌ User not identified.' };
+            const { dbAll, dbRun } = require('../../../../db/core');
+            await dbRun("CREATE TABLE IF NOT EXISTS swap_favorites (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, name TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, chainIndex TEXT DEFAULT '196', createdAt TEXT DEFAULT (datetime('now')))");
+            const rows = await dbAll('SELECT * FROM swap_favorites WHERE userId = ? ORDER BY id DESC LIMIT 10', [String(userId)]);
+            let lang = context?.lang || 'en';
+            try { const { getUserLanguage: gFL2 } = require('../../../../db/users'); const dfl2 = await gFL2(String(userId)); if (dfl2) lang = dfl2; } catch(_){}
+            const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+            if (!rows || rows.length === 0) {
+                const noFav = { en: 'No favorites yet.', vi: 'Chưa có cặp yêu thích.', zh: '暂无收藏。', ko: '즐겨찾기 없음.', ru: 'Нет избранных.', id: 'Belum ada favorit.' };
+                return { displayMessage: '⭐ ' + (noFav[lk] || noFav.en) };
+            }
+            const titles = { en: 'SWAP FAVORITES', vi: 'CẶP SWAP YÊU THÍCH', zh: '收藏交易对', ko: '즐겨찾기', ru: 'ИЗБРАННОЕ', id: 'FAVORIT' };
+            let msg = `⭐ <b>${titles[lk]}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+            const btns = [];
+            rows.forEach((r, i) => {
+                msg += `${i+1}. ${r.fromSymbol||'?'} ➔ ${r.toSymbol||'?'}${r.name ? ' ('+r.name+')' : ''}\n`;
+                btns.push({ text: `💱 ${r.fromSymbol} ➔ ${r.toSymbol}`, callback_data: `swapaction|favorite|${r.fromToken?.slice(0,10)||''}|${r.toToken?.slice(0,10)||''}|${r.chainIndex||'196'}` });
+            });
+            const btnRows = [];
+            for (let i = 0; i < btns.length; i += 2) btnRows.push(btns.slice(i, i+2));
+            return { displayMessage: msg, reply_markup: { inline_keyboard: btnRows } };
+        } catch (err) { return { displayMessage: '❌ ' + err.message }; }
+    },
+
+    // #8: Swap Limit Order
+    async set_swap_limit_order(args, context) {
+        try {
+            const userId = context?.userId;
+            if (!userId) return { displayMessage: '❌ User not identified.' };
+            const { dbRun } = require('../../../../db/core');
+            await dbRun("CREATE TABLE IF NOT EXISTS swap_limit_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, chatId TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, amount TEXT, targetPrice REAL, chainIndex TEXT DEFAULT '196', status TEXT DEFAULT 'active', createdAt TEXT DEFAULT (datetime('now')))");
+            const targetPrice = Number(args.targetPrice);
+            if (!targetPrice || targetPrice <= 0) return { displayMessage: '❌ Invalid target price.' };
+            await dbRun('INSERT INTO swap_limit_orders (userId,chatId,fromToken,toToken,fromSymbol,toSymbol,amount,targetPrice,chainIndex) VALUES (?,?,?,?,?,?,?,?,?)',
+                [String(userId), String(context?.chatId || context?.msg?.chat?.id || ''), args.fromTokenAddress||'', args.toTokenAddress||'', args.fromSymbol||'?', args.toSymbol||'?', args.amount||'0', targetPrice, args.chainIndex||'196']);
+            let lang = context?.lang || 'en';
+            try { const { getUserLanguage: gLO } = require('../../../../db/users'); const dlO = await gLO(String(userId)); if (dlO) lang = dlO; } catch(_){}
+            const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
+            const msgs = {
+                en: `📌 <b>LIMIT ORDER SET</b>\n━━━━━━━━━━━━━━━━━━\n💱 ${args.amount} ${args.fromSymbol||'?'} ➔ ${args.toSymbol||'?'}\n🎯 Target: ${targetPrice}\n⏳ Status: Active\n\n<i>Bot will execute when price hits target.</i>`,
+                vi: `📌 <b>ĐÃ ĐẶT LỆNH GIỚI HẠN</b>\n━━━━━━━━━━━━━━━━━━\n💱 ${args.amount} ${args.fromSymbol||'?'} ➔ ${args.toSymbol||'?'}\n🎯 Giá mục tiêu: ${targetPrice}\n⏳ Trạng thái: Đang hoạt động\n\n<i>Bot sẽ tự swap khi giá đạt mục tiêu.</i>`,
+                zh: `📌 <b>限价单已设置</b>\n━━━━━━━━━━━━━━━━━━\n💱 ${args.amount} ${args.fromSymbol||'?'} ➔ ${args.toSymbol||'?'}\n🎯 目标价: ${targetPrice}\n⏳ 状态: 活跃\n\n<i>达到目标价时自动执行。</i>`,
+                ko: `📌 <b>지정가 주문 설정</b>\n━━━━━━━━━━━━━━━━━━\n💱 ${args.amount} ${args.fromSymbol||'?'} ➔ ${args.toSymbol||'?'}\n🎯 목표가: ${targetPrice}\n⏳ 상태: 활성\n\n<i>가격 도달 시 자동 실행.</i>`,
+                ru: `📌 <b>ЛИМИТНЫЙ ОРДЕР</b>\n━━━━━━━━━━━━━━━━━━\n💱 ${args.amount} ${args.fromSymbol||'?'} ➔ ${args.toSymbol||'?'}\n🎯 Цель: ${targetPrice}\n⏳ Статус: Активен\n\n<i>Бот выполнит при достижении цены.</i>`,
+                id: `📌 <b>LIMIT ORDER AKTIF</b>\n━━━━━━━━━━━━━━━━━━\n💱 ${args.amount} ${args.fromSymbol||'?'} ➔ ${args.toSymbol||'?'}\n🎯 Target: ${targetPrice}\n⏳ Status: Aktif\n\n<i>Bot akan swap otomatis saat harga tercapai.</i>`
+            };
+            return { displayMessage: msgs[lk] || msgs.en };
+        } catch (err) { return { displayMessage: '❌ ' + err.message }; }
     },
 
     // ── #5: Swap History Tool ──

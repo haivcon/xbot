@@ -3827,6 +3827,28 @@ function createAiHandlers(deps) {
 
       await bot.sendChatAction(msg.chat.id, 'typing');
 
+      // #7: Onboarding — check if new user
+      try {
+        const { dbGet: dbG7, dbRun: dbR7 } = require('../../db/core');
+        await dbR7("CREATE TABLE IF NOT EXISTS user_onboarded (userId TEXT PRIMARY KEY, onboardedAt TEXT DEFAULT (datetime('now')))");
+        const onboarded = await dbG7('SELECT 1 FROM user_onboarded WHERE userId = ?', [String(msg.from.id)]);
+        if (!onboarded) {
+          await dbR7('INSERT OR IGNORE INTO user_onboarded (userId) VALUES (?)', [String(msg.from.id)]);
+          let oLang = 'en';
+          try { const { getUserLanguage: gOL } = require('../../db/users'); const dol = await gOL(String(msg.from.id)); if (dol) oLang = dol; } catch(_){}
+          const olk = ['zh-Hans','zh-cn'].includes(oLang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(oLang) ? oLang : 'en');
+          const welcomeMsgs = {
+            en: '👋 <b>Welcome!</b>\n━━━━━━━━━━━━━━━━━━\n🔹 <b>Step 1:</b> Create a trading wallet — say <i>"create wallet"</i>\n🔹 <b>Step 2:</b> Fund your wallet with OKB\n🔹 <b>Step 3:</b> Start swapping — <i>"swap 100 banmao to OKB"</i>\n\n💡 <i>I understand natural language in 6 languages!</i>',
+            vi: '👋 <b>Chào mừng!</b>\n━━━━━━━━━━━━━━━━━━\n🔹 <b>Bước 1:</b> Tạo ví giao dịch — nói <i>"tạo ví"</i>\n🔹 <b>Bước 2:</b> Nạp OKB vào ví\n🔹 <b>Bước 3:</b> Bắt đầu swap — <i>"đổi 100 banmao lấy OKB"</i>\n\n💡 <i>Tôi hiểu ngôn ngữ tự nhiên bằng 6 thứ tiếng!</i>',
+            zh: '👋 <b>欢迎！</b>\n━━━━━━━━━━━━━━━━━━\n🔹 <b>第1步：</b>创建交易钱包 — 说 <i>"创建钱包"</i>\n🔹 <b>第2步：</b>充值 OKB\n🔹 <b>第3步：</b>开始兑换 — <i>"兑换 100 banmao 为 OKB"</i>\n\n💡 <i>支持6种语言自然对话！</i>',
+            ko: '👋 <b>환영합니다!</b>\n━━━━━━━━━━━━━━━━━━\n🔹 <b>1단계:</b> 거래 지갑 생성 — <i>"지갑 만들어"</i>\n🔹 <b>2단계:</b> OKB 충전\n🔹 <b>3단계:</b> 스왑 시작 — <i>"100 banmao를 OKB로"</i>',
+            ru: '👋 <b>Добро пожаловать!</b>\n━━━━━━━━━━━━━━━━━━\n🔹 <b>Шаг 1:</b> Создайте кошелёк — <i>"создать кошелёк"</i>\n🔹 <b>Шаг 2:</b> Пополните OKB\n🔹 <b>Шаг 3:</b> Начните обмен — <i>"обменять 100 banmao на OKB"</i>',
+            id: '👋 <b>Selamat datang!</b>\n━━━━━━━━━━━━━━━━━━\n🔹 <b>Langkah 1:</b> Buat dompet — <i>"buat dompet"</i>\n🔹 <b>Langkah 2:</b> Isi OKB\n🔹 <b>Langkah 3:</b> Mulai swap — <i>"tukar 100 banmao ke OKB"</i>'
+          };
+          try { await bot.sendMessage(msg.chat.id, welcomeMsgs[olk] || welcomeMsgs.en, { parse_mode: 'HTML', disable_notification: true }); } catch(_){}
+        }
+      } catch(_) {}
+
       // ---------- SKELETON LOADING MESSAGE ----------
       try {
         const loadingTextBase = t(lang, 'ai_loading_message') || '⏳ Đang phân tích dữ liệu';
@@ -4031,7 +4053,7 @@ function createAiHandlers(deps) {
                       }
                       swapQueue.shift(); // remove processed swap
                       // Brief pause between swaps
-                      if (i < totalRemaining - 1) await new Promise(r => setTimeout(r, 5000)); // 5s to ensure previous tx is confirmed
+                      if (i < totalRemaining - 1) { try { await botRef.sendChatAction(chatId, 'typing'); } catch(_){} await new Promise(r => setTimeout(r, 5000)); }
                     }
                     // Final summary
                     if (botRef && chatId && results.length > 0) {

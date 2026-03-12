@@ -956,6 +956,39 @@ function registerBatchTransferCallbacks(bot, getLang) {
           const { handleAiaCommand } = require('./aiHandlers');
           if (handleAiaCommand) await handleAiaCommand(syntheticMsg);
         } catch(_){}
+      } else if (action === 'price') {
+        // Quick price check
+        const tokenSnippet = parts[2] || '';
+        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib check price of ' + tokenSnippet };
+        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
+      } else if (action === 'balance') {
+        // Quick balance check
+        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib check my wallet balance' };
+        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
+      } else if (action === 'history') {
+        // Show swap history
+        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib show my swap history' };
+        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
+      } else if (action === 'alert') {
+        // Suggest setting price alert
+        const tokenSym = parts[2] || '';
+        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib set price alert for ' + tokenSym };
+        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
+      } else if (action === 'favorite') {
+        // Swap from favorite pair
+        const fToken = parts[2] || '';
+        const tToken = parts[3] || '';
+        const chain = parts[4] || '196';
+        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap from ' + fToken + ' to ' + tToken + ' on chain ' + chain };
+        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
+      } else if (action === 'retry') {
+        // Retry swap with higher slippage
+        const fToken = parts[2] || '';
+        const tToken = parts[3] || '';
+        const amt = parts[4] || '';
+        const chain = parts[5] || '196';
+        const syntheticMsg = { chat: { id: chatId }, from: { id: userId }, text: '/aib swap ' + amt + ' ' + fToken + ' to ' + tToken + ' high slippage chain ' + chain };
+        try { const { handleAiaCommand } = require('./aiHandlers'); if (handleAiaCommand) await handleAiaCommand(syntheticMsg); } catch(_){}
       }
       return;
     }
