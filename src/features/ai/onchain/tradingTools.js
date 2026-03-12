@@ -620,8 +620,10 @@ module.exports = {
             // Use the user's actual DB-stored language preference (not prompt-detected lang which fails on "ok")
             let lang = context?.lang || 'en';
             try {
-                const { getLang } = require('../../../app/language');
-                if (context?.msg) lang = await getLang(context.msg);
+                const { getUserLanguage: getULang } = require('../../../../db/users');
+                const chatKey = String(context?.chatId || context?.msg?.chat?.id || userId);
+                const dbL = await getULang(chatKey);
+                if (dbL) lang = dbL;
             } catch (e) { /* fallback to context.lang */ }
             let title = 'SWAP SUCCESS';
             let swappedLabel = 'Swapped:';

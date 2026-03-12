@@ -3950,7 +3950,11 @@ function createAiHandlers(deps) {
                 let botRef; try { botRef = require('../core/bot').bot; } catch(_){}
                 // Detect user language for progress messages
                 let uLang = 'vi';
-                try { const { getLang } = require('./language'); uLang = await getLang(msg); } catch(_){}
+                try {
+                  const { getUserLanguage } = require('../../db/users');
+                  const dbLang = await getUserLanguage(String(msg?.chat?.id || userId));
+                  if (dbLang) uLang = dbLang;
+                } catch(_){}
                 const uLk = ['zh-Hans','zh-cn'].includes(uLang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(uLang) ? uLang : 'en');
                 const progressLabels = {
                   en: { exec: 'Executing', of: 'of', done: 'BATCH SWAP COMPLETE', success: 'Success', fail: 'Failed' },
@@ -3968,12 +3972,13 @@ function createAiHandlers(deps) {
                 setTimeout(async () => {
                   try {
                     const totalSwaps = totalRemaining + 1; // include already-executed first swap
+                    let progressMsgId = null;
                     for (let i = 0; i < totalRemaining; i++) {
                       const nextSwap = swapQueue[0]; // always take first
                       if (!nextSwap) break;
                       // Send progress
                       if (botRef && chatId) {
-                        try { await botRef.sendMessage(chatId, `⏳ ${pL.exec} swap ${i + 2} / ${totalSwaps}...`, { disable_notification: true }); } catch(_){}
+                        try { const pm = await botRef.sendMessage(chatId, `⏳ ${pL.exec} swap ${i + 2} / ${totalSwaps}...`, { disable_notification: true }); progressMsgId = pm?.message_id; } catch(_){}
                       }
                       // Build context for execute_swap
                       const swapContext = { ...context, userId, chatId, msg, lang: uLang };
@@ -3986,14 +3991,16 @@ function createAiHandlers(deps) {
                         }, swapContext);
                         results.push({ swap: nextSwap, success: true, result: swapResult });
                         log.child('FnCall').info(`Multi-swap ${i+2}/${totalSwaps}: success`);
-                        // Send success message to user (display tx hash, etc.)
+                        // Delete progress msg then show success
+                        if (progressMsgId && botRef && chatId) { try { await botRef.deleteMessage(chatId, progressMsgId); } catch(_){} progressMsgId = null; }
                         if (botRef && chatId && swapResult?.displayMessage) {
                           try { await botRef.sendMessage(chatId, swapResult.displayMessage, { parse_mode: 'HTML', disable_web_page_preview: true }); } catch(_){}
                         }
                       } catch (swapErr) {
                         results.push({ swap: nextSwap, success: false, error: swapErr.message });
                         log.child('FnCall').warn(`Multi-swap ${i+2}/${totalSwaps}: failed:`, swapErr.message);
-                        // Notify user of failure
+                        // Delete progress + notify failure
+                        if (progressMsgId && botRef && chatId) { try { await botRef.deleteMessage(chatId, progressMsgId); } catch(_){} progressMsgId = null; }
                         if (botRef && chatId) {
                           try { await botRef.sendMessage(chatId, `❌ Swap ${i+2}/${totalSwaps} ${pL.fail}: ${swapErr.message}`, { disable_notification: true }); } catch(_){}
                         }
