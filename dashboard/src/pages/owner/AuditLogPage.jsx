@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Shield, Search, Filter, Download, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Shield, Search, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, Calendar, BarChart3 } from 'lucide-react';
 import api from '@/api/client';
 import { exportToCsv } from '@/utils/csvExport';
 
@@ -22,6 +22,9 @@ export default function AuditLogPage() {
     const [filter, setFilter] = useState('all');
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    const [viewMode, setViewMode] = useState('table'); // 'table' | 'timeline'
     const searchTimerRef = useRef(null);
 
     // Debounce search input
@@ -89,6 +92,12 @@ export default function AuditLogPage() {
                     <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-surface-200/50 text-xs transition-all">
                         <Download size={14} /> Export CSV
                     </button>
+                    <button onClick={() => setViewMode(v => v === 'table' ? 'timeline' : 'table')}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs transition-all ${
+                            viewMode === 'timeline' ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30' : 'bg-white/5 hover:bg-white/10 text-surface-200/50'
+                        }`}>
+                        <BarChart3 size={14} /> {viewMode === 'timeline' ? 'Table' : 'Timeline'}
+                    </button>
                 </div>
             </div>
 
@@ -120,7 +129,45 @@ export default function AuditLogPage() {
                         </button>
                     ))}
                 </div>
+
+                {/* Date range filter */}
+                <div className="flex items-center gap-2">
+                    <Calendar size={14} className="text-surface-200/30" />
+                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                        className="input-field !py-1.5 !px-2.5 !text-[11px] !w-auto" />
+                    <span className="text-surface-200/30 text-xs">→</span>
+                    <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                        className="input-field !py-1.5 !px-2.5 !text-[11px] !w-auto" />
+                    {(dateFrom || dateTo) && (
+                        <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-[10px] text-surface-200/30 hover:text-red-400 transition-colors">Clear</button>
+                    )}
+                </div>
             </div>
+
+            {/* Timeline View */}
+            {viewMode === 'timeline' && logs.length > 0 && (
+                <div className="glass-card p-5">
+                    <h3 className="text-xs font-semibold text-surface-200/50 mb-3 uppercase tracking-wider">Activity Timeline</h3>
+                    <div className="space-y-2">
+                        {logs.slice(0, 15).map((log, i) => (
+                            <div key={log.id || i} className="flex items-start gap-3">
+                                <div className="flex flex-col items-center">
+                                    <div className="w-3 h-3 rounded-full bg-brand-500/30 border border-brand-500/50 flex-shrink-0" />
+                                    {i < logs.length - 1 && i < 14 && <div className="w-0.5 h-8 bg-white/5" />}
+                                </div>
+                                <div className="flex-1 pb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm">{ACTION_ICONS[log.action] || ACTION_ICONS.default}</span>
+                                        <span className="text-xs font-medium text-surface-100">{(log.action || '').replace(/_/g, ' ')}</span>
+                                        <span className="text-[10px] text-surface-200/30 ml-auto">{formatDate(log.ts || log.createdAt)}</span>
+                                    </div>
+                                    <p className="text-[11px] text-surface-200/40 mt-0.5">{log.userName || log.userId} — {log.details || '-'}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Table */}
             <div className="card overflow-hidden">
