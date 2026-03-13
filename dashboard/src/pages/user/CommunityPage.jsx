@@ -163,10 +163,8 @@ function CommunityCard({ community, price, priceLoading }) {
         <div className={`group relative overflow-hidden rounded-2xl border ${borderColor} bg-surface-800/60 backdrop-blur-sm transition-all duration-500 hover:shadow-2xl ${glowColor}`}>
             {/* Background gradient overlay */}
             <div className={`absolute inset-0 bg-gradient-to-br ${bgGradient} opacity-50 group-hover:opacity-80 transition-opacity duration-500`} />
-            {/* Animated gradient border top */}
-            <div className={`h-[2px] bg-gradient-to-r ${gradient} opacity-80`} />
 
-            <div className="relative p-6">
+            <div className="relative p-5">
                 {/* ── Top Row: Logo + Name + Price ── */}
                 <div className="flex items-start justify-between gap-4 mb-5">
                     <div className="flex items-center gap-4">
@@ -280,6 +278,14 @@ export default function CommunityPage() {
     const { t } = useTranslation();
     const tokenAddresses = useMemo(() => COMMUNITIES.map(c => c.token), []);
     const { prices, loading: priceLoading } = useTokenPrices(tokenAddresses);
+    const [activeFilter, setActiveFilter] = useState('all');
+
+    const filteredCommunities = useMemo(() => {
+        if (activeFilter === 'all') return COMMUNITIES;
+        if (activeFilter === 'gamefi') return COMMUNITIES.filter(c => c.links.gamefi);
+        if (activeFilter === 'defi') return COMMUNITIES.filter(c => c.links.defi);
+        return COMMUNITIES;
+    }, [activeFilter]);
 
     return (
         <div className="space-y-8 animate-fadeIn">
@@ -321,29 +327,29 @@ export default function CommunityPage() {
                         </div>
                     </div>
 
-                    {/* Stats pills */}
-                    <div className="flex items-center gap-3 mt-7 flex-wrap">
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.06] backdrop-blur-sm">
-                            <Users size={14} className="text-brand-400" />
-                            <span className="text-xs text-surface-200/60">
-                                <span className="text-surface-100 font-bold">{COMMUNITIES.length}</span> Communities
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.06] backdrop-blur-sm">
-                            <Gamepad2 size={14} className="text-purple-400" />
-                            <span className="text-xs text-surface-200/60">
-                                <span className="text-surface-100 font-bold">{COMMUNITIES.filter(c => c.links.gamefi).length}</span> GameFi
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.06] backdrop-blur-sm">
-                            <Landmark size={14} className="text-emerald-400" />
-                            <span className="text-xs text-surface-200/60">
-                                <span className="text-surface-100 font-bold">{COMMUNITIES.filter(c => c.links.defi).length}</span> DeFi
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.06] backdrop-blur-sm">
+                    {/* Filter tabs */}
+                    <div className="flex items-center gap-2 mt-7 flex-wrap">
+                        {[
+                            { id: 'all', icon: Users, label: `${COMMUNITIES.length} All`, color: 'text-brand-400' },
+                            { id: 'gamefi', icon: Gamepad2, label: `${COMMUNITIES.filter(c => c.links.gamefi).length} GameFi`, color: 'text-purple-400' },
+                            { id: 'defi', icon: Landmark, label: `${COMMUNITIES.filter(c => c.links.defi).length} DeFi`, color: 'text-emerald-400' },
+                        ].map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveFilter(tab.id)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-full border backdrop-blur-sm transition-all duration-200 text-xs cursor-pointer ${
+                                    activeFilter === tab.id
+                                        ? 'bg-white/[0.08] border-white/[0.15] text-surface-100 shadow-lg'
+                                        : 'bg-white/[0.03] border-white/[0.06] text-surface-200/50 hover:bg-white/[0.06] hover:border-white/[0.10]'
+                                }`}
+                            >
+                                <tab.icon size={14} className={activeFilter === tab.id ? tab.color : 'text-surface-200/30'} />
+                                <span className={activeFilter === tab.id ? 'font-bold' : 'font-medium'}>{tab.label}</span>
+                            </button>
+                        ))}
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.06] backdrop-blur-sm">
                             <Sparkles size={14} className="text-amber-400" />
-                            <span className="text-xs text-surface-200/60">
+                            <span className="text-xs text-surface-200/50">
                                 <span className="text-surface-100 font-bold">X Layer</span> Chain
                             </span>
                         </div>
@@ -351,9 +357,9 @@ export default function CommunityPage() {
                 </div>
             </div>
 
-            {/* ═══════ Community Cards ═══════ */}
-            <div className="space-y-5">
-                {COMMUNITIES.map((community) => (
+            {/* ═══════ Community Cards — 3 Column Grid ═══════ */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {filteredCommunities.map((community) => (
                     <CommunityCard
                         key={community.token}
                         community={community}
