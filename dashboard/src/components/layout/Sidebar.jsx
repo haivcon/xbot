@@ -111,6 +111,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/trading', icon: BarChart3, label: t('dashboard.sidebar.trading') },
         { to: '/okx-trading', icon: BarChart3, label: t('dashboard.sidebar.okxTrading') || 'OKX Trading' },
         { to: '/leaderboard', icon: Trophy, label: t('dashboard.sidebar.leaderboard') },
+        { to: '/community', icon: Globe, label: 'X Layer Community', highlight: false },
         { to: '/settings', icon: Settings, label: t('dashboard.sidebar.settings') },
     ];
 
