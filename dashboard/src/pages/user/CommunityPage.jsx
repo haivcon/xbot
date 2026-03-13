@@ -151,7 +151,7 @@ function useTokenPrices(tokens) {
     return { prices, loading };
 }
 
-/* ── Token Info Hook (market cap, liquidity, 24h change) ── */
+/* ── Token Info Hook (market cap, liquidity, 24h change, holder count) ── */
 function useTokenInfo(tokens) {
     const [info, setInfo] = useState({});
 
@@ -164,13 +164,24 @@ function useTokenInfo(tokens) {
                 if (!cancelled) {
                     const results = {};
                     const priceInfos = json?.priceInfo || [];
+                    const basicInfos = json?.basicInfo || [];
+
+                    // Index basicInfo by address for holder count lookup
+                    const basicMap = {};
+                    for (const bi of basicInfos) {
+                        const addr = (bi.tokenContractAddress || '').toLowerCase();
+                        basicMap[addr] = bi;
+                    }
+
                     for (const item of priceInfos) {
                         const addr = (item.tokenContractAddress || '').toLowerCase();
+                        const basic = basicMap[addr] || {};
                         results[addr] = {
                             change24h: parseFloat(item.priceChange24H || 0),
                             marketCap: parseFloat(item.marketCap || 0),
                             liquidity: parseFloat(item.liquidity || 0),
                             volume24h: parseFloat(item.volume24H || 0),
+                            holderCount: parseInt(basic.totalHolder || basic.holderCount || basic.holders || 0, 10),
                         };
                     }
                     setInfo(results);
@@ -183,32 +194,6 @@ function useTokenInfo(tokens) {
     }, []);
 
     return info;
-}
-
-/* ── Token Holders Hook ── */
-function useTokenHolders(tokens) {
-    const [holders, setHolders] = useState({});
-
-    useEffect(() => {
-        let cancelled = false;
-        async function fetchHolders() {
-            const results = {};
-            await Promise.allSettled(
-                tokens.map(async (addr) => {
-                    try {
-                        const json = await api.getTokenHolders(XLAYER_CHAIN, addr);
-                        const holderList = json?.data || [];
-                        results[addr.toLowerCase()] = holderList.length || 0;
-                    } catch { /* ignore */ }
-                })
-            );
-            if (!cancelled) setHolders(results);
-        }
-        fetchHolders();
-        return () => { cancelled = true; };
-    }, []);
-
-    return holders;
 }
 
 /* ── Vote/Like System (localStorage) ── */
@@ -271,7 +256,7 @@ function fmtChange(pct) {
 }
 
 /* ── Community Card — Premium Design v2 ── */
-function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, holderCount, votes, isVoted, onVote, t, navigate }) {
+function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, votes, isVoted, onVote, t, navigate }) {
     const [copied, setCopied] = useState(false);
     const [expanded, setExpanded] = useState(false);
     const { name, symbol, token, logo, gradient, bgGradient, borderColor, glowColor, expandedBg, tagline, desc, links, isNew } = community;
@@ -297,8 +282,10 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, h
     const change24h = tokenInfo?.change24h;
     const changeStr = fmtChange(change24h);
 
+    const holderCount = tokenInfo?.holderCount || 0;
+
     return (
-        <div className={`group relative overflow-hidden rounded-2xl border ${borderColor} bg-surface-800/60 backdrop-blur-sm transition-all duration-500 hover:shadow-2xl ${glowColor}`}>
+        <div className={`group relative overflow-hidden rounded-2xl border ${borderColor} bg-surface-800/60 backdrop-blur-sm transition-all duration-500 hover:shadow-2xl ${glowColor} flex flex-col`}>
             {/* Background gradient overlay */}
             <div className={`absolute inset-0 bg-gradient-to-br ${expanded ? expandedBg : bgGradient} transition-opacity duration-500 ${expanded ? 'opacity-80' : 'opacity-50 group-hover:opacity-80'}`} />
 
@@ -314,7 +301,7 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, h
                 </div>
             )}
 
-            <div className="relative p-5">
+            <div className="relative p-5 flex flex-col flex-1">
                 {/* ── Top Row: Logo + Name + Price ── */}
                 <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="flex items-center gap-4">
@@ -367,38 +354,28 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, h
                     </div>
                 </div>
 
-                {/* ── Market Data Pills ── */}
-                {tokenInfo && (
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {tokenInfo.marketCap > 0 && (
-                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
-                                <Star size={9} className="text-amber-400" />
-                                MCap {fmtCompact(tokenInfo.marketCap)}
-                            </span>
-                        )}
-                        {tokenInfo.liquidity > 0 && (
-                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
-                                <Zap size={9} className="text-cyan-400" />
-                                Liq {fmtCompact(tokenInfo.liquidity)}
-                            </span>
-                        )}
-                        {holderCount > 0 && (
-                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
-                                <Users size={9} className="text-purple-400" />
-                                {holderCount} {t('dashboard.community.holders')}
-                            </span>
-                        )}
-                        {tokenInfo.volume24h > 0 && (
-                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
-                                <TrendingUp size={9} className="text-emerald-400" />
-                                Vol {fmtCompact(tokenInfo.volume24h)}
-                            </span>
-                        )}
-                    </div>
-                )}
+                {/* ── Market Data Pills (always 4 pills for consistency) ── */}
+                <div className="flex flex-wrap gap-2 mb-4 min-h-[32px]">
+                    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
+                        <Star size={9} className="text-amber-400" />
+                        MCap {tokenInfo?.marketCap ? fmtCompact(tokenInfo.marketCap) : '—'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
+                        <Zap size={9} className="text-cyan-400" />
+                        Liq {tokenInfo?.liquidity ? fmtCompact(tokenInfo.liquidity) : '—'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
+                        <Users size={9} className="text-purple-400" />
+                        {holderCount > 0 ? holderCount.toLocaleString() : '—'} {t('dashboard.community.holders')}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
+                        <TrendingUp size={9} className="text-emerald-400" />
+                        Vol {tokenInfo?.volume24h ? fmtCompact(tokenInfo.volume24h) : '—'}
+                    </span>
+                </div>
 
-                {/* ── Description ── */}
-                <p className="text-[13px] text-surface-200/45 leading-relaxed mb-4">
+                {/* ── Description (fixed height — 2 lines) ── */}
+                <p className="text-[13px] text-surface-200/45 leading-relaxed mb-4 line-clamp-2 flex-1">
                     {t(`dashboard.community.${desc}`)}
                 </p>
 
@@ -464,7 +441,7 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, h
                 </div>
 
                 {/* ── Bottom Row: Social + Actions ── */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between min-h-[44px] mt-auto">
                     <div className="flex items-center gap-2.5">
                         {links.telegram && (
                             <SocialButton href={links.telegram} icon={TelegramIcon} label="Telegram"
@@ -543,7 +520,6 @@ export default function CommunityPage() {
     const tokenAddresses = useMemo(() => COMMUNITIES.map(c => c.token), []);
     const { prices, loading: priceLoading } = useTokenPrices(tokenAddresses);
     const tokenInfo = useTokenInfo(tokenAddresses);
-    const holderCounts = useTokenHolders(tokenAddresses);
     const { votes, voted, toggleVote } = useVotes();
     const [activeFilter, setActiveFilter] = useState('all');
 
@@ -625,7 +601,7 @@ export default function CommunityPage() {
             </div>
 
             {/* ═══════ Community Cards — 3 Column Grid ═══════ */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 items-stretch">
                 {filteredCommunities.map((community) => (
                     <CommunityCard
                         key={community.token}
@@ -633,7 +609,6 @@ export default function CommunityPage() {
                         price={prices[community.token.toLowerCase()]}
                         priceLoading={priceLoading}
                         tokenInfo={tokenInfo[community.token.toLowerCase()]}
-                        holderCount={holderCounts[community.token.toLowerCase()]}
                         votes={votes[community.token.toLowerCase()] || 0}
                         isVoted={!!voted[community.token.toLowerCase()]}
                         onVote={toggleVote}
