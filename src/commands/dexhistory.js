@@ -1,8 +1,8 @@
-const onchainos = require('../../services/onchainos');
+const onchainos = require('../services/onchainos');
 const { enforceBanForMessage, enforceOwnerCommandLimit } = require('../features/auth/utils');
 const { getLang, t } = require('../../i18n');
 const { sendReply } = require('../utils/chat');
-const db = require('../../../db');
+const db = require('../../db');
 
 module.exports = {
     command: /^\/dexhistory(?:@[\w_]+)?(?:\s+(.+))?$/,

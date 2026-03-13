@@ -1,4 +1,4 @@
-const onchainos = require('../../services/onchainos');
+const onchainos = require('../services/onchainos');
 const { enforceBanForMessage, enforceOwnerCommandLimit } = require('../features/auth/utils');
 const { getLang, t } = require('../../i18n');
 const { sendReply } = require('../utils/chat');

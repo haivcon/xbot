@@ -174,6 +174,254 @@ function registerCoreCommands(deps = {}) {
         await handleTopTokenCommand(msg);
     });
 
+    // ── On-chain analysis commands ──────────────────
+    const onchainos = require('../services/onchainos');
+    const _db = require('../../db');
+
+    bot.onText(/^\/meme(?:@[\w_]+)?(?:\s+(.+))?$/, async (msg, match) => {
+        if (await enforceBanForMessage(msg)) return;
+        if (await enforceOwnerCommandLimit(msg, 'meme')) return;
+        const lang = await getLang(msg);
+        const input = match?.[1]?.trim();
+        const chainIndex = '501';
+        try {
+            if (input && (input.length > 20 || input.startsWith('0x'))) {
+                await sendReply(msg, t(lang, 'meme_loading_detail'));
+                const [detail, devInfo] = await Promise.all([
+                    onchainos.getMemePumpTokenDetails(chainIndex, input).catch(() => null),
+                    onchainos.getMemePumpDevInfo(chainIndex, input).catch(() => null)
+                ]);
+                if (!detail) return sendReply(msg, t(lang, 'meme_not_found'), { parse_mode: 'HTML' });
+                const d = Array.isArray(detail) ? detail[0] : detail;
+                const dev = devInfo ? (Array.isArray(devInfo) ? devInfo[0] : devInfo) : null;
+                const sym = d.tokenSymbol || '?';
+                const name = d.tokenName || sym;
+                const mcap = Number(d.marketCap || 0);
+                const price = Number(d.price || 0);
+                const holders = d.holderCount || d.holders || '?';
+                const progress = d.progress ? (Number(d.progress) * 100).toFixed(1) + '%' : 'N/A';
+                const creator = d.creatorAddress || d.devAddress || '?';
+                const mcapStr = mcap > 1e6 ? '$' + (mcap / 1e6).toFixed(2) + 'M' : '$' + mcap.toFixed(0);
+                const pStr = price < 0.0001 ? price.toFixed(10) : price < 0.01 ? price.toFixed(8) : price.toFixed(6);
+                let card = `🎯 <b>${sym}</b> — ${name}\n━━━━━━━━━━━━━━━━━━\n`;
+                card += `💰 ${t(lang, 'meme_price')}: <code>$${pStr}</code>\n`;
+                card += `📊 ${t(lang, 'meme_mcap')}: ${mcapStr}\n`;
+                card += `👥 ${t(lang, 'meme_holders')}: ${holders}\n`;
+                card += `⏳ ${t(lang, 'meme_progress')}: ${progress}\n`;
+                card += `👨‍💻 Dev: <code>${creator.slice(0, 8)}...${creator.slice(-4)}</code>\n`;
+                if (dev) {
+                    const rugs = dev.rugPullCount || dev.rugs || 0;
+                    const total = dev.totalTokensCreated || dev.tokenCount || 0;
+                    const riskIcon = rugs > 3 ? '🔴' : rugs > 0 ? '🟡' : '🟢';
+                    card += `\n${riskIcon} <b>${t(lang, 'meme_dev_stats')}</b>: ${total} ${t(lang, 'meme_created')}, ⚠️ ${rugs} rug(s)\n`;
+                }
+                if (d.description) card += `\n📝 <i>${d.description.slice(0, 200)}</i>\n`;
+                return sendReply(msg, card, { parse_mode: 'HTML', disable_web_page_preview: true });
+            }
+            await sendReply(msg, t(lang, 'meme_loading'));
+            const data = await onchainos.getMemePumpTokenList(chainIndex, 'MIGRATED', { sortBy: 'marketCap', limit: '15' });
+            if (!data || !Array.isArray(data) || data.length === 0) return sendReply(msg, t(lang, 'meme_empty'), { parse_mode: 'HTML' });
+            let card = `🚀 <b>${t(lang, 'meme_title')}</b> (Solana/PumpFun)\n📊 ${t(lang, 'meme_stage')}: MIGRATED | ${data.length} tokens\n━━━━━━━━━━━━━━━━━━\n\n`;
+            data.slice(0, 15).forEach((tok, i) => {
+                const sym = tok.tokenSymbol || '?';
+                const mcap = Number(tok.marketCap || 0);
+                const vol = Number(tok.volume24h || tok.volumeUsd || 0);
+                const holders = tok.holderCount || tok.holders || '?';
+                const mcapStr = mcap > 1e6 ? '$' + (mcap / 1e6).toFixed(2) + 'M' : mcap > 1e3 ? '$' + (mcap / 1e3).toFixed(1) + 'K' : '$' + mcap.toFixed(0);
+                const volStr = vol > 1e6 ? '$' + (vol / 1e6).toFixed(2) + 'M' : vol > 1e3 ? '$' + (vol / 1e3).toFixed(1) + 'K' : '$' + vol.toFixed(0);
+                card += `${i + 1}. <b>${sym}</b>\n   💰 MCap: ${mcapStr} | 📊 Vol: ${volStr} | 👥 ${holders}\n\n`;
+            });
+            card += `\n💡 <i>${t(lang, 'meme_hint')}</i>`;
+            return sendReply(msg, card, { parse_mode: 'HTML', disable_web_page_preview: true });
+        } catch (error) {
+            return sendReply(msg, `❌ ${t(lang, 'meme_error')}: ${error.message}`, { parse_mode: 'HTML' });
+        }
+    });
+
+    bot.onText(/^\/pnl(?:@[\w_]+)?(?:\s+(.+))?$/, async (msg, match) => {
+        if (await enforceBanForMessage(msg)) return;
+        if (await enforceOwnerCommandLimit(msg, 'pnl')) return;
+        const lang = await getLang(msg);
+        const input = match?.[1]?.trim();
+        const userId = String(msg.from?.id);
+        try {
+            let walletAddress = input;
+            let chainIndex = '1';
+            if (!walletAddress) {
+                const wallets = await _db.getWalletsForUser(userId);
+                if (!wallets || wallets.length === 0) return sendReply(msg, t(lang, 'pnl_no_wallet'), { parse_mode: 'HTML' });
+                walletAddress = wallets[0].address || wallets[0].wallet;
+            }
+            if (walletAddress.length > 32 && !walletAddress.startsWith('0x')) chainIndex = '501';
+            await sendReply(msg, t(lang, 'pnl_loading'));
+            const [overview, recentPnl] = await Promise.all([
+                onchainos.getPortfolioOverview(chainIndex, walletAddress, '3').catch(() => null),
+                onchainos.getRecentPnl(chainIndex, walletAddress, { limit: '10' }).catch(() => null)
+            ]);
+            if (!overview && !recentPnl) return sendReply(msg, t(lang, 'pnl_no_data'), { parse_mode: 'HTML' });
+            let card = `📊 <b>${t(lang, 'pnl_title')}</b> (7D)\n━━━━━━━━━━━━━━━━━━\n`;
+            card += `👛 <code>${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)}</code>\n\n`;
+            if (overview) {
+                const o = Array.isArray(overview) ? overview[0] : overview;
+                const pnl = Number(o.totalPnl || o.pnl || 0);
+                const winRate = Number(o.winRate || 0);
+                const trades = Number(o.totalTradeCount || o.txCount || 0);
+                const pnlIcon = pnl >= 0 ? '🟢' : '🔴';
+                const pnlStr = pnl >= 0 ? '+$' + pnl.toFixed(2) : '-$' + Math.abs(pnl).toFixed(2);
+                card += `${pnlIcon} PnL: <b>${pnlStr}</b>\n🎯 Win Rate: <b>${(winRate * 100).toFixed(1)}%</b>\n📈 Trades: <b>${trades}</b>\n\n`;
+            }
+            if (recentPnl && Array.isArray(recentPnl) && recentPnl.length > 0) {
+                card += `📋 <b>${t(lang, 'pnl_recent')}</b>:\n`;
+                recentPnl.slice(0, 10).forEach((tok, i) => {
+                    const sym = tok.tokenSymbol || '?';
+                    const p = Number(tok.pnl || tok.realizedPnl || 0);
+                    const icon = p >= 0 ? '🟢' : '🔴';
+                    card += `  ${i + 1}. ${icon} <b>${sym}</b>: ${p >= 0 ? '+' : ''}$${p.toFixed(2)}\n`;
+                });
+            }
+            card += `\n💡 <i>${t(lang, 'pnl_hint')}</i>`;
+            return sendReply(msg, card, { parse_mode: 'HTML', disable_web_page_preview: true });
+        } catch (error) {
+            return sendReply(msg, `❌ ${t(lang, 'pnl_error')}: ${error.message}`, { parse_mode: 'HTML' });
+        }
+    });
+
+    bot.onText(/^\/dexhistory(?:@[\w_]+)?(?:\s+(.+))?$/, async (msg, match) => {
+        if (await enforceBanForMessage(msg)) return;
+        if (await enforceOwnerCommandLimit(msg, 'dexhistory')) return;
+        const lang = await getLang(msg);
+        const input = match?.[1]?.trim();
+        const userId = String(msg.from?.id);
+        try {
+            let walletAddress = input;
+            let chainIndex = '1';
+            if (!walletAddress) {
+                const wallets = await _db.getWalletsForUser(userId);
+                if (!wallets || wallets.length === 0) return sendReply(msg, t(lang, 'dex_no_wallet'), { parse_mode: 'HTML' });
+                walletAddress = wallets[0].address || wallets[0].wallet;
+            }
+            if (walletAddress.length > 32 && !walletAddress.startsWith('0x')) chainIndex = '501';
+            await sendReply(msg, t(lang, 'dex_loading'));
+            const now = Date.now();
+            const begin = String(now - 30 * 24 * 60 * 60 * 1000);
+            const end = String(now);
+            const data = await onchainos.getDexHistory(chainIndex, walletAddress, begin, end, { limit: '15' });
+            if (!data || (Array.isArray(data) && data.length === 0)) return sendReply(msg, t(lang, 'dex_no_data'), { parse_mode: 'HTML' });
+            const items = Array.isArray(data) ? data : [data];
+            const typeLabels = { '1': '🟢 BUY', '2': '🔴 SELL', '3': '📥 IN', '4': '📤 OUT' };
+            let card = `📜 <b>${t(lang, 'dex_title')}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+            card += `👛 <code>${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)}</code>\n\n`;
+            items.slice(0, 15).forEach((tx, i) => {
+                const type = typeLabels[tx.type] || tx.type || '?';
+                const sym = tx.tokenSymbol || '?';
+                const value = Number(tx.valueUsd || tx.usdValue || 0);
+                const time = tx.time ? new Date(Number(tx.time)).toLocaleString('en-US', { hour12: false, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                card += `${i + 1}. ${type} <b>${sym}</b>: $${value.toFixed(2)}`;
+                if (time) card += ` | 🕐 ${time}`;
+                card += '\n';
+            });
+            return sendReply(msg, card, { parse_mode: 'HTML', disable_web_page_preview: true });
+        } catch (error) {
+            return sendReply(msg, `❌ ${t(lang, 'dex_error')}: ${error.message}`, { parse_mode: 'HTML' });
+        }
+    });
+
+    bot.onText(/^\/tx(?:history)?(?:@[\w_]+)?(?:\s+(.+))?$/, async (msg, match) => {
+        if (await enforceBanForMessage(msg)) return;
+        if (await enforceOwnerCommandLimit(msg, 'txhistory')) return;
+        const lang = await getLang(msg);
+        const input = match?.[1]?.trim();
+        const userId = String(msg.from?.id);
+        try {
+            if (input && input.length >= 64) {
+                await sendReply(msg, t(lang, 'tx_loading_detail'));
+                const chainIndex = input.startsWith('0x') ? '1' : '501';
+                const data = await onchainos.getTransactionDetail(chainIndex, input);
+                if (!data) return sendReply(msg, t(lang, 'tx_not_found'), { parse_mode: 'HTML' });
+                const d = Array.isArray(data) ? data[0] : data;
+                const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana' };
+                let card = `🔍 <b>${t(lang, 'tx_detail_title')}</b>\n━━━━━━━━━━━━━━━━━━\n\n`;
+                card += `⛓ ${chainNames[chainIndex] || 'Chain #' + chainIndex}\n`;
+                card += `🔗 <code>${input.slice(0, 16)}...${input.slice(-8)}</code>\n`;
+                if (d.from) card += `📤 From: <code>${d.from.slice(0, 10)}...${d.from.slice(-4)}</code>\n`;
+                if (d.to) card += `📥 To: <code>${d.to.slice(0, 10)}...${d.to.slice(-4)}</code>\n`;
+                if (d.amount || d.value) card += `💰 Value: ${d.amount || d.value}\n`;
+                if (d.txFee) card += `💸 Fee: ${d.txFee}\n`;
+                if (d.state !== undefined) card += `✅ Status: ${d.state === '1' || d.state === 'success' ? '✅ Success' : '❌ Failed'}\n`;
+                if (d.methodLabel) card += `📋 Method: ${d.methodLabel}\n`;
+                if (d.tokenTransferDetails && d.tokenTransferDetails.length > 0) {
+                    card += `\n📦 ${t(lang, 'tx_transfers')}:\n`;
+                    d.tokenTransferDetails.slice(0, 5).forEach(tr => {
+                        card += `  • ${Number(tr.amount || 0).toLocaleString('en-US', { maximumFractionDigits: 4 })} ${tr.symbol || '?'}\n`;
+                    });
+                }
+                return sendReply(msg, card, { parse_mode: 'HTML', disable_web_page_preview: true });
+            }
+            let address = input;
+            if (!address) {
+                const wallets = await _db.getWalletsForUser(userId);
+                if (!wallets || wallets.length === 0) return sendReply(msg, t(lang, 'tx_no_wallet'), { parse_mode: 'HTML' });
+                address = wallets[0].address || wallets[0].wallet;
+            }
+            await sendReply(msg, t(lang, 'tx_loading'));
+            const chains = address.startsWith('0x') ? '1,56,196,137' : '501';
+            const data = await onchainos.getTransactionHistory(address, { chains, limit: '10' });
+            if (!data || (Array.isArray(data) && data.length === 0)) return sendReply(msg, t(lang, 'tx_no_data'), { parse_mode: 'HTML' });
+            const items = Array.isArray(data) ? data : [data];
+            let card = `📜 <b>${t(lang, 'tx_title')}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+            card += `👛 <code>${address.slice(0, 8)}...${address.slice(-4)}</code>\n\n`;
+            items.slice(0, 10).forEach((tx, i) => {
+                const method = tx.methodLabel || tx.method || tx.txType || 'Transfer';
+                const hash = tx.txHash || tx.txhash || '?';
+                const time = tx.transactionTime ? new Date(Number(tx.transactionTime)).toLocaleString('en-US', { hour12: false, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                card += `${i + 1}. <b>${method}</b>\n   🔗 <code>${hash.slice(0, 12)}...</code>`;
+                if (time) card += ` | 🕐 ${time}`;
+                card += '\n';
+            });
+            card += `\n💡 <i>${t(lang, 'tx_hint')}</i>`;
+            return sendReply(msg, card, { parse_mode: 'HTML', disable_web_page_preview: true });
+        } catch (error) {
+            return sendReply(msg, `❌ ${t(lang, 'tx_error')}: ${error.message}`, { parse_mode: 'HTML' });
+        }
+    });
+
+    bot.onText(/^\/(trending|topvolume|topmcap)(?:@[\w_]+)?$/, async (msg, match) => {
+        if (await enforceBanForMessage(msg)) return;
+        if (await enforceOwnerCommandLimit(msg, 'trending')) return;
+        const lang = await getLang(msg);
+        const subCmd = match?.[1] || 'trending';
+        const sortMap = {
+            'trending': { sortBy: '2', label: '🔥 Top Gainers', timeFrame: '4' },
+            'topvolume': { sortBy: '3', label: '📊 Top Volume', timeFrame: '4' },
+            'topmcap': { sortBy: '5', label: '💎 Top Market Cap', timeFrame: '4' }
+        };
+        const config = sortMap[subCmd] || sortMap.trending;
+        try {
+            await sendReply(msg, t(lang, 'trending_loading'));
+            const chains = '501';
+            const data = await onchainos.getTokenTopList(chains, config.sortBy, config.timeFrame);
+            if (!data || !Array.isArray(data) || data.length === 0) return sendReply(msg, t(lang, 'trending_empty'), { parse_mode: 'HTML' });
+            let card = `${config.label} <b>(24H)</b>\n━━━━━━━━━━━━━━━━━━\n\n`;
+            data.slice(0, 15).forEach((tok, i) => {
+                const sym = tok.tokenSymbol || '?';
+                const price = Number(tok.price || 0);
+                const change = Number(tok.priceChangePercent24H || tok.change24h || 0);
+                const vol = Number(tok.volume24H || tok.volume || 0);
+                const mcap = Number(tok.marketCap || 0);
+                const pStr = price < 0.01 ? price.toFixed(8) : price.toFixed(4);
+                const changeIcon = change >= 0 ? '🟢' : '🔴';
+                const changeStr = change >= 0 ? '+' + change.toFixed(2) + '%' : change.toFixed(2) + '%';
+                const volStr = vol > 1e6 ? '$' + (vol / 1e6).toFixed(2) + 'M' : vol > 1e3 ? '$' + (vol / 1e3).toFixed(1) + 'K' : '$' + vol.toFixed(0);
+                const mcapStr = mcap > 1e9 ? '$' + (mcap / 1e9).toFixed(2) + 'B' : mcap > 1e6 ? '$' + (mcap / 1e6).toFixed(2) + 'M' : mcap > 1e3 ? '$' + (mcap / 1e3).toFixed(1) + 'K' : '$' + mcap.toFixed(0);
+                card += `${i + 1}. <b>${sym}</b> $${pStr} ${changeIcon} ${changeStr}\n   Vol: ${volStr} | MCap: ${mcapStr}\n\n`;
+            });
+            card += `\n💡 <i>${t(lang, 'trending_hint')}</i>`;
+            return sendReply(msg, card, { parse_mode: 'HTML', disable_web_page_preview: true });
+        } catch (error) {
+            return sendReply(msg, `❌ ${t(lang, 'trending_error')}: ${error.message}`, { parse_mode: 'HTML' });
+        }
+    });
+
     bot.onText(/^\/contract(?:@[\w_]+)?(?:\s+(.+))?$/, async (msg, match) => {
         if (await enforceBanForMessage(msg)) {
             return;
