@@ -401,6 +401,62 @@ function createHelpExecutors(deps) {
             }
             return { message: t(lang, 'welcome_admin_menu_opening') };
         },
+        meme: async (query, lang) => {
+            const synthetic = buildSyntheticCommandMessage(query);
+            synthetic.text = '/meme';
+            synthetic.entities = [{ type: 'bot_command', offset: 0, length: 5 }];
+            trackCommand('meme', query, synthetic);
+            bot.processUpdate({ update_id: Date.now(), message: synthetic });
+            return { message: t(lang, 'help_action_executed') };
+        },
+        pnl: async (query, lang) => {
+            const synthetic = buildSyntheticCommandMessage(query);
+            synthetic.text = '/pnl';
+            synthetic.entities = [{ type: 'bot_command', offset: 0, length: 4 }];
+            trackCommand('pnl', query, synthetic);
+            bot.processUpdate({ update_id: Date.now(), message: synthetic });
+            return { message: t(lang, 'help_action_executed') };
+        },
+        dexhistory: async (query, lang) => {
+            const synthetic = buildSyntheticCommandMessage(query);
+            synthetic.text = '/dexhistory';
+            synthetic.entities = [{ type: 'bot_command', offset: 0, length: 11 }];
+            trackCommand('dexhistory', query, synthetic);
+            bot.processUpdate({ update_id: Date.now(), message: synthetic });
+            return { message: t(lang, 'help_action_executed') };
+        },
+        txhistory: async (query, lang) => {
+            const synthetic = buildSyntheticCommandMessage(query);
+            synthetic.text = '/txhistory';
+            synthetic.entities = [{ type: 'bot_command', offset: 0, length: 10 }];
+            trackCommand('txhistory', query, synthetic);
+            bot.processUpdate({ update_id: Date.now(), message: synthetic });
+            return { message: t(lang, 'help_action_executed') };
+        },
+        trending: async (query, lang) => {
+            const synthetic = buildSyntheticCommandMessage(query);
+            synthetic.text = '/trending';
+            synthetic.entities = [{ type: 'bot_command', offset: 0, length: 9 }];
+            trackCommand('trending', query, synthetic);
+            bot.processUpdate({ update_id: Date.now(), message: synthetic });
+            return { message: t(lang, 'help_action_executed') };
+        },
+        topvolume: async (query, lang) => {
+            const synthetic = buildSyntheticCommandMessage(query);
+            synthetic.text = '/topvolume';
+            synthetic.entities = [{ type: 'bot_command', offset: 0, length: 10 }];
+            trackCommand('topvolume', query, synthetic);
+            bot.processUpdate({ update_id: Date.now(), message: synthetic });
+            return { message: t(lang, 'help_action_executed') };
+        },
+        topmcap: async (query, lang) => {
+            const synthetic = buildSyntheticCommandMessage(query);
+            synthetic.text = '/topmcap';
+            synthetic.entities = [{ type: 'bot_command', offset: 0, length: 8 }];
+            trackCommand('topmcap', query, synthetic);
+            bot.processUpdate({ update_id: Date.now(), message: synthetic });
+            return { message: t(lang, 'help_action_executed') };
+        },
         admin: buildAdminDetailExecutor('admin'),
         admin_ban: buildAdminDetailExecutor('admin_ban'),
         admin_kick: buildAdminDetailExecutor('admin_kick'),
