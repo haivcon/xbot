@@ -1,10 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, Globe, Gamepad2, Landmark, Users, UserPlus, TrendingUp, TrendingDown, Copy, Check, ChevronRight, Sparkles, ArrowUpRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+    ExternalLink, Globe, Gamepad2, Landmark, Users, UserPlus,
+    TrendingUp, TrendingDown, Copy, Check, ChevronRight, ChevronDown, ChevronUp,
+    Sparkles, ArrowUpRight, Heart, ShoppingCart, Star, Zap
+} from 'lucide-react';
 import api from '@/api/client';
 
 /* ═══════════════════════════════════════════════════
-   X Layer Community Ecosystem — Premium Design
+   X Layer Community Ecosystem — Premium Design v2
    ═══════════════════════════════════════════════════ */
 
 const XLAYER_CHAIN = '196';
@@ -15,14 +20,17 @@ const COMMUNITIES = [
         name: 'Banmao',
         symbol: 'BANMAO',
         token: '0x16d91d1615fc55b76d5f92365bd60c069b46ef78',
-        emoji: '🐱',
+        logo: '/logos/banmao.png',
         color: '#f59e0b',
         gradient: 'from-amber-500 via-orange-500 to-yellow-400',
         bgGradient: 'from-amber-500/10 via-orange-500/5 to-transparent',
         borderColor: 'border-amber-500/20 hover:border-amber-400/40',
         glowColor: 'hover:shadow-amber-500/15',
+        expandedBg: 'from-amber-500/15 via-orange-500/8 to-transparent',
         tagline: 'banmaoTagline',
         desc: 'banmaoDesc',
+        isNew: false,
+        addedDate: '2024-01-01',
         links: {
             telegram: 'https://t.me/banmao_X',
             twitter: 'https://x.com/banmao_X',
@@ -35,14 +43,17 @@ const COMMUNITIES = [
         name: 'Niuma',
         symbol: 'NIUMA',
         token: '0x87669801a1fad6dad9db70d27ac752f452989667',
-        emoji: '🐂',
+        logo: '/logos/niuma.png',
         color: '#ef4444',
         gradient: 'from-red-500 via-rose-500 to-pink-400',
         bgGradient: 'from-red-500/10 via-rose-500/5 to-transparent',
         borderColor: 'border-red-500/20 hover:border-red-400/40',
         glowColor: 'hover:shadow-red-500/15',
+        expandedBg: 'from-red-500/15 via-rose-500/8 to-transparent',
         tagline: 'niumaTagline',
         desc: 'niumaDesc',
+        isNew: false,
+        addedDate: '2024-01-01',
         links: {
             telegram: 'https://t.me/NIUMANEW',
             twitter: 'https://x.com/NIUMA_Xlayer',
@@ -53,14 +64,17 @@ const COMMUNITIES = [
         name: 'Xwizard',
         symbol: 'XWIZARD',
         token: '0xdcc83b32b6b4e95a61951bfcc9d71967515c0fca',
-        emoji: '🧙',
+        logo: '/logos/xwizard.png',
         color: '#8b5cf6',
         gradient: 'from-purple-500 via-violet-500 to-indigo-400',
         bgGradient: 'from-purple-500/10 via-violet-500/5 to-transparent',
         borderColor: 'border-purple-500/20 hover:border-purple-400/40',
         glowColor: 'hover:shadow-purple-500/15',
+        expandedBg: 'from-purple-500/15 via-violet-500/8 to-transparent',
         tagline: 'xwizardTagline',
         desc: 'xwizardDesc',
+        isNew: true,
+        addedDate: '2025-12-01',
         links: {
             telegram: 'https://t.me/okx_xwizard',
             twitter: 'https://x.com/xwizard_cto',
@@ -98,7 +112,6 @@ function SocialButton({ href, icon: Icon, label, bg, hoverBg }) {
             className={`group/social relative w-10 h-10 rounded-xl ${bg} flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg ${hoverBg}`}
         >
             <Icon size={16} />
-            {/* Tooltip */}
             <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 text-[9px] font-medium text-surface-200/50 opacity-0 group-hover/social:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
                 {label}
             </span>
@@ -138,28 +151,142 @@ function useTokenPrices(tokens) {
     return { prices, loading };
 }
 
-/* ── Format Price — 4 significant digits, truncated (no rounding) ── */
+/* ── Token Info Hook (market cap, liquidity, 24h change) ── */
+function useTokenInfo(tokens) {
+    const [info, setInfo] = useState({});
+
+    useEffect(() => {
+        let cancelled = false;
+        async function fetchInfo() {
+            try {
+                const body = tokens.map(addr => ({ chainIndex: XLAYER_CHAIN, tokenContractAddress: addr }));
+                const json = await api.getTokenInfo(body);
+                if (!cancelled) {
+                    const results = {};
+                    const priceInfos = json?.priceInfo || [];
+                    for (const item of priceInfos) {
+                        const addr = (item.tokenContractAddress || '').toLowerCase();
+                        results[addr] = {
+                            change24h: parseFloat(item.priceChange24H || 0),
+                            marketCap: parseFloat(item.marketCap || 0),
+                            liquidity: parseFloat(item.liquidity || 0),
+                            volume24h: parseFloat(item.volume24H || 0),
+                        };
+                    }
+                    setInfo(results);
+                }
+            } catch { /* ignore */ }
+        }
+        fetchInfo();
+        const interval = setInterval(fetchInfo, 60000);
+        return () => { cancelled = true; clearInterval(interval); };
+    }, []);
+
+    return info;
+}
+
+/* ── Token Holders Hook ── */
+function useTokenHolders(tokens) {
+    const [holders, setHolders] = useState({});
+
+    useEffect(() => {
+        let cancelled = false;
+        async function fetchHolders() {
+            const results = {};
+            await Promise.allSettled(
+                tokens.map(async (addr) => {
+                    try {
+                        const json = await api.getTokenHolders(XLAYER_CHAIN, addr);
+                        const holderList = json?.data || [];
+                        results[addr.toLowerCase()] = holderList.length || 0;
+                    } catch { /* ignore */ }
+                })
+            );
+            if (!cancelled) setHolders(results);
+        }
+        fetchHolders();
+        return () => { cancelled = true; };
+    }, []);
+
+    return holders;
+}
+
+/* ── Vote/Like System (localStorage) ── */
+function useVotes() {
+    const [votes, setVotes] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('community_votes') || '{}'); }
+        catch { return {}; }
+    });
+    const [voted, setVoted] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('community_voted') || '{}'); }
+        catch { return {}; }
+    });
+
+    const toggleVote = useCallback((tokenAddr) => {
+        const addr = tokenAddr.toLowerCase();
+        setVotes(prev => {
+            const next = { ...prev };
+            const isVoted = voted[addr];
+            next[addr] = (next[addr] || 0) + (isVoted ? -1 : 1);
+            if (next[addr] < 0) next[addr] = 0;
+            localStorage.setItem('community_votes', JSON.stringify(next));
+            return next;
+        });
+        setVoted(prev => {
+            const next = { ...prev, [addr]: !prev[addr] };
+            localStorage.setItem('community_voted', JSON.stringify(next));
+            return next;
+        });
+    }, [voted]);
+
+    return { votes, voted, toggleVote };
+}
+
+/* ── Format Helpers ── */
 function fmtPrice(p) {
     if (!p) return '—';
     if (p < 1) {
-        // Convert to string with max precision, then truncate to 4 significant digits
         const s = p.toFixed(18);
-        // Find first non-zero digit after "0."
         const match = s.match(/^0\.(0*)/);
         const leadingZeros = match ? match[1].length : 0;
-        // Truncate: keep leading zeros + 4 significant digits
         const truncated = s.slice(0, 2 + leadingZeros + 4);
         return `$${truncated}`;
     }
-    // For >= $1, truncate to 2 decimal places (no rounding)
     const floored = Math.floor(p * 100) / 100;
     return `$${floored.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/* ── Community Card — Premium Design ── */
-function CommunityCard({ community, price, priceLoading, t }) {
+function fmtCompact(n) {
+    if (!n || n === 0) return '—';
+    if (n >= 1e9) return `$${(Math.floor(n / 1e7) / 100).toFixed(2)}B`;
+    if (n >= 1e6) return `$${(Math.floor(n / 1e4) / 100).toFixed(2)}M`;
+    if (n >= 1e3) return `$${(Math.floor(n / 10) / 100).toFixed(2)}K`;
+    return `$${Math.floor(n * 100) / 100}`;
+}
+
+function fmtChange(pct) {
+    if (pct === null || pct === undefined || isNaN(pct)) return null;
+    const val = (Math.floor(Math.abs(pct) * 100) / 100).toFixed(2);
+    return pct >= 0 ? `+${val}%` : `-${val}%`;
+}
+
+/* ── Community Card — Premium Design v2 ── */
+function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, holderCount, votes, isVoted, onVote, t, navigate }) {
     const [copied, setCopied] = useState(false);
-    const { name, symbol, token, emoji, gradient, bgGradient, borderColor, glowColor, tagline, desc, links } = community;
+    const [expanded, setExpanded] = useState(false);
+    const { name, symbol, token, logo, gradient, bgGradient, borderColor, glowColor, expandedBg, tagline, desc, links, isNew } = community;
+
+    // Price flash animation
+    const [priceFlash, setPriceFlash] = useState('');
+    const prevPriceRef = useRef(price);
+    useEffect(() => {
+        if (prevPriceRef.current && price && prevPriceRef.current !== price) {
+            setPriceFlash(price > prevPriceRef.current ? 'flash-green' : 'flash-red');
+            const tm = setTimeout(() => setPriceFlash(''), 1200);
+            return () => clearTimeout(tm);
+        }
+        prevPriceRef.current = price;
+    }, [price]);
 
     const copyAddress = () => {
         navigator.clipboard.writeText(token);
@@ -167,19 +294,33 @@ function CommunityCard({ community, price, priceLoading, t }) {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const change24h = tokenInfo?.change24h;
+    const changeStr = fmtChange(change24h);
+
     return (
         <div className={`group relative overflow-hidden rounded-2xl border ${borderColor} bg-surface-800/60 backdrop-blur-sm transition-all duration-500 hover:shadow-2xl ${glowColor}`}>
             {/* Background gradient overlay */}
-            <div className={`absolute inset-0 bg-gradient-to-br ${bgGradient} opacity-50 group-hover:opacity-80 transition-opacity duration-500`} />
+            <div className={`absolute inset-0 bg-gradient-to-br ${expanded ? expandedBg : bgGradient} transition-opacity duration-500 ${expanded ? 'opacity-80' : 'opacity-50 group-hover:opacity-80'}`} />
+
+            {/* NEW badge */}
+            {isNew && (
+                <div className="absolute top-3 right-3 z-10">
+                    <span className="relative flex h-5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-30" />
+                        <span className="relative inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[9px] font-bold text-emerald-400 uppercase tracking-wider">
+                            NEW
+                        </span>
+                    </span>
+                </div>
+            )}
 
             <div className="relative p-5">
                 {/* ── Top Row: Logo + Name + Price ── */}
-                <div className="flex items-start justify-between gap-4 mb-5">
+                <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="flex items-center gap-4">
-                        {/* Animated logo */}
-                        <div className={`relative w-14 h-14 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-3xl shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
-                            {emoji}
-                            {/* Pulse ring */}
+                        {/* Real token logo */}
+                        <div className={`relative w-14 h-14 rounded-2xl bg-gradient-to-br ${gradient} p-0.5 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
+                            <img src={logo} alt={name} className="w-full h-full rounded-[14px] object-cover" />
                             <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-30 animate-ping`} style={{ animationDuration: '2s' }} />
                         </div>
                         <div>
@@ -190,7 +331,7 @@ function CommunityCard({ community, price, priceLoading, t }) {
                         </div>
                     </div>
 
-                    {/* Price Section */}
+                    {/* Price Section with animated ticker */}
                     <div className="text-right flex-shrink-0">
                         {priceLoading ? (
                             <div className="space-y-1.5">
@@ -200,29 +341,69 @@ function CommunityCard({ community, price, priceLoading, t }) {
                         ) : (
                             <>
                                 <div className="flex items-baseline gap-1 justify-end">
-                                    <span className="text-xl font-bold text-surface-100 tabular-nums tracking-tight">
+                                    <span className={`text-xl font-bold text-surface-100 tabular-nums tracking-tight transition-colors duration-500 ${
+                                        priceFlash === 'flash-green' ? '!text-emerald-400' : priceFlash === 'flash-red' ? '!text-red-400' : ''
+                                    }`}>
                                         {fmtPrice(price)}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-1 justify-end mt-0.5">
+                                <div className="flex items-center gap-1.5 justify-end mt-0.5">
                                     <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
                                         price ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-surface-200/30'
                                     }`}>
                                         ${symbol}
                                     </span>
+                                    {changeStr && (
+                                        <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                                            change24h >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                                        }`}>
+                                            {change24h >= 0 ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
+                                            {changeStr}
+                                        </span>
+                                    )}
                                 </div>
                             </>
                         )}
                     </div>
                 </div>
 
+                {/* ── Market Data Pills ── */}
+                {tokenInfo && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {tokenInfo.marketCap > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
+                                <Star size={9} className="text-amber-400" />
+                                MCap {fmtCompact(tokenInfo.marketCap)}
+                            </span>
+                        )}
+                        {tokenInfo.liquidity > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
+                                <Zap size={9} className="text-cyan-400" />
+                                Liq {fmtCompact(tokenInfo.liquidity)}
+                            </span>
+                        )}
+                        {holderCount > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
+                                <Users size={9} className="text-purple-400" />
+                                {holderCount} {t('dashboard.community.holders')}
+                            </span>
+                        )}
+                        {tokenInfo.volume24h > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
+                                <TrendingUp size={9} className="text-emerald-400" />
+                                Vol {fmtCompact(tokenInfo.volume24h)}
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 {/* ── Description ── */}
-                <p className="text-[13px] text-surface-200/45 leading-relaxed mb-5">
+                <p className="text-[13px] text-surface-200/45 leading-relaxed mb-4">
                     {t(`dashboard.community.${desc}`)}
                 </p>
 
                 {/* ── Contract Address ── */}
-                <div className="flex items-center gap-2 mb-5 group/ca">
+                <div className="flex items-center gap-2 mb-4 group/ca">
                     <div className="flex-1 flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-black/20 border border-white/[0.04] hover:border-white/[0.08] transition-all">
                         <span className="text-[9px] text-surface-200/20 font-bold uppercase tracking-widest">CA</span>
                         <div className="w-px h-3 bg-white/[0.06]" />
@@ -238,7 +419,51 @@ function CommunityCard({ community, price, priceLoading, t }) {
                     </div>
                 </div>
 
-                {/* ── Social Links + OKX ── */}
+                {/* ── Expanded Details ── */}
+                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${expanded ? 'max-h-[500px] opacity-100 mb-4' : 'max-h-0 opacity-0'}`}>
+                    <div className="pt-3 border-t border-white/[0.06] space-y-3">
+                        {/* Social Feed Preview */}
+                        {links.twitter && (
+                            <a
+                                href={links.twitter}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 p-3 rounded-xl bg-black/20 border border-white/[0.04] hover:border-white/[0.08] transition-all group/feed"
+                            >
+                                <div className="w-8 h-8 rounded-full bg-slate-200/10 flex items-center justify-center">
+                                    <XTwitterIcon size={14} />
+                                </div>
+                                <div className="flex-1">
+                                    <span className="text-xs font-semibold text-surface-100">@{links.twitter.split('/').pop()}</span>
+                                    <p className="text-[10px] text-surface-200/40 mt-0.5">{t('dashboard.community.latestPosts')}</p>
+                                </div>
+                                <ArrowUpRight size={12} className="text-surface-200/30 group-hover/feed:text-surface-200/60 transition-colors" />
+                            </a>
+                        )}
+
+                        {/* Quick Actions */}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => navigate(`/trading?to=${token}`)}
+                                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r ${gradient} text-white text-xs font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all duration-200`}
+                            >
+                                <ShoppingCart size={13} />
+                                {t('dashboard.community.buyToken')} {symbol}
+                            </button>
+                            <a
+                                href={OKX_TOKEN_URL(token)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-surface-200/60 hover:text-surface-100 hover:bg-white/[0.08] transition-all text-xs font-medium"
+                            >
+                                OKX
+                                <ArrowUpRight size={11} />
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── Bottom Row: Social + Actions ── */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                         {links.telegram && (
@@ -263,16 +488,46 @@ function CommunityCard({ community, price, priceLoading, t }) {
                         )}
                     </div>
 
-                    {/* OKX Web3 link */}
-                    <a
-                        href={OKX_TOKEN_URL(token)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.08] hover:border-white/[0.12] text-surface-200/40 hover:text-surface-200/70 transition-all duration-200 text-[11px] font-medium group/okx"
-                    >
-                        <span>OKX Web3</span>
-                        <ArrowUpRight size={11} className="group-hover/okx:translate-x-0.5 group-hover/okx:-translate-y-0.5 transition-transform" />
-                    </a>
+                    {/* Right side: Vote + Expand + OKX */}
+                    <div className="flex items-center gap-2">
+                        {/* Vote button */}
+                        <button
+                            onClick={() => onVote(token)}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition-all duration-200 ${
+                                isVoted
+                                    ? 'bg-pink-500/15 border border-pink-500/30 text-pink-400'
+                                    : 'bg-white/[0.03] border border-white/[0.06] text-surface-200/40 hover:bg-pink-500/10 hover:border-pink-500/20 hover:text-pink-400'
+                            }`}
+                        >
+                            <Heart size={12} className={isVoted ? 'fill-current' : ''} />
+                            {votes > 0 && <span>{votes}</span>}
+                        </button>
+
+                        {/* Expand toggle */}
+                        <button
+                            onClick={() => setExpanded(!expanded)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-surface-200/40 hover:bg-white/[0.06] hover:text-surface-200/70 transition-all text-[11px] font-medium"
+                        >
+                            {expanded ? (
+                                <><ChevronUp size={12} /> {t('dashboard.community.collapse')}</>
+                            ) : (
+                                <><ChevronDown size={12} /> {t('dashboard.community.details')}</>
+                            )}
+                        </button>
+
+                        {/* OKX Web3 link (only when not expanded) */}
+                        {!expanded && (
+                            <a
+                                href={OKX_TOKEN_URL(token)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.08] hover:border-white/[0.12] text-surface-200/40 hover:text-surface-200/70 transition-all duration-200 text-[11px] font-medium group/okx"
+                            >
+                                <span>OKX Web3</span>
+                                <ArrowUpRight size={11} className="group-hover/okx:translate-x-0.5 group-hover/okx:-translate-y-0.5 transition-transform" />
+                            </a>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
@@ -284,8 +539,12 @@ function CommunityCard({ community, price, priceLoading, t }) {
    ═══════════════════════════════════════════════════ */
 export default function CommunityPage() {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const tokenAddresses = useMemo(() => COMMUNITIES.map(c => c.token), []);
     const { prices, loading: priceLoading } = useTokenPrices(tokenAddresses);
+    const tokenInfo = useTokenInfo(tokenAddresses);
+    const holderCounts = useTokenHolders(tokenAddresses);
+    const { votes, voted, toggleVote } = useVotes();
     const [activeFilter, setActiveFilter] = useState('all');
 
     const filteredCommunities = useMemo(() => {
@@ -373,7 +632,13 @@ export default function CommunityPage() {
                         community={community}
                         price={prices[community.token.toLowerCase()]}
                         priceLoading={priceLoading}
+                        tokenInfo={tokenInfo[community.token.toLowerCase()]}
+                        holderCount={holderCounts[community.token.toLowerCase()]}
+                        votes={votes[community.token.toLowerCase()] || 0}
+                        isVoted={!!voted[community.token.toLowerCase()]}
+                        onVote={toggleVote}
                         t={t}
+                        navigate={navigate}
                     />
                 ))}
             </div>
@@ -409,7 +674,7 @@ export default function CommunityPage() {
                         className="group flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-xl shadow-brand-500/25 hover:shadow-brand-500/40 hover:scale-[1.03] active:scale-95 transition-all duration-300 whitespace-nowrap"
                     >
                         <XTwitterIcon size={16} />
-                        Contact @haivcon
+                        {t('dashboard.community.contact')}
                         <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
                     </a>
                 </div>
