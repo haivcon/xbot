@@ -34,7 +34,7 @@ module.exports = function registerOnchainCallbacks({ bot, getLang, t }) {
 
     bot.on('callback_query', async (query) => {
         try {
-            const data = query.data || '';
+            let data = query.data || '';
             if (!data.startsWith('oc_')) return;
 
             const lang = await getLang(query.message);
@@ -129,11 +129,13 @@ module.exports = function registerOnchainCallbacks({ bot, getLang, t }) {
                 // #9: Send photo if logo exists
                 if (logoUrl) {
                     try {
-                        await bot.sendPhoto(chatId, logoUrl, {
-                            caption: card, parse_mode: 'HTML',
-                            reply_markup: { inline_keyboard: buttons }
-                        });
-                        return;
+                        if (card.length <= 1024) {
+                            await bot.sendPhoto(chatId, logoUrl, {
+                                caption: card, parse_mode: 'HTML',
+                                reply_markup: { inline_keyboard: buttons }
+                            });
+                            return;
+                        }
                     } catch (_) { /* fallback to text */ }
                 }
 
@@ -291,8 +293,8 @@ module.exports = function registerOnchainCallbacks({ bot, getLang, t }) {
                 const parts = data.slice('oc_trend_ch|'.length).split('|');
                 const subCmd = parts[0] || 'trending';
                 const chainIndex = parts[1] || '196';
-                // Reuse trending switch logic
-                query.data = `oc_trend_sw|${subCmd}|${chainIndex}`;
+            // Reuse trending switch logic
+                data = `oc_trend_sw|${subCmd}|${chainIndex}`;
                 // Fall through to oc_trend_sw handler below
             }
 

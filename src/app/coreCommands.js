@@ -314,11 +314,13 @@ function registerCoreCommands(deps = {}) {
                 // #9: Send photo if logo exists, otherwise text
                 if (logoUrl) {
                     try {
-                        return bot.sendPhoto(msg.chat.id, logoUrl, {
-                            caption: card, parse_mode: 'HTML',
-                            reply_markup: { inline_keyboard: buttons },
-                            reply_to_message_id: msg.message_id
-                        });
+                        if (card.length <= 1024) {
+                            return bot.sendPhoto(msg.chat.id, logoUrl, {
+                                caption: card, parse_mode: 'HTML',
+                                reply_markup: { inline_keyboard: buttons },
+                                reply_to_message_id: msg.message_id
+                            });
+                        }
                     } catch (_) { /* fallback to text */ }
                 }
 
@@ -439,7 +441,7 @@ function registerCoreCommands(deps = {}) {
                     o.topPnlTokenList.slice(0, 5).forEach((tok, i) => {
                         const p = Number(tok.pnlUsd || tok.pnl || 0);
                         const icon = p >= 0 ? '🟢' : '🔴';
-                        card += `  ${i + 1}. ${icon} <b>${tok.tokenSymbol || '?'}</b>: ${p >= 0 ? '+' : ''}$${p.toFixed(2)}\n`;
+                        card += `  ${i + 1}. ${icon} <b>${escHtml(tok.tokenSymbol || '?')}</b>: ${p >= 0 ? '+' : ''}$${p.toFixed(2)}\n`;
                     });
                 }
                 card += '\n';
@@ -450,7 +452,7 @@ function registerCoreCommands(deps = {}) {
             if (pnlItems.length > 0) {
                 card += `📋 <b>${t(lang, 'pnl_recent')}</b>:\n`;
                 pnlItems.slice(0, 10).forEach((tok, i) => {
-                    const sym = tok.tokenSymbol || '?';
+                    const sym = escHtml(tok.tokenSymbol || '?');
                     const p = Number(tok.pnlUsd || tok.pnl || tok.realizedPnl || 0);
                     const icon = p >= 0 ? '🟢' : '🔴';
                     card += `  ${i + 1}. ${icon} <b>${sym}</b>: ${p >= 0 ? '+' : ''}$${p.toFixed(2)}\n`;
@@ -502,7 +504,7 @@ function registerCoreCommands(deps = {}) {
             card += `👛 <a href="${explorerAddressUrl(chainIndex, walletAddress)}">${shortAddr(walletAddress)}</a>\n\n`;
             items.slice(0, 15).forEach((tx, i) => {
                 const type = typeLabels[tx.type] || tx.type || '?';
-                const sym = tx.tokenSymbol || '?';
+                const sym = escHtml(tx.tokenSymbol || '?');
                 const value = Number(tx.valueUsd || tx.usdValue || 0);
                 const amount = tx.amount ? Number(tx.amount).toLocaleString('en-US', { maximumFractionDigits: 4 }) : '';
                 const age = relativeTime(tx.time);
