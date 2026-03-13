@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import useWsStore from '@/stores/wsStore';
+import useThemeStore from '@/stores/themeStore';
 import { SkeletonStatCards, SkeletonCard } from '@/components/Skeleton';
 import {
     Activity,
@@ -22,6 +23,10 @@ import {
     Eye,
     EyeOff,
     GripVertical,
+    Wallet,
+    Fuel,
+    Bell,
+    TrendingUp,
 } from 'lucide-react';
 
 const ACTION_ICONS = {
@@ -77,6 +82,8 @@ function formatUptime(seconds) {
 
 export default function DashboardPage() {
     const { t } = useTranslation();
+    const { theme } = useThemeStore();
+    const isLight = theme === 'light';
     const [health, setHealth] = useState(null);
     const [overview, setOverview] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -88,6 +95,7 @@ export default function DashboardPage() {
 
     // Widget customization
     const DEFAULT_WIDGETS = [
+        { id: 'live', label: 'Live Stats', visible: true },
         { id: 'overview', label: 'Overview Stats', visible: true },
         { id: 'status', label: 'System Status', visible: true },
         { id: 'health', label: 'Health Details', visible: true },
@@ -127,6 +135,46 @@ export default function DashboardPage() {
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    // Live stats: portfolio, gas, alerts
+    const [liveStats, setLiveStats] = useState({ portfolio: null, gasPrice: null, alertsCount: null });
+    useEffect(() => {
+        async function fetchLive() {
+            try {
+                const [walRes, gasRes, alertsRes] = await Promise.allSettled([
+                    api.getWallets(),
+                    api.getGasPrice(),
+                    api.getAlerts(),
+                ]);
+                const wallets = walRes.status === 'fulfilled' ? (walRes.value?.wallets || []) : [];
+                // Sum balances from wallets
+                let totalUsd = 0;
+                if (wallets.length > 0) {
+                    const balResults = await Promise.allSettled(
+                        wallets.map(w => api.getWalletBalance(w.id))
+                    );
+                    for (const r of balResults) {
+                        if (r.status === 'fulfilled') {
+                            const tokens = r.value?.data?.tokenAssets || [];
+                            for (const tk of tokens) {
+                                totalUsd += parseFloat(tk.tokenPrice || 0) * parseFloat(tk.holdingAmount || 0);
+                            }
+                        }
+                    }
+                }
+                const gwei = gasRes.status === 'fulfilled' ? parseFloat(gasRes.value?.data?.[0]?.gasPrice || 0) : null;
+                const alerts = alertsRes.status === 'fulfilled' ? (alertsRes.value?.alerts || []) : [];
+                setLiveStats({
+                    portfolio: totalUsd,
+                    gasPrice: gwei,
+                    alertsCount: alerts.filter(a => a.enabled !== false).length,
+                });
+            } catch { /* ignore */ }
+        }
+        fetchLive();
+        const iv = setInterval(fetchLive, 60000);
+        return () => clearInterval(iv);
     }, []);
 
     // Initial fetch + fallback polling every 30s
@@ -220,6 +268,45 @@ export default function DashboardPage() {
                     </button>
                 </div>
             </div>
+
+            {/* ── Live Stats Widget ── */}
+            {isVisible('live') && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="glass-card p-5 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center">
+                            <Wallet size={22} className="text-brand-400" />
+                        </div>
+                        <div>
+                            <p className="text-xs text-surface-200/50 font-medium">{t('dashboard.liveStats.portfolio') || 'Portfolio Value'}</p>
+                            <p className="text-2xl font-bold text-surface-100 tabular-nums">
+                                {liveStats.portfolio !== null ? `$${Math.floor(liveStats.portfolio * 100) / 100}` : '—'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="glass-card p-5 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+                            <Fuel size={22} className="text-amber-400" />
+                        </div>
+                        <div>
+                            <p className="text-xs text-surface-200/50 font-medium">{t('dashboard.liveStats.gasPrice') || 'Gas Price'}</p>
+                            <p className="text-2xl font-bold text-surface-100 tabular-nums">
+                                {liveStats.gasPrice !== null ? `${liveStats.gasPrice < 0.01 ? liveStats.gasPrice.toFixed(4) : liveStats.gasPrice.toFixed(2)} Gwei` : '—'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="glass-card p-5 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 flex items-center justify-center">
+                            <Bell size={22} className="text-cyan-400" />
+                        </div>
+                        <div>
+                            <p className="text-xs text-surface-200/50 font-medium">{t('dashboard.liveStats.activeAlerts') || 'Active Alerts'}</p>
+                            <p className="text-2xl font-bold text-surface-100 tabular-nums">
+                                {liveStats.alertsCount !== null ? liveStats.alertsCount : '—'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {error && (
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">{error}</div>

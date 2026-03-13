@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import useAuthStore from '@/stores/authStore';
 import useThemeStore from '@/stores/themeStore';
 import useWsStore from '@/stores/wsStore';
-import { Menu, LogOut, Bell, Sun, Moon, Wifi, WifiOff, X, Volume2, VolumeX, Search } from 'lucide-react';
+import api from '@/api/client';
+import { Menu, LogOut, Bell, Sun, Moon, Wifi, WifiOff, X, Volume2, VolumeX, Search, Fuel } from 'lucide-react';
 
 const ACTION_LABELS = {
     settings_update: '⚙️',
@@ -39,6 +40,21 @@ export default function Header({ onMenuClick }) {
     const bellRef = useRef(null);
     const searchRef = useRef(null);
     const isLight = theme === 'light';
+
+    // Gas price
+    const [gasPrice, setGasPrice] = useState(null);
+    useEffect(() => {
+        const fetchGas = async () => {
+            try {
+                const res = await api.getGasPrice();
+                const gwei = res?.data?.[0]?.gasPrice;
+                if (gwei) setGasPrice(parseFloat(gwei));
+            } catch { /* ignore */ }
+        };
+        fetchGas();
+        const iv = setInterval(fetchGas, 60000);
+        return () => clearInterval(iv);
+    }, []);
 
     useEffect(() => {
         const close = (e) => {
@@ -138,6 +154,15 @@ export default function Header({ onMenuClick }) {
                         </>
                     )}
                 </div>
+
+                {/* Gas price pill */}
+                {gasPrice !== null && (
+                    <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${isLight ? 'bg-amber-50 text-amber-600' : 'bg-amber-500/10 text-amber-400'}`} title="X Layer Gas Price">
+                        <Fuel size={13} />
+                        <span className="text-[10px] font-bold tabular-nums">{gasPrice < 0.01 ? gasPrice.toFixed(4) : gasPrice.toFixed(2)}</span>
+                        <span className="text-[9px] opacity-60">Gwei</span>
+                    </div>
+                )}
 
                 {/* Theme toggle */}
                 <button
