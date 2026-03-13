@@ -138,13 +138,11 @@ function useTokenPrices(tokens) {
     return { prices, loading };
 }
 
-/* ── Format Price — no rounding, full precision ── */
+/* ── Format Price — 4 significant digits ── */
 function fmtPrice(p) {
     if (!p) return '—';
-    if (p < 0.000001) return `$${p.toFixed(18).replace(/0+$/, '').replace(/\.$/, '')}`;
-    if (p < 0.001) return `$${p.toFixed(18).replace(/0+$/, '').replace(/\.$/, '')}`;
-    if (p < 1) return `$${p.toFixed(10).replace(/0+$/, '').replace(/\.$/, '')}`;
-    return `$${p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+    if (p < 1) return `$${parseFloat(p.toPrecision(4))}`;
+    return `$${p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
 }
 
 /* ── Community Card — Premium Design ── */
