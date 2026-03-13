@@ -18,7 +18,7 @@ const OKX_TOKEN_URL = (addr) => `https://web3.okx.com/token/x-layer/${addr}`;
 
 const COMMUNITIES = [
     {
-        name: 'Banmao',
+        name: 'banmao 🐱🍌',
         symbol: 'BANMAO',
         token: '0x16d91d1615fc55b76d5f92365bd60c069b46ef78',
         logo: '/logos/banmao.png',
@@ -41,7 +41,7 @@ const COMMUNITIES = [
         },
     },
     {
-        name: 'Niuma',
+        name: 'NIUMA 🐂🐴',
         symbol: 'NIUMA',
         token: '0x87669801a1fad6dad9db70d27ac752f452989667',
         logo: '/logos/niuma.png',
@@ -62,7 +62,7 @@ const COMMUNITIES = [
         },
     },
     {
-        name: 'Xwizard',
+        name: 'Xwizard 🧙',
         symbol: 'XWIZARD',
         token: '0xdcc83b32b6b4e95a61951bfcc9d71967515c0fca',
         logo: '/logos/xwizard.png',
