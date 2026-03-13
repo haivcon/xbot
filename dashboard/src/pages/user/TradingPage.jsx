@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import {
@@ -421,13 +422,109 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect }) {
         return list;
     };
 
-    /* Custom Token Dropdown with Search (#1) + Favorites (#9) */
+    /* Custom Token Dropdown with Search (#1) + Favorites (#9) — Portal-based */
     const TokenDropdown = ({ value, onChange, open, setOpen, exclude, label }) => {
         const list = getTokenList(exclude);
+        const triggerRef = useRef(null);
+        const dropdownRef = useRef(null);
+        const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+
+        useEffect(() => {
+            if (open && triggerRef.current) {
+                const rect = triggerRef.current.getBoundingClientRect();
+                setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+            }
+        }, [open]);
+
+        // Close on outside click
+        useEffect(() => {
+            if (!open) return;
+            const handler = (e) => {
+                if (triggerRef.current?.contains(e.target)) return;
+                if (dropdownRef.current?.contains(e.target)) return;
+                setOpen(false);
+                setSearchQuery('');
+            };
+            document.addEventListener('mousedown', handler);
+            return () => document.removeEventListener('mousedown', handler);
+        }, [open]);
+
+        const dropdownPanel = open ? createPortal(
+            <div
+                ref={dropdownRef}
+                className="fixed z-[9999] bg-surface-800/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-fadeIn max-h-[280px] overflow-y-auto"
+                style={{ top: pos.top, left: pos.left, width: pos.width }}
+            >
+                {/* Search input */}
+                <div className="p-2 border-b border-white/5">
+                    <div className="flex items-center gap-2 bg-surface-900/60 rounded-lg px-2.5 py-1.5">
+                        <Search size={11} className="text-surface-200/30" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => { setSearchQuery(e.target.value); setSearchTarget(label === 'From' ? 'from' : 'to'); }}
+                            className="flex-1 bg-transparent text-xs text-surface-100 outline-none placeholder:text-surface-200/20"
+                            placeholder="Search tokens..."
+                            autoFocus
+                        />
+                        {searching && <Loader2 size={10} className="animate-spin text-surface-200/30" />}
+                    </div>
+                </div>
+                {/* Known tokens */}
+                {list.map(({ sym, icon, isFav: f }) => (
+                    <button
+                        key={sym}
+                        onClick={() => { onChange(sym); setOpen(false); setSearchQuery(''); }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm transition-all ${
+                            sym === value ? 'bg-brand-500/15 text-brand-400 font-bold' : 'text-surface-200/70 hover:bg-white/[0.05] hover:text-surface-100'
+                        }`}
+                    >
+                        {f && <Star size={10} className="text-amber-400 fill-amber-400" />}
+                        <span className="text-base">{icon}</span>
+                        <span className="font-medium flex-1 text-left">{sym}</span>
+                        <button onClick={e => { e.stopPropagation(); toggleFav(sym); }} className="p-0.5 hover:text-amber-400 transition-colors">
+                            {isFav(sym) ? <Star size={10} className="text-amber-400 fill-amber-400" /> : <StarOff size={10} className="text-surface-200/20" />}
+                        </button>
+                    </button>
+                ))}
+                {/* Search results */}
+                {searchResults.length > 0 && (
+                    <>
+                        <div className="px-3 py-1.5 text-[9px] text-surface-200/20 uppercase border-t border-white/5">Search Results</div>
+                        {searchResults.map((t, i) => (
+                            <button
+                                key={i}
+                                onClick={() => {
+                                    const sym = t.tokenSymbol || '?';
+                                    if (!tokens[sym]) {
+                                        tokens[sym] = { addr: t.tokenContractAddress, icon: '🪙', decimals: Number(t.decimals || 18) };
+                                    }
+                                    onChange(sym);
+                                    setOpen(false);
+                                    setSearchQuery('');
+                                    setSearchResults([]);
+                                }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200/60 hover:bg-white/[0.05] hover:text-surface-100 transition-all"
+                            >
+                                <span>🪙</span>
+                                <div className="flex-1 text-left">
+                                    <span className="font-medium">{t.tokenSymbol || '?'}</span>
+                                    <span className="text-[9px] text-surface-200/20 ml-1.5">{t.tokenFullName}</span>
+                                </div>
+                                <span className="text-[9px] text-surface-200/15 font-mono">{(t.tokenContractAddress || '').slice(0, 6)}...{(t.tokenContractAddress || '').slice(-4)}</span>
+                            </button>
+                        ))}
+                    </>
+                )}
+            </div>,
+            document.body
+        ) : null;
+
         return (
-            <div className={`relative ${open ? 'z-50' : ''}`}>
+            <div className="relative">
                 <label className="text-[9px] text-surface-200/30 uppercase tracking-widest mb-1.5 block font-semibold">{label}</label>
                 <button
+                    ref={triggerRef}
                     onClick={() => setOpen(!open)}
                     className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] text-surface-100 text-sm font-semibold transition-all w-full"
                 >
@@ -435,78 +532,13 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect }) {
                     <span className="flex-1 text-left font-bold">{value}</span>
                     <ChevronDown size={14} className={`text-surface-200/30 transition-transform ${open ? 'rotate-180' : ''}`} />
                 </button>
-                {open && (
-                    <div className="absolute top-full left-0 right-0 mt-1 z-40 bg-surface-800/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-fadeIn max-h-[280px] overflow-y-auto">
-                        {/* Search input */}
-                        <div className="p-2 border-b border-white/5">
-                            <div className="flex items-center gap-2 bg-surface-900/60 rounded-lg px-2.5 py-1.5">
-                                <Search size={11} className="text-surface-200/30" />
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={e => { setSearchQuery(e.target.value); setSearchTarget(label === 'From' ? 'from' : 'to'); }}
-                                    className="flex-1 bg-transparent text-xs text-surface-100 outline-none placeholder:text-surface-200/20"
-                                    placeholder="Search tokens..."
-                                    autoFocus
-                                />
-                                {searching && <Loader2 size={10} className="animate-spin text-surface-200/30" />}
-                            </div>
-                        </div>
-                        {/* Known tokens */}
-                        {list.map(({ sym, icon, isFav: f }) => (
-                            <button
-                                key={sym}
-                                onClick={() => { onChange(sym); setOpen(false); setSearchQuery(''); }}
-                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm transition-all ${
-                                    sym === value ? 'bg-brand-500/15 text-brand-400 font-bold' : 'text-surface-200/70 hover:bg-white/[0.05] hover:text-surface-100'
-                                }`}
-                            >
-                                {f && <Star size={10} className="text-amber-400 fill-amber-400" />}
-                                <span className="text-base">{icon}</span>
-                                <span className="font-medium flex-1 text-left">{sym}</span>
-                                <button onClick={e => { e.stopPropagation(); toggleFav(sym); }} className="p-0.5 hover:text-amber-400 transition-colors">
-                                    {isFav(sym) ? <Star size={10} className="text-amber-400 fill-amber-400" /> : <StarOff size={10} className="text-surface-200/20" />}
-                                </button>
-                            </button>
-                        ))}
-                        {/* Search results */}
-                        {searchResults.length > 0 && (
-                            <>
-                                <div className="px-3 py-1.5 text-[9px] text-surface-200/20 uppercase border-t border-white/5">Search Results</div>
-                                {searchResults.map((t, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => {
-                                            // Dynamically add token
-                                            const sym = t.tokenSymbol || '?';
-                                            if (!tokens[sym]) {
-                                                tokens[sym] = { addr: t.tokenContractAddress, icon: '🪙', decimals: Number(t.decimals || 18) };
-                                            }
-                                            onChange(sym);
-                                            setOpen(false);
-                                            setSearchQuery('');
-                                            setSearchResults([]);
-                                        }}
-                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200/60 hover:bg-white/[0.05] hover:text-surface-100 transition-all"
-                                    >
-                                        <span>🪙</span>
-                                        <div className="flex-1 text-left">
-                                            <span className="font-medium">{t.tokenSymbol || '?'}</span>
-                                            <span className="text-[9px] text-surface-200/20 ml-1.5">{t.tokenFullName}</span>
-                                        </div>
-                                        <span className="text-[9px] text-surface-200/15 font-mono">{(t.tokenContractAddress || '').slice(0, 6)}...{(t.tokenContractAddress || '').slice(-4)}</span>
-                                    </button>
-                                ))}
-                            </>
-                        )}
-                    </div>
-                )}
+                {dropdownPanel}
             </div>
         );
     };
 
     return (
-        <div className={`glass-card p-5 relative ${openFrom || openTo ? 'z-30' : ''}`}>
+        <div className="glass-card p-5 relative">
             <ConfettiBurst active={showConfetti} />
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-500 via-purple-500 to-cyan-500 rounded-t-2xl" />
 
@@ -838,28 +870,57 @@ function TxHistory() {
    ═══════════════════════════════════════════ */
 function ChainSelector({ selected, onChange }) {
     const [open, setOpen] = useState(false);
+    const triggerRef = useRef(null);
+    const dropdownRef = useRef(null);
+    const [pos, setPos] = useState({ top: 0, right: 0 });
+
+    useEffect(() => {
+        if (open && triggerRef.current) {
+            const rect = triggerRef.current.getBoundingClientRect();
+            setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+        }
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e) => {
+            if (triggerRef.current?.contains(e.target)) return;
+            if (dropdownRef.current?.contains(e.target)) return;
+            setOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    const dropdownPanel = open ? createPortal(
+        <div
+            ref={dropdownRef}
+            className="fixed z-[9999] bg-surface-800/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 overflow-hidden animate-fadeIn min-w-[160px]"
+            style={{ top: pos.top, right: pos.right }}
+        >
+            {Object.entries(CHAINS).map(([id, chain]) => (
+                <button key={id} onClick={() => { onChange(id); setOpen(false); }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm transition-all ${
+                        id === selected ? 'bg-brand-500/15 text-brand-400 font-bold' : 'text-surface-200/60 hover:bg-white/[0.05] hover:text-surface-100'
+                    }`}>
+                    <span>{chain.icon}</span>
+                    <span className="font-medium">{chain.name}</span>
+                    {id === selected && <span className="ml-auto text-brand-400">✓</span>}
+                </button>
+            ))}
+        </div>,
+        document.body
+    ) : null;
+
     return (
-        <div className={`relative ${open ? 'z-50' : ''}`}>
-            <button onClick={() => setOpen(!open)}
+        <div className="relative">
+            <button ref={triggerRef} onClick={() => setOpen(!open)}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] text-surface-100 text-xs font-semibold transition-all">
                 <span className="text-sm">{CHAINS[selected]?.icon}</span>
                 <span>{CHAINS[selected]?.name}</span>
                 <ChevronDown size={12} className={`text-surface-200/30 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
-            {open && (
-                <div className="absolute top-full right-0 mt-1 z-40 bg-surface-800/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/40 overflow-hidden animate-fadeIn min-w-[160px]">
-                    {Object.entries(CHAINS).map(([id, chain]) => (
-                        <button key={id} onClick={() => { onChange(id); setOpen(false); }}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm transition-all ${
-                                id === selected ? 'bg-brand-500/15 text-brand-400 font-bold' : 'text-surface-200/60 hover:bg-white/[0.05] hover:text-surface-100'
-                            }`}>
-                            <span>{chain.icon}</span>
-                            <span className="font-medium">{chain.name}</span>
-                            {id === selected && <span className="ml-auto text-brand-400">✓</span>}
-                        </button>
-                    ))}
-                </div>
-            )}
+            {dropdownPanel}
         </div>
     );
 }

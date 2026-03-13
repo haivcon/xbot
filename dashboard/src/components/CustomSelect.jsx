@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check, Search } from 'lucide-react';
 
 /**
- * CustomSelect — Premium glassmorphism dropdown.
+ * CustomSelect — Premium glassmorphism dropdown using Portal.
  * 
  * Props:
  *   value       — current value
@@ -25,16 +26,34 @@ export default function CustomSelect({
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [highlightIdx, setHighlightIdx] = useState(-1);
+    const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
     const wrapperRef = useRef(null);
+    const triggerRef = useRef(null);
     const searchRef = useRef(null);
     const listRef = useRef(null);
+    const dropdownRef = useRef(null);
 
     const selected = options.find(o => o.value === value);
+
+    // Calculate dropdown position
+    const updatePosition = useCallback(() => {
+        if (triggerRef.current) {
+            const rect = triggerRef.current.getBoundingClientRect();
+            setDropdownPos({
+                top: rect.bottom + 4,
+                left: rect.left,
+                width: rect.width,
+            });
+        }
+    }, []);
 
     // Close on outside click
     useEffect(() => {
         const handler = (e) => {
-            if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+            if (
+                wrapperRef.current && !wrapperRef.current.contains(e.target) &&
+                dropdownRef.current && !dropdownRef.current.contains(e.target)
+            ) {
                 setOpen(false);
                 setSearch('');
             }
@@ -42,6 +61,19 @@ export default function CustomSelect({
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
+
+    // Update position on open & scroll/resize
+    useEffect(() => {
+        if (open) {
+            updatePosition();
+            window.addEventListener('scroll', updatePosition, true);
+            window.addEventListener('resize', updatePosition);
+            return () => {
+                window.removeEventListener('scroll', updatePosition, true);
+                window.removeEventListener('resize', updatePosition);
+            };
+        }
+    }, [open, updatePosition]);
 
     // Focus search on open
     useEffect(() => {
@@ -107,10 +139,80 @@ export default function CustomSelect({
         }
     };
 
+    const dropdownPanel = open ? createPortal(
+        <div
+            ref={dropdownRef}
+            className="fixed z-[9999] rounded-xl border border-white/10 bg-surface-900/95 backdrop-blur-xl shadow-2xl shadow-black/40 overflow-hidden animate-fadeIn"
+            style={{
+                top: dropdownPos.top,
+                left: dropdownPos.left,
+                width: dropdownPos.width,
+            }}
+            role="listbox"
+        >
+            {/* Search */}
+            {searchable && (
+                <div className="p-2 border-b border-white/5">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-800/60 border border-white/5">
+                        <Search size={13} className="text-surface-200/30 flex-shrink-0" />
+                        <input
+                            ref={searchRef}
+                            type="text"
+                            value={search}
+                            onChange={(e) => { setSearch(e.target.value); setHighlightIdx(0); }}
+                            placeholder="Search..."
+                            className="w-full bg-transparent text-sm text-surface-100 placeholder:text-surface-200/25 outline-none"
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Options list */}
+            <div ref={listRef} className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                {filteredOptions.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-xs text-surface-200/30">No options found</div>
+                ) : (
+                    filteredOptions.map((opt, idx) => {
+                        const isSelected = opt.value === value;
+                        const isHighlighted = idx === highlightIdx;
+                        return (
+                            <button
+                                key={opt.value}
+                                data-option
+                                type="button"
+                                onClick={() => handleSelect(opt.value)}
+                                onMouseEnter={() => setHighlightIdx(idx)}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100
+                                    ${isHighlighted ? 'bg-brand-500/10' : ''}
+                                    ${isSelected ? 'text-brand-400' : 'text-surface-200/80 hover:text-surface-100'}
+                                `}
+                                role="option"
+                                aria-selected={isSelected}
+                            >
+                                {opt.icon && <span className="text-base flex-shrink-0">{opt.icon}</span>}
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium truncate">{opt.label}</div>
+                                    {opt.description && (
+                                        <div className="text-[11px] text-surface-200/35 truncate mt-0.5">{opt.description}</div>
+                                    )}
+                                </div>
+                                {isSelected && (
+                                    <Check size={14} className="text-brand-400 flex-shrink-0" />
+                                )}
+                            </button>
+                        );
+                    })
+                )}
+            </div>
+        </div>,
+        document.body
+    ) : null;
+
     return (
-        <div ref={wrapperRef} className={`relative ${open ? 'z-50' : ''} ${className}`} onKeyDown={handleKeyDown}>
+        <div ref={wrapperRef} className={`relative ${className}`} onKeyDown={handleKeyDown}>
             {/* Trigger Button */}
             <button
+                ref={triggerRef}
                 type="button"
                 disabled={disabled}
                 onClick={() => !disabled && setOpen(!open)}
@@ -143,67 +245,8 @@ export default function CustomSelect({
                 />
             </button>
 
-            {/* Dropdown Panel */}
-            {open && (
-                <div className="absolute z-50 w-full mt-2 rounded-xl border border-white/10 bg-surface-900/95 backdrop-blur-xl shadow-2xl shadow-black/40 overflow-hidden animate-fadeIn"
-                    role="listbox"
-                >
-                    {/* Search */}
-                    {searchable && (
-                        <div className="p-2 border-b border-white/5">
-                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-800/60 border border-white/5">
-                                <Search size={13} className="text-surface-200/30 flex-shrink-0" />
-                                <input
-                                    ref={searchRef}
-                                    type="text"
-                                    value={search}
-                                    onChange={(e) => { setSearch(e.target.value); setHighlightIdx(0); }}
-                                    placeholder="Search..."
-                                    className="w-full bg-transparent text-sm text-surface-100 placeholder:text-surface-200/25 outline-none"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Options list */}
-                    <div ref={listRef} className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
-                        {filteredOptions.length === 0 ? (
-                            <div className="px-4 py-6 text-center text-xs text-surface-200/30">No options found</div>
-                        ) : (
-                            filteredOptions.map((opt, idx) => {
-                                const isSelected = opt.value === value;
-                                const isHighlighted = idx === highlightIdx;
-                                return (
-                                    <button
-                                        key={opt.value}
-                                        data-option
-                                        type="button"
-                                        onClick={() => handleSelect(opt.value)}
-                                        onMouseEnter={() => setHighlightIdx(idx)}
-                                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100
-                                            ${isHighlighted ? 'bg-brand-500/10' : ''}
-                                            ${isSelected ? 'text-brand-400' : 'text-surface-200/80 hover:text-surface-100'}
-                                        `}
-                                        role="option"
-                                        aria-selected={isSelected}
-                                    >
-                                        {opt.icon && <span className="text-base flex-shrink-0">{opt.icon}</span>}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-medium truncate">{opt.label}</div>
-                                            {opt.description && (
-                                                <div className="text-[11px] text-surface-200/35 truncate mt-0.5">{opt.description}</div>
-                                            )}
-                                        </div>
-                                        {isSelected && (
-                                            <Check size={14} className="text-brand-400 flex-shrink-0" />
-                                        )}
-                                    </button>
-                                );
-                            })
-                        )}
-                    </div>
-                </div>
-            )}
+            {/* Dropdown rendered via Portal */}
+            {dropdownPanel}
         </div>
     );
 }
