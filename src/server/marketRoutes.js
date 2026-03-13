@@ -87,8 +87,13 @@ function createMarketRoutes() {
         try {
             const { chainIndex = '196', tokenContractAddress } = req.query;
             if (!tokenContractAddress) return res.status(400).json({ error: 'tokenContractAddress required' });
-            const data = await onchainos.getTokenHolder(chainIndex, tokenContractAddress);
-            res.json({ data: data || [] });
+            // Fetch holder list + basicInfo (for totalHolder) in parallel
+            const [holderData, basicInfo] = await Promise.all([
+                onchainos.getTokenHolder(chainIndex, tokenContractAddress).catch(() => []),
+                onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress }]).catch(() => null)
+            ]);
+            const totalHolder = basicInfo?.[0]?.totalHolder || basicInfo?.[0]?.holderCount || null;
+            res.json({ data: holderData || [], totalHolder: totalHolder ? Number(totalHolder) : null });
         } catch (err) {
             log.error('token/holders error:', err.msg || err.message);
             res.status(500).json({ error: err.msg || err.message });

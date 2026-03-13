@@ -193,7 +193,7 @@ function useTokenInfo(tokens) {
     return info;
 }
 
-/* ── Token Holders Hook (uses /api/v6/dex/market/token/holder) ── */
+/* ── Token Holders Hook (uses /api/v6/dex/market/token/holder + basicInfo totalHolder) ── */
 function useTokenHolders(tokens) {
     const [holders, setHolders] = useState({});
 
@@ -205,9 +205,8 @@ function useTokenHolders(tokens) {
                 tokens.map(async (addr) => {
                     try {
                         const json = await api.getTokenHolders(XLAYER_CHAIN, addr);
-                        const holderList = json?.data || [];
-                        // Use holderCount from response if available, else count the returned list
-                        const count = json?.holderCount || json?.totalHolder || json?.total || holderList.length || 0;
+                        // Backend now returns { data: holderList, totalHolder: number }
+                        const count = json?.totalHolder || json?.holderCount || 0;
                         results[addr.toLowerCase()] = count;
                     } catch { /* ignore */ }
                 })
@@ -215,7 +214,7 @@ function useTokenHolders(tokens) {
             if (!cancelled) setHolders(results);
         }
         fetchHolders();
-        const iv = setInterval(fetchHolders, 120000); // refresh every 2min
+        const iv = setInterval(fetchHolders, 120000);
         return () => { cancelled = true; clearInterval(iv); };
     }, []);
 
@@ -285,6 +284,7 @@ function fmtChange(pct) {
 function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, holderCount, votes, isVoted, onVote, t, navigate }) {
     const [copied, setCopied] = useState(false);
     const [expanded, setExpanded] = useState(false);
+    const [lightbox, setLightbox] = useState(false);
     const { name, symbol, token, logo, gradient, bgGradient, borderColor, glowColor, expandedBg, tagline, desc, links, isNew } = community;
 
     // Price flash animation
@@ -319,8 +319,9 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, h
                 {/* ── Top Row: Logo + Name + Price ── */}
                 <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="flex items-center gap-4">
-                        {/* Real token logo — uniform size + NEW badge overlay */}
-                        <div className={`relative w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} p-0.5 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 flex-shrink-0`}>
+                        {/* Real token logo — uniform size + NEW badge overlay + clickable */}
+                        <div className={`relative w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} p-0.5 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 flex-shrink-0 cursor-pointer`}
+                             onClick={() => setLightbox(true)}>
                             <div className="w-full h-full rounded-[12px] bg-surface-900/80 flex items-center justify-center overflow-hidden">
                                 <img src={logo} alt={name} className="w-10 h-10 object-contain" />
                             </div>
@@ -330,6 +331,17 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, h
                                 </span>
                             )}
                         </div>
+
+                        {/* Logo Lightbox */}
+                        {lightbox && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setLightbox(false)}>
+                                <div className="relative max-w-[320px] max-h-[320px] animate-scaleIn" onClick={e => e.stopPropagation()}>
+                                    <img src={logo} alt={name} className="w-full h-full object-contain rounded-3xl shadow-2xl" />
+                                    <p className="text-center mt-3 text-sm font-bold text-white">{name}</p>
+                                    <button onClick={() => setLightbox(false)} className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-surface-800 border border-white/10 text-white flex items-center justify-center hover:bg-red-500/30 transition-colors text-sm">&times;</button>
+                                </div>
+                            </div>
+                        )}
                         <div>
                             <h3 className="text-xl font-bold text-surface-100 tracking-tight">
                                 {name}
