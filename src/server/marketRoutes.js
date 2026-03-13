@@ -130,6 +130,21 @@ function createMarketRoutes() {
     });
 
     /**
+     * GET /trades?chainIndex=196&tokenContractAddress=0x...
+     */
+    router.get('/trades', async (req, res) => {
+        try {
+            const { chainIndex = '196', tokenContractAddress } = req.query;
+            if (!tokenContractAddress) return res.status(400).json({ error: 'tokenContractAddress required' });
+            const data = await onchainos.getMarketTrades(chainIndex, tokenContractAddress, {});
+            res.json({ data: data || [] });
+        } catch (err) {
+            log.error('trades error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /**
      * POST /signals
      * Body: { chainIndex, walletType?, minAmountUsd? }
      */

@@ -304,6 +304,7 @@ class ApiClient {
     getTokenHolders(chainIndex, tokenContractAddress) { return this.get(`/market/token/holders?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}`); }
     getGasPrice(chainIndex = '196') { return this.get(`/market/gas?chainIndex=${chainIndex}`); }
     getCandles(chainIndex, tokenContractAddress, bar = '1H', limit = 24) { return this.get(`/market/candles?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}&bar=${bar}&limit=${limit}`); }
+    getMarketTrades(chainIndex, tokenContractAddress) { return this.get(`/market/trades?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}`); }
     getSignals(chainIndex = '196', walletType, minAmountUsd) { return this.post('/market/signals', { chainIndex, walletType, minAmountUsd }); }
     getSignalChains() { return this.get('/market/signals/chains'); }
 
