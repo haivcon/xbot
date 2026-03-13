@@ -138,11 +138,22 @@ function useTokenPrices(tokens) {
     return { prices, loading };
 }
 
-/* ── Format Price — 4 significant digits ── */
+/* ── Format Price — 4 significant digits, truncated (no rounding) ── */
 function fmtPrice(p) {
     if (!p) return '—';
-    if (p < 1) return `$${parseFloat(p.toPrecision(4))}`;
-    return `$${p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+    if (p < 1) {
+        // Convert to string with max precision, then truncate to 4 significant digits
+        const s = p.toFixed(18);
+        // Find first non-zero digit after "0."
+        const match = s.match(/^0\.(0*)/);
+        const leadingZeros = match ? match[1].length : 0;
+        // Truncate: keep leading zeros + 4 significant digits
+        const truncated = s.slice(0, 2 + leadingZeros + 4);
+        return `$${truncated}`;
+    }
+    // For >= $1, truncate to 2 decimal places (no rounding)
+    const floored = Math.floor(p * 100) / 100;
+    return `$${floored.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /* ── Community Card — Premium Design ── */
