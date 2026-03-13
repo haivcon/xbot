@@ -331,17 +331,13 @@
     /* Reduce heading sizes */
     h1 { @apply text-lg; }
 
-    /* Compact zoom for mobile tablets */
-    #root {
-      zoom: 0.85;
-    }
+    /* Compact scale via base font-size */
+    html { font-size: 13px; }
   }
 
   /* Extra compact for small phones */
   @media (max-width: 480px) {
-    #root {
-      zoom: 0.72;
-    }
+    html { font-size: 11.5px; }
     h1 { font-size: 1rem !important; }
     h2 { font-size: 0.875rem !important; }
     h3 { font-size: 0.8rem !important; }
