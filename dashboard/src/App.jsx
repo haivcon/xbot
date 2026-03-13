@@ -7,7 +7,7 @@ import Layout from '@/components/layout/Layout';
 import LoginModal from '@/components/LoginModal';
 import ToastContainer from '@/components/ToastContainer';
 import ChatWidget from '@/components/ChatWidget';
-import ErrorBoundary from '@/components/ErrorBoundary';
+import ErrorBoundary, { OfflineBanner } from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/Skeleton';
 import { setupBackButton, isTelegramMiniApp } from '@/utils/telegram';
 
@@ -88,6 +88,7 @@ export default function App() {
     // Authenticated → full dashboard
     return (
         <>
+            <OfflineBanner />
             <ErrorBoundary>
             <Routes>
                 <Route path="/" element={<Layout />}>

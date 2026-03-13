@@ -5,7 +5,7 @@ import useAuthStore from '@/stores/authStore';
 import useThemeStore from '@/stores/themeStore';
 import useWsStore from '@/stores/wsStore';
 import api from '@/api/client';
-import { Menu, LogOut, Bell, Sun, Moon, Wifi, WifiOff, X, Volume2, VolumeX, Search, Fuel } from 'lucide-react';
+import { Menu, LogOut, Bell, Sun, Moon, Wifi, WifiOff, X, Volume2, VolumeX, Search, Fuel, Gauge } from 'lucide-react';
 
 const ACTION_LABELS = {
     settings_update: '⚙️',
@@ -53,6 +53,22 @@ export default function Header({ onMenuClick }) {
         };
         fetchGas();
         const iv = setInterval(fetchGas, 60000);
+        return () => clearInterval(iv);
+    }, []);
+
+    // Rate limit (#11)
+    const [rateLimit, setRateLimit] = useState(null);
+    useEffect(() => {
+        const fetchRL = async () => {
+            try {
+                const h = await api.getHealth();
+                if (h?.inFlight != null && h?.rateLimitMax) {
+                    setRateLimit({ current: h.inFlight, max: h.rateLimitMax });
+                }
+            } catch { /* ignore */ }
+        };
+        fetchRL();
+        const iv = setInterval(fetchRL, 30000);
         return () => clearInterval(iv);
     }, []);
 
@@ -161,6 +177,18 @@ export default function Header({ onMenuClick }) {
                         <Fuel size={13} />
                         <span className="text-[10px] font-bold tabular-nums">{gasPrice < 0.01 ? gasPrice.toFixed(4) : gasPrice.toFixed(2)}</span>
                         <span className="text-[9px] opacity-60">Gwei</span>
+                    </div>
+                )}
+
+                {/* Rate limit pill (#11) */}
+                {rateLimit && (
+                    <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${
+                        rateLimit.current / rateLimit.max > 0.8 ? (isLight ? 'bg-red-50 text-red-600' : 'bg-red-500/10 text-red-400') :
+                        rateLimit.current / rateLimit.max > 0.5 ? (isLight ? 'bg-amber-50 text-amber-600' : 'bg-amber-500/10 text-amber-400') :
+                        (isLight ? 'bg-emerald-50 text-emerald-600' : 'bg-emerald-500/10 text-emerald-400')
+                    }`} title={`API: ${rateLimit.current}/${rateLimit.max} req/min`}>
+                        <Gauge size={13} />
+                        <span className="text-[10px] font-bold tabular-nums">{rateLimit.current}/{rateLimit.max}</span>
                     </div>
                 )}
 
