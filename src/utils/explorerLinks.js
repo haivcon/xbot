@@ -2,6 +2,19 @@
  * Explorer Links & Formatting Utilities for On-chain Commands
  */
 
+// ─── HTML Sanitization (#1) ───────────────────────────
+function escHtml(str) {
+    if (!str || typeof str !== 'string') return str || '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ─── Callback Data Safety (#2) ────────────────────────
+// Telegram limits callback_data to 64 bytes
+function cbAddr(address, maxLen = 38) {
+    if (!address) return '';
+    return address.slice(0, maxLen);
+}
+
 // ─── Chain Config ─────────────────────────────────────
 const CHAIN_MAP = {
     '1':     { slug: 'eth',      name: 'Ethereum',  symbol: 'ETH' },
@@ -36,6 +49,20 @@ function explorerAddressUrl(chainIndex, address) {
     const { slug } = chainInfo(chainIndex);
     return `${OKLINK_BASE}/${slug}/address/${address}`;
 }
+
+function explorerChartUrl(chainIndex, address) {
+    const { slug } = chainInfo(chainIndex);
+    return `${OKLINK_BASE}/${slug}/token/${address}`;
+}
+
+// Chain selector for trending commands (default = 196 X Layer)
+const TRENDING_CHAINS = [
+    { id: '196',   label: 'X Layer',  emoji: '🔷' },
+    { id: '501',   label: 'Solana',   emoji: '☀️' },
+    { id: '1',     label: 'ETH',      emoji: '🔹' },
+    { id: '56',    label: 'BSC',      emoji: '🟡' },
+    { id: '8453',  label: 'Base',     emoji: '🔵' },
+];
 
 // ─── Number Formatting ────────────────────────────────
 function fmtNum(n) {
@@ -161,10 +188,14 @@ function shortAddr(addr, head = 6, tail = 4) {
 module.exports = {
     CHAIN_MAP,
     SUPPORTED_CHAINS,
+    TRENDING_CHAINS,
     chainInfo,
+    escHtml,
+    cbAddr,
     explorerTokenUrl,
     explorerTxUrl,
     explorerAddressUrl,
+    explorerChartUrl,
     fmtNum,
     fmtPrice,
     fmtPercent,

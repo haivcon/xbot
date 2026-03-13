@@ -657,6 +657,7 @@ module.exports = {
     getTokenBasicInfo,
     getTokenPriceInfo,
     getTokenTopList,
+    getTokenSearch,
     getTokenHolder,
     getTokenAdvancedInfo,
     getTokenLiquidityPool,

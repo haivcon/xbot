@@ -178,11 +178,15 @@ function registerCoreCommands(deps = {}) {
     const onchainos = require('../services/onchainos');
     const _db = require('../../db');
     const {
-        explorerTokenUrl, explorerTxUrl, explorerAddressUrl,
+        explorerTokenUrl, explorerTxUrl, explorerAddressUrl, explorerChartUrl,
         fmtNum, fmtPrice, fmtPercent, fmtCompact,
         progressBar, relativeTime, riskScore, riskTagsText,
-        buySellRatio, shortAddr, chainInfo, SUPPORTED_CHAINS
+        buySellRatio, shortAddr, chainInfo, escHtml, cbAddr,
+        SUPPORTED_CHAINS, TRENDING_CHAINS
     } = require('../utils/explorerLinks');
+
+    // Per-user compact mode preference (shared with callbacks via global)
+    if (!global._ocCompactMode) global._ocCompactMode = new Map();
 
     // ── /meme ─────────────────────────────────────────
     bot.onText(/^\/meme(?:@[\w_]+)?(?:\s+(.+))?$/, async (msg, match) => {
@@ -191,9 +195,45 @@ function registerCoreCommands(deps = {}) {
         const lang = await getLang(msg);
         const input = match?.[1]?.trim();
         const chainIndex = '501';
+        const userId = String(msg.from?.id);
+        const compact = global._ocCompactMode.get(userId);
         try {
+            // ── #5: Keyword search: /meme <keyword> ──
+            if (input && input.length > 1 && input.length <= 20 && !['pumping', 'migrated', 'all'].includes(input.toLowerCase())) {
+                await sendReply(msg, `🔍 Searching "${escHtml(input)}"...`);
+                const results = await onchainos.getTokenSearch(chainIndex, input).catch(() => null);
+                if (!results || (Array.isArray(results) && results.length === 0)) {
+                    return sendReply(msg, `❌ No tokens found for "${escHtml(input)}"`, { parse_mode: 'HTML' });
+                }
+                const items = Array.isArray(results) ? results : [results];
+                let card = `🔍 <b>Search: ${escHtml(input)}</b>\n━━━━━━━━━━━━━━━━━━\n\n`;
+                items.slice(0, 8).forEach((tok, i) => {
+                    const sym = escHtml(tok.tokenSymbol || tok.symbol || '?');
+                    const name = escHtml(tok.tokenName || tok.name || '');
+                    const addr = tok.tokenContractAddress || tok.tokenAddress || '';
+                    const price = Number(tok.price || 0);
+                    const vol = Number(tok.volume || tok.volume24h || 0);
+                    const cIdx = tok.chainIndex || chainIndex;
+                    card += `${i + 1}. <b>${sym}</b>`;
+                    if (name) card += ` — ${name}`;
+                    card += `\n   💰 ${fmtPrice(price)} | Vol: ${fmtNum(vol)}`;
+                    if (addr) card += `\n   <a href="${explorerChartUrl(cIdx, addr)}">📈 Chart</a>`;
+                    card += '\n\n';
+                });
+                const detailBtns = items.slice(0, 5).map((tok, i) => ({
+                    text: `${i + 1}. ${tok.tokenSymbol || '?'}`,
+                    callback_data: `oc_meme_d|${cbAddr(tok.tokenContractAddress || tok.tokenAddress)}`
+                }));
+                const buttons = [];
+                if (detailBtns.length > 0) buttons.push(detailBtns);
+                return sendReply(msg, card, {
+                    parse_mode: 'HTML', disable_web_page_preview: true,
+                    reply_markup: { inline_keyboard: buttons }
+                });
+            }
+
             // ── Detail view: /meme <address> ──
-            if (input && input.length > 20 && !['pumping', 'migrated', 'all'].includes(input.toLowerCase())) {
+            if (input && input.length > 20) {
                 await sendReply(msg, t(lang, 'meme_loading_detail'));
                 const [detail, devInfo] = await Promise.all([
                     onchainos.getMemePumpTokenDetails(chainIndex, input).catch(() => null),
@@ -202,8 +242,8 @@ function registerCoreCommands(deps = {}) {
                 if (!detail) return sendReply(msg, t(lang, 'meme_not_found'), { parse_mode: 'HTML' });
                 const d = Array.isArray(detail) ? detail[0] : detail;
                 const dev = devInfo ? (Array.isArray(devInfo) ? devInfo[0] : devInfo) : null;
-                const sym = d.symbol || d.tokenSymbol || '?';
-                const name = d.name || d.tokenName || sym;
+                const sym = escHtml(d.symbol || d.tokenSymbol || '?');
+                const name = escHtml(d.name || d.tokenName || sym);
                 const addr = d.tokenAddress || input;
                 const mcap = Number(d.market?.marketCapUsd || d.marketCap || 0);
                 const price = Number(d.market?.price || d.price || 0);
@@ -213,6 +253,7 @@ function registerCoreCommands(deps = {}) {
                 const buyTx = d.market?.buyTxCount1h || 0;
                 const sellTx = d.market?.sellTxCount1h || 0;
                 const vol1h = Number(d.market?.volumeUsd1h || 0);
+                const logoUrl = d.tokenLogoUrl || d.logoUrl || d.logo || null;
 
                 // Risk score
                 const risk = riskScore(d.tags);
@@ -246,7 +287,7 @@ function registerCoreCommands(deps = {}) {
                     card += `\n🛡️ <b>Risk Tags</b>\n${tagsText}\n`;
                 }
 
-                if (d.description) card += `\n📝 <i>${d.description.slice(0, 150)}</i>\n`;
+                if (d.description) card += `\n📝 <i>${escHtml(d.description.slice(0, 150))}</i>\n`;
 
                 // Social + action buttons
                 const buttons = [];
@@ -257,14 +298,29 @@ function registerCoreCommands(deps = {}) {
                 if (socialRow.length > 0) buttons.push(socialRow);
 
                 buttons.push([
-                    { text: '🔍 Similar', callback_data: `oc_similar|${chainIndex}|${addr.slice(0, 40)}` },
-                    { text: '📦 Bundle', callback_data: `oc_bundle|${chainIndex}|${addr.slice(0, 40)}` },
-                    { text: '🛡️ Security', callback_data: `oc_security|${chainIndex}|${addr.slice(0, 40)}` },
+                    { text: '🔍 Similar', callback_data: `oc_similar|${chainIndex}|${cbAddr(addr)}` },
+                    { text: '📦 Bundle', callback_data: `oc_bundle|${chainIndex}|${cbAddr(addr)}` },
+                    { text: '🛡️ Security', callback_data: `oc_security|${chainIndex}|${cbAddr(addr)}` },
                 ]);
                 buttons.push([
+                    { text: '📈 Chart', url: explorerChartUrl(chainIndex, addr) },
                     { text: '🔗 OKLink', url: explorerTokenUrl(chainIndex, addr) },
                     { text: '💱 Swap', callback_data: `oc_swap|${sym}` },
                 ]);
+                buttons.push([
+                    { text: '⭐ Watch', callback_data: `oc_fav_add|${chainIndex}|${cbAddr(addr)}|${sym}` },
+                ]);
+
+                // #9: Send photo if logo exists, otherwise text
+                if (logoUrl) {
+                    try {
+                        return bot.sendPhoto(msg.chat.id, logoUrl, {
+                            caption: card, parse_mode: 'HTML',
+                            reply_markup: { inline_keyboard: buttons },
+                            reply_to_message_id: msg.message_id
+                        });
+                    } catch (_) { /* fallback to text */ }
+                }
 
                 return sendReply(msg, card, {
                     parse_mode: 'HTML',
@@ -281,21 +337,24 @@ function registerCoreCommands(deps = {}) {
             if (!data || !Array.isArray(data) || data.length === 0) return sendReply(msg, t(lang, 'meme_empty'), { parse_mode: 'HTML' });
 
             let card = `🚀 <b>${t(lang, 'meme_title')}</b> (Solana)\n📊 ${t(lang, 'meme_stage')}: ${stage} | ${data.length} tokens\n━━━━━━━━━━━━━━━━━━\n\n`;
-            data.slice(0, 10).forEach((tok, i) => {
-                const sym = tok.symbol || tok.tokenSymbol || '?';
+            data.slice(0, compact ? 15 : 10).forEach((tok, i) => {
+                const sym = escHtml(tok.symbol || tok.tokenSymbol || '?');
                 const mcap = Number(tok.market?.marketCapUsd || tok.marketCap || 0);
                 const vol = Number(tok.market?.volumeUsd1h || 0);
                 const holders = tok.tags?.totalHolders || '?';
                 const bondPct = Number(tok.bondingPercent || 0);
                 const risk = riskScore(tok.tags);
-                const addr = tok.tokenAddress || '';
                 const age = relativeTime(tok.createdTimestamp);
 
-                card += `${i + 1}. ${risk.icon} <b>${sym}</b>`;
-                if (age) card += ` <i>(${age})</i>`;
-                card += `\n   💰 ${fmtNum(mcap)} | 📊 ${fmtNum(vol)}/1h | 👥 ${holders}\n`;
-                if (stage === 'PUMPING') card += `   ⏳ ${progressBar(bondPct, 8)}\n`;
-                card += `\n`;
+                if (compact) {
+                    card += `${i + 1}. ${risk.icon} <b>${sym}</b> ${fmtNum(mcap)}${age ? ` (${age})` : ''}\n`;
+                } else {
+                    card += `${i + 1}. ${risk.icon} <b>${sym}</b>`;
+                    if (age) card += ` <i>(${age})</i>`;
+                    card += `\n   💰 ${fmtNum(mcap)} | 📊 ${fmtNum(vol)}/1h | 👥 ${holders}\n`;
+                    if (stage === 'PUMPING') card += `   ⏳ ${progressBar(bondPct, 8)}\n`;
+                    card += '\n';
+                }
             });
             card += `💡 <i>${t(lang, 'meme_hint')}</i>`;
 
@@ -303,13 +362,14 @@ function registerCoreCommands(deps = {}) {
             const buttons = [];
             const detailRow = data.slice(0, 5).map((tok, i) => ({
                 text: `${i + 1}. ${tok.symbol || '?'}`,
-                callback_data: `oc_meme_d|${tok.tokenAddress?.slice(0, 40) || ''}`
+                callback_data: `oc_meme_d|${cbAddr(tok.tokenAddress)}`
             }));
             if (detailRow.length > 0) buttons.push(detailRow);
 
             buttons.push([
                 { text: stage === 'MIGRATED' ? '✅ Migrated ◀' : '✅ Migrated', callback_data: 'oc_meme_s|MIGRATED' },
                 { text: stage === 'PUMPING' ? '🔥 Pumping ◀' : '🔥 Pumping', callback_data: 'oc_meme_s|PUMPING' },
+                { text: compact ? '📋 Full' : '📐 Compact', callback_data: `oc_compact|meme` },
                 { text: '🔄', callback_data: `oc_meme_r|${stage}` },
             ]);
 
@@ -563,7 +623,9 @@ function registerCoreCommands(deps = {}) {
         if (await enforceOwnerCommandLimit(msg, 'trending')) return;
         const lang = await getLang(msg);
         const subCmd = match?.[1] || 'trending';
-        const chainIndex = '501';
+        const userId = String(msg.from?.id);
+        const compact = global._ocCompactMode.get(userId);
+        const chainIndex = '196'; // #7: Default X Layer
         const sortMap = {
             'trending':  { sortBy: '2', label: '🔥 Top Gainers',    icon: '🔥' },
             'topvolume': { sortBy: '3', label: '📊 Top Volume',     icon: '📊' },
@@ -577,8 +639,8 @@ function registerCoreCommands(deps = {}) {
             const chn = chainInfo(chainIndex);
 
             let card = `${config.label} <b>(24H)</b> — ${chn.name}\n━━━━━━━━━━━━━━━━━━\n\n`;
-            data.slice(0, 10).forEach((tok, i) => {
-                const sym = tok.tokenSymbol || tok.symbol || '?';
+            data.slice(0, compact ? 15 : 10).forEach((tok, i) => {
+                const sym = escHtml(tok.tokenSymbol || tok.symbol || '?');
                 const price = Number(tok.price || 0);
                 const change = Number(tok.change || 0);
                 const vol = Number(tok.volume || 0);
@@ -590,33 +652,47 @@ function registerCoreCommands(deps = {}) {
                 const addr = tok.tokenContractAddress || '';
                 const age = relativeTime(tok.firstTradeTime);
 
-                const changeIcon = change >= 0 ? '🟢' : '🔴';
-                card += `${i + 1}. <b>${sym}</b> ${fmtPrice(price)} ${changeIcon} ${change >= 0 ? '+' : ''}${fmtPercent(change)}`;
-                if (age) card += ` <i>(${age})</i>`;
-                card += `\n   Vol: ${fmtNum(vol)} | MCap: ${fmtNum(mcap)}`;
-                card += `\n   👥 ${fmtCompact(holders)} holders`;
-                if (traders) card += ` · ${fmtCompact(traders)} traders`;
-                card += ` | ${buySellRatio(txBuy, txSell)}`;
-                if (addr) card += `\n   <a href="${explorerTokenUrl(chainIndex, addr)}">🔗 OKLink</a>`;
-                card += '\n\n';
+                if (compact) {
+                    const cIcon = change >= 0 ? '🟢' : '🔴';
+                    card += `${i + 1}. <b>${sym}</b> ${fmtPrice(price)} ${cIcon} ${change >= 0 ? '+' : ''}${fmtPercent(change)}\n`;
+                } else {
+                    const changeIcon = change >= 0 ? '🟢' : '🔴';
+                    card += `${i + 1}. <b>${sym}</b> ${fmtPrice(price)} ${changeIcon} ${change >= 0 ? '+' : ''}${fmtPercent(change)}`;
+                    if (age) card += ` <i>(${age})</i>`;
+                    card += `\n   Vol: ${fmtNum(vol)} | MCap: ${fmtNum(mcap)}`;
+                    card += `\n   👥 ${fmtCompact(holders)} holders`;
+                    if (traders) card += ` · ${fmtCompact(traders)} traders`;
+                    card += ` | ${buySellRatio(txBuy, txSell)}`;
+                    if (addr) card += `\n   <a href="${explorerChartUrl(chainIndex, addr)}">📈 Chart</a>`;
+                    card += '\n\n';
+                }
             });
             card += `💡 <i>${t(lang, 'trending_hint')}</i>`;
 
-            // Tab switch + detail buttons
+            // Tab switch + chain selector + detail buttons
             const tabRow = [
-                { text: subCmd === 'trending' ? '🔥 Gainers ◀' : '🔥 Gainers', callback_data: 'oc_trend_sw|trending' },
-                { text: subCmd === 'topvolume' ? '📊 Volume ◀' : '📊 Volume', callback_data: 'oc_trend_sw|topvolume' },
-                { text: subCmd === 'topmcap' ? '💎 MCap ◀' : '💎 MCap', callback_data: 'oc_trend_sw|topmcap' },
+                { text: subCmd === 'trending' ? '🔥 Gainers ◀' : '🔥 Gainers', callback_data: 'oc_trend_sw|trending|196' },
+                { text: subCmd === 'topvolume' ? '📊 Volume ◀' : '📊 Volume', callback_data: 'oc_trend_sw|topvolume|196' },
+                { text: subCmd === 'topmcap' ? '💎 MCap ◀' : '💎 MCap', callback_data: 'oc_trend_sw|topmcap|196' },
             ];
+            // #7: Chain selector
+            const chainRow = TRENDING_CHAINS.map(c => ({
+                text: c.id === chainIndex ? `${c.emoji} ${c.label} ◀` : `${c.emoji} ${c.label}`,
+                callback_data: `oc_trend_ch|${subCmd}|${c.id}`
+            }));
             const detailRow = data.slice(0, 5).map((tok, i) => ({
-                text: `${i + 1}. ${tok.tokenSymbol || '?'}`,
-                callback_data: `oc_meme_d|${(tok.tokenContractAddress || '').slice(0, 40)}`
+                text: `${i + 1}. ${escHtml(tok.tokenSymbol || '?')}`,
+                callback_data: `oc_meme_d|${cbAddr(tok.tokenContractAddress)}`
             }));
 
             const buttons = [];
             if (detailRow.length > 0) buttons.push(detailRow);
             buttons.push(tabRow);
-            buttons.push([{ text: '🔄 Refresh', callback_data: `oc_trend_r|${subCmd}|${chainIndex}` }]);
+            buttons.push(chainRow);
+            buttons.push([
+                { text: compact ? '📋 Full' : '📐 Compact', callback_data: `oc_compact|trend` },
+                { text: '🔄 Refresh', callback_data: `oc_trend_r|${subCmd}|${chainIndex}` },
+            ]);
 
             return sendReply(msg, card, {
                 parse_mode: 'HTML',
