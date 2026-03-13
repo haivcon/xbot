@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ExternalLink, Globe, Gamepad2, Landmark, Users, UserPlus, TrendingUp, TrendingDown, Copy, Check, ChevronRight, Sparkles, ArrowUpRight } from 'lucide-react';
+import api from '@/api/client';
 
 /* ═══════════════════════════════════════════════════
    X Layer Community Ecosystem — Premium Design
@@ -105,7 +106,7 @@ function SocialButton({ href, icon: Icon, label, bg, hoverBg }) {
     );
 }
 
-/* ── Token Price Hook — uses backend proxy to avoid CORS ── */
+/* ── Token Price Hook — uses API client with proper auth ── */
 function useTokenPrices(tokens) {
     const [prices, setPrices] = useState({});
     const [loading, setLoading] = useState(true);
@@ -116,13 +117,7 @@ function useTokenPrices(tokens) {
             setLoading(true);
             try {
                 const body = tokens.map(addr => ({ chainIndex: XLAYER_CHAIN, tokenContractAddress: addr }));
-                const res = await fetch('/api/dashboard/market/token/price', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ tokens: body }),
-                });
-                const json = await res.json();
+                const json = await api.getTokenPrice(body);
                 if (!cancelled && Array.isArray(json?.data)) {
                     const results = {};
                     for (const item of json.data) {
