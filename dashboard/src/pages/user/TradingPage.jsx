@@ -167,8 +167,8 @@ function GasWidget({ chainIndex }) {
     const unit = gasData?.unit || 'Gwei';
 
     return (
-        <div className="glass-card p-4 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-amber-500 to-orange-500" />
+        <div className="glass-card p-4 relative">
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-amber-500 to-orange-500 rounded-t-2xl" />
             <div className="flex items-center gap-2 mb-2">
                 <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center">
                     <Fuel size={13} className="text-amber-400" />
@@ -209,8 +209,8 @@ function TokenInfoCard({ chainIndex, tokenAddress, symbol }) {
     if (!info) return null;
 
     return (
-        <div className="glass-card p-3 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-cyan-500 to-blue-500" />
+        <div className="glass-card p-3 relative">
+            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-cyan-500 to-blue-500 rounded-t-2xl" />
             <div className="flex items-center gap-2 mb-2">
                 <Info size={11} className="text-cyan-400" />
                 <span className="text-[10px] font-bold text-surface-100">{symbol || info.tokenSymbol}</span>
@@ -249,8 +249,8 @@ function MiniPriceChart({ chainIndex, tokenAddress, symbol }) {
     if (!tokenAddress || tokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') return null;
 
     return (
-        <div className="glass-card p-3 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-purple-500 to-indigo-500" />
+        <div className="glass-card p-3 relative">
+            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-purple-500 to-indigo-500 rounded-t-2xl" />
             <div className="flex items-center gap-2 mb-2">
                 <BarChart3 size={11} className="text-purple-400" />
                 <span className="text-[10px] font-bold text-surface-100">{symbol} — 7D Chart</span>
@@ -288,8 +288,8 @@ function RecentTrades({ chainIndex, tokenAddress }) {
     if (!tokenAddress || tokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') return null;
 
     return (
-        <div className="glass-card overflow-hidden relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-emerald-500 to-teal-500" />
+        <div className="glass-card relative">
+            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-emerald-500 to-teal-500 rounded-t-2xl" />
             <div className="p-3 border-b border-white/5 flex items-center gap-2">
                 <Activity size={11} className="text-emerald-400" />
                 <h4 className="text-[10px] font-bold text-surface-100">Recent Trades</h4>
@@ -506,9 +506,9 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect }) {
     };
 
     return (
-        <div className="glass-card p-5 relative overflow-hidden">
+        <div className="glass-card p-5 relative">
             <ConfettiBurst active={showConfetti} />
-            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-500 via-purple-500 to-cyan-500" />
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-500 via-purple-500 to-cyan-500 rounded-t-2xl" />
 
             <div className="flex items-center gap-2 mb-4">
                 <div className="w-8 h-8 rounded-xl bg-brand-500/15 flex items-center justify-center">
@@ -694,8 +694,8 @@ function TopTokensList({ chainIndex, onSelectToken }) {
     ];
 
     return (
-        <div className="glass-card overflow-hidden relative">
-            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-500 to-emerald-500" />
+        <div className="glass-card relative">
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-500 to-emerald-500 rounded-t-2xl" />
             <div className="p-4 border-b border-white/5 flex items-center justify-between">
                 <h3 className="text-sm font-bold text-surface-100 flex items-center gap-2">
                     <TrendingUp size={14} className="text-brand-400" />
@@ -789,8 +789,8 @@ function TxHistory() {
     }, []);
 
     return (
-        <div className="glass-card overflow-hidden relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-blue-500 to-indigo-500" />
+        <div className="glass-card relative">
+            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-blue-500 to-indigo-500 rounded-t-2xl" />
             <div className="p-4 border-b border-white/5 flex items-center gap-2">
                 <Clock size={14} className="text-blue-400" />
                 <h3 className="text-xs font-bold text-surface-100">Recent Transactions</h3>
