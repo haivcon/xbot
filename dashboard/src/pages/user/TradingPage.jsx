@@ -425,7 +425,7 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect }) {
     const TokenDropdown = ({ value, onChange, open, setOpen, exclude, label }) => {
         const list = getTokenList(exclude);
         return (
-            <div className="relative">
+            <div className={`relative ${open ? 'z-50' : ''}`}>
                 <label className="text-[9px] text-surface-200/30 uppercase tracking-widest mb-1.5 block font-semibold">{label}</label>
                 <button
                     onClick={() => setOpen(!open)}
@@ -506,7 +506,7 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect }) {
     };
 
     return (
-        <div className="glass-card p-5 relative">
+        <div className={`glass-card p-5 relative ${openFrom || openTo ? 'z-30' : ''}`}>
             <ConfettiBurst active={showConfetti} />
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-500 via-purple-500 to-cyan-500 rounded-t-2xl" />
 
@@ -839,7 +839,7 @@ function TxHistory() {
 function ChainSelector({ selected, onChange }) {
     const [open, setOpen] = useState(false);
     return (
-        <div className="relative">
+        <div className={`relative ${open ? 'z-50' : ''}`}>
             <button onClick={() => setOpen(!open)}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] text-surface-100 text-xs font-semibold transition-all">
                 <span className="text-sm">{CHAINS[selected]?.icon}</span>

@@ -108,7 +108,7 @@ export default function CustomSelect({
     };
 
     return (
-        <div ref={wrapperRef} className={`relative ${className}`} onKeyDown={handleKeyDown}>
+        <div ref={wrapperRef} className={`relative ${open ? 'z-50' : ''} ${className}`} onKeyDown={handleKeyDown}>
             {/* Trigger Button */}
             <button
                 type="button"
