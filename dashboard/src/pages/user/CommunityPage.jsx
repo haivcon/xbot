@@ -193,6 +193,35 @@ function useTokenInfo(tokens) {
     return info;
 }
 
+/* ── Token Holders Hook (uses /api/v6/dex/market/token/holder) ── */
+function useTokenHolders(tokens) {
+    const [holders, setHolders] = useState({});
+
+    useEffect(() => {
+        let cancelled = false;
+        async function fetchHolders() {
+            const results = {};
+            await Promise.allSettled(
+                tokens.map(async (addr) => {
+                    try {
+                        const json = await api.getTokenHolders(XLAYER_CHAIN, addr);
+                        const holderList = json?.data || [];
+                        // Use holderCount from response if available, else count the returned list
+                        const count = json?.holderCount || json?.totalHolder || json?.total || holderList.length || 0;
+                        results[addr.toLowerCase()] = count;
+                    } catch { /* ignore */ }
+                })
+            );
+            if (!cancelled) setHolders(results);
+        }
+        fetchHolders();
+        const iv = setInterval(fetchHolders, 120000); // refresh every 2min
+        return () => { cancelled = true; clearInterval(iv); };
+    }, []);
+
+    return holders;
+}
+
 /* ── Vote/Like System (localStorage) ── */
 function useVotes() {
     const [votes, setVotes] = useState(() => {
@@ -253,7 +282,7 @@ function fmtChange(pct) {
 }
 
 /* ── Community Card — Premium Design v2 ── */
-function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, votes, isVoted, onVote, t, navigate }) {
+function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, holderCount, votes, isVoted, onVote, t, navigate }) {
     const [copied, setCopied] = useState(false);
     const [expanded, setExpanded] = useState(false);
     const { name, symbol, token, logo, gradient, bgGradient, borderColor, glowColor, expandedBg, tagline, desc, links, isNew } = community;
@@ -279,34 +308,27 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, v
     const change24h = tokenInfo?.change24h;
     const changeStr = fmtChange(change24h);
 
-    const holderCount = tokenInfo?.holderCount || 0;
+    const displayHolderCount = holderCount || tokenInfo?.holderCount || 0;
 
     return (
         <div className={`group relative overflow-hidden rounded-2xl border ${borderColor} bg-surface-800/60 backdrop-blur-sm transition-all duration-500 hover:shadow-2xl ${glowColor} flex flex-col`}>
             {/* Background gradient overlay */}
             <div className={`absolute inset-0 bg-gradient-to-br ${expanded ? expandedBg : bgGradient} transition-opacity duration-500 ${expanded ? 'opacity-80' : 'opacity-50 group-hover:opacity-80'}`} />
 
-            {/* NEW badge */}
-            {isNew && (
-                <div className="absolute top-3 right-3 z-10">
-                    <span className="relative flex h-5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-30" />
-                        <span className="relative inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[9px] font-bold text-emerald-400 uppercase tracking-wider">
-                            NEW
-                        </span>
-                    </span>
-                </div>
-            )}
-
             <div className="relative p-5 flex flex-col flex-1">
                 {/* ── Top Row: Logo + Name + Price ── */}
                 <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="flex items-center gap-4">
-                        {/* Real token logo — uniform size */}
+                        {/* Real token logo — uniform size + NEW badge overlay */}
                         <div className={`relative w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} p-0.5 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 flex-shrink-0`}>
                             <div className="w-full h-full rounded-[12px] bg-surface-900/80 flex items-center justify-center overflow-hidden">
                                 <img src={logo} alt={name} className="w-10 h-10 object-contain" />
                             </div>
+                            {isNew && (
+                                <span className="absolute -top-1.5 -right-1.5 z-10 px-1.5 py-0.5 rounded-full bg-emerald-500 text-[7px] font-bold text-white uppercase tracking-wider shadow-lg shadow-emerald-500/30">
+                                    NEW
+                                </span>
+                            )}
                         </div>
                         <div>
                             <h3 className="text-xl font-bold text-surface-100 tracking-tight">
@@ -376,7 +398,7 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, v
                     </span>
                     <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
                         <Users size={9} className="text-purple-400" />
-                        {holderCount > 0 ? holderCount.toLocaleString() : '—'} {t('dashboard.community.holders')}
+                        {displayHolderCount > 0 ? displayHolderCount.toLocaleString() : '—'} {t('dashboard.community.holders')}
                     </span>
                     <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-surface-200/50">
                         <TrendingUp size={9} className="text-emerald-400" />
@@ -514,6 +536,7 @@ export default function CommunityPage() {
     const tokenAddresses = useMemo(() => COMMUNITIES.map(c => c.token), []);
     const { prices, loading: priceLoading } = useTokenPrices(tokenAddresses);
     const tokenInfo = useTokenInfo(tokenAddresses);
+    const holderCounts = useTokenHolders(tokenAddresses);
     const { votes, voted, toggleVote } = useVotes();
     const [activeFilter, setActiveFilter] = useState('all');
 
@@ -603,6 +626,7 @@ export default function CommunityPage() {
                         price={prices[community.token.toLowerCase()]}
                         priceLoading={priceLoading}
                         tokenInfo={tokenInfo[community.token.toLowerCase()]}
+                        holderCount={holderCounts[community.token.toLowerCase()] || 0}
                         votes={votes[community.token.toLowerCase()] || 0}
                         isVoted={!!voted[community.token.toLowerCase()]}
                         onVote={toggleVote}
