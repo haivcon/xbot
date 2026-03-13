@@ -21,8 +21,8 @@ const COMMUNITIES = [
         bgGradient: 'from-amber-500/10 via-orange-500/5 to-transparent',
         borderColor: 'border-amber-500/20 hover:border-amber-400/40',
         glowColor: 'hover:shadow-amber-500/15',
-        tagline: 'The mischievous cat of X Layer',
-        desc: 'GameFi, DeFi & memes ecosystem — building the most fun community on X Layer.',
+        tagline: 'banmaoTagline',
+        desc: 'banmaoDesc',
         links: {
             telegram: 'https://t.me/banmao_X',
             twitter: 'https://x.com/banmao_X',
@@ -41,8 +41,8 @@ const COMMUNITIES = [
         bgGradient: 'from-red-500/10 via-rose-500/5 to-transparent',
         borderColor: 'border-red-500/20 hover:border-red-400/40',
         glowColor: 'hover:shadow-red-500/15',
-        tagline: 'The unstoppable bull of X Layer',
-        desc: 'Powering DEX activity and community culture on X Layer.',
+        tagline: 'niumaTagline',
+        desc: 'niumaDesc',
         links: {
             telegram: 'https://t.me/NIUMANEW',
             twitter: 'https://x.com/NIUMA_Xlayer',
@@ -59,8 +59,8 @@ const COMMUNITIES = [
         bgGradient: 'from-purple-500/10 via-violet-500/5 to-transparent',
         borderColor: 'border-purple-500/20 hover:border-purple-400/40',
         glowColor: 'hover:shadow-purple-500/15',
-        tagline: 'The wizard of X Layer',
-        desc: 'Community magic meets GameFi — conjuring vibes and value.',
+        tagline: 'xwizardTagline',
+        desc: 'xwizardDesc',
         links: {
             telegram: 'https://t.me/okx_xwizard',
             twitter: 'https://x.com/xwizard_cto',
@@ -149,7 +149,7 @@ function fmtPrice(p) {
 }
 
 /* ── Community Card — Premium Design ── */
-function CommunityCard({ community, price, priceLoading }) {
+function CommunityCard({ community, price, priceLoading, t }) {
     const [copied, setCopied] = useState(false);
     const { name, symbol, token, emoji, gradient, bgGradient, borderColor, glowColor, tagline, desc, links } = community;
 
@@ -178,7 +178,7 @@ function CommunityCard({ community, price, priceLoading }) {
                             <h3 className="text-xl font-bold text-surface-100 tracking-tight">
                                 {name}
                             </h3>
-                            <p className="text-xs text-surface-200/40 mt-0.5 italic">{tagline}</p>
+                            <p className="text-xs text-surface-200/40 mt-0.5 italic">{t(`dashboard.community.${tagline}`)}</p>
                         </div>
                     </div>
 
@@ -210,7 +210,7 @@ function CommunityCard({ community, price, priceLoading }) {
 
                 {/* ── Description ── */}
                 <p className="text-[13px] text-surface-200/45 leading-relaxed mb-5">
-                    {desc}
+                    {t(`dashboard.community.${desc}`)}
                 </p>
 
                 {/* ── Contract Address ── */}
@@ -319,10 +319,10 @@ export default function CommunityPage() {
                         </div>
                         <div>
                             <h1 className="text-3xl sm:text-4xl font-extrabold text-surface-100 tracking-tight">
-                                X Layer <span className="bg-gradient-to-r from-brand-400 to-purple-400 bg-clip-text text-transparent">Community</span>
+                                X Layer <span className="bg-gradient-to-r from-brand-400 to-purple-400 bg-clip-text text-transparent">{t('dashboard.community.communities')}</span>
                             </h1>
                             <p className="text-sm text-surface-200/40 mt-1 max-w-lg">
-                                Discover the vibrant ecosystem of communities building on X Layer — GameFi, DeFi & beyond
+                                {t('dashboard.community.subtitle')}
                             </p>
                         </div>
                     </div>
@@ -330,7 +330,7 @@ export default function CommunityPage() {
                     {/* Filter tabs */}
                     <div className="flex items-center gap-2 mt-7 flex-wrap">
                         {[
-                            { id: 'all', icon: Users, label: `${COMMUNITIES.length} All`, color: 'text-brand-400' },
+                            { id: 'all', icon: Users, label: `${COMMUNITIES.length} ${t('dashboard.community.filterAll')}`, color: 'text-brand-400' },
                             { id: 'gamefi', icon: Gamepad2, label: `${COMMUNITIES.filter(c => c.links.gamefi).length} GameFi`, color: 'text-purple-400' },
                             { id: 'defi', icon: Landmark, label: `${COMMUNITIES.filter(c => c.links.defi).length} DeFi`, color: 'text-emerald-400' },
                         ].map(tab => (
@@ -350,7 +350,7 @@ export default function CommunityPage() {
                         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.06] backdrop-blur-sm">
                             <Sparkles size={14} className="text-amber-400" />
                             <span className="text-xs text-surface-200/50">
-                                <span className="text-surface-100 font-bold">X Layer</span> Chain
+                                <span className="text-surface-100 font-bold">X Layer</span> {t('dashboard.community.chain')}
                             </span>
                         </div>
                     </div>
@@ -365,6 +365,7 @@ export default function CommunityPage() {
                         community={community}
                         price={prices[community.token.toLowerCase()]}
                         priceLoading={priceLoading}
+                        t={t}
                     />
                 ))}
             </div>
@@ -385,12 +386,11 @@ export default function CommunityPage() {
 
                     <div className="flex-1">
                         <h3 className="text-xl font-bold text-surface-100 mb-2 flex items-center gap-2">
-                            List Your Community
-                            <span className="px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 text-[10px] font-semibold uppercase tracking-wider">Free</span>
+                            {t('dashboard.community.listTitle')}
+                            <span className="px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 text-[10px] font-semibold uppercase tracking-wider">{t('dashboard.community.listFree')}</span>
                         </h3>
                         <p className="text-sm text-surface-200/40 leading-relaxed max-w-xl">
-                            Building on X Layer? Get your community token, GameFi, or DeFi project featured in the X Layer ecosystem directory.
-                            Join the growing network of projects shaping the future of X Layer.
+                            {t('dashboard.community.listDesc')}
                         </p>
                     </div>
 
@@ -410,7 +410,7 @@ export default function CommunityPage() {
             {/* ═══════ Footer ═══════ */}
             <div className="text-center space-y-2 pb-6">
                 <p className="text-[10px] text-surface-200/15">
-                    Prices powered by OKX DEX API · Auto-refresh every 30s · X Layer (Chain ID: 196)
+                    {t('dashboard.community.footer')}
                 </p>
             </div>
         </div>
