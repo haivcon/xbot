@@ -116,7 +116,7 @@ function useTokenPrices(tokens) {
             setLoading(true);
             try {
                 const body = tokens.map(addr => ({ chainIndex: XLAYER_CHAIN, tokenContractAddress: addr }));
-                const res = await fetch('/api/market/token/price', {
+                const res = await fetch('/api/dashboard/market/token/price', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
