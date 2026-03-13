@@ -216,6 +216,15 @@ export default function TransferHistoryPage() {
         swaps: transactions.filter(tx => tx.type === 'swap').length,
     };
 
+    // Trade analytics (#7)
+    const analytics = (() => {
+        const swaps = transactions.filter(tx => tx.type === 'swap');
+        const totalVolume = swaps.reduce((s, tx) => s + parseFloat(tx.fromAmount || 0), 0);
+        const avgSize = swaps.length > 0 ? totalVolume / swaps.length : 0;
+        const biggest = swaps.reduce((mx, tx) => Math.max(mx, parseFloat(tx.fromAmount || 0)), 0);
+        return { totalVolume, avgSize, biggest, swapCount: swaps.length };
+    })();
+
     return (
         <div className="space-y-6 animate-fadeIn">
             {/* Header */}
@@ -256,6 +265,26 @@ export default function TransferHistoryPage() {
                     </div>
                 ))}
             </div>
+
+            {/* Trade Analytics (#7) */}
+            {analytics.swapCount > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                        { label: t('dashboard.tradeAnalytics.totalVolume') || 'Total Volume', value: analytics.totalVolume.toFixed(4), icon: '💰', color: 'text-amber-400' },
+                        { label: t('dashboard.tradeAnalytics.avgSwap') || 'Avg Swap Size', value: analytics.avgSize.toFixed(4), icon: '📐', color: 'text-cyan-400' },
+                        { label: t('dashboard.tradeAnalytics.biggestSwap') || 'Biggest Swap', value: analytics.biggest.toFixed(4), icon: '🐋', color: 'text-purple-400' },
+                        { label: t('dashboard.tradeAnalytics.swapCount') || 'Total Swaps', value: analytics.swapCount, icon: '🔄', color: 'text-brand-400' },
+                    ].map((s, i) => (
+                        <div key={`a${i}`} className="glass-card p-3.5 flex items-center gap-3">
+                            <span className="text-xl">{s.icon}</span>
+                            <div>
+                                <p className={`text-sm font-bold tabular-nums ${s.color}`}>{s.value}</p>
+                                <p className="text-[10px] text-surface-200/40 uppercase tracking-wider">{s.label}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Filter + Table */}
             <div className="glass-card overflow-hidden">

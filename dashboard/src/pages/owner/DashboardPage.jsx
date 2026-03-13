@@ -80,6 +80,66 @@ function formatUptime(seconds) {
     return `${m}m`;
 }
 
+/* ── Watchlist: X Layer Community Tokens ── */
+const WATCHLIST_TOKENS = [
+    { name: 'Banmao', symbol: 'BANMAO', addr: '0x16d91d1615fc55b76d5f92365bd60c069b46ef78', logo: '/logos/banmao.png', color: 'text-amber-400' },
+    { name: 'Niuma', symbol: 'NIUMA', addr: '0x87669801a1fad6dad9db70d27ac752f452989667', logo: '/logos/niuma.png', color: 'text-red-400' },
+    { name: 'Xwizard', symbol: 'XWIZARD', addr: '0xdcc83b32b6b4e95a61951bfcc9d71967515c0fca', logo: '/logos/xwizard.png', color: 'text-purple-400' },
+];
+
+function WatchlistTokens() {
+    const [prices, setPrices] = useState({});
+    useEffect(() => {
+        async function fetch() {
+            try {
+                const body = WATCHLIST_TOKENS.map(t => ({ chainIndex: '196', tokenContractAddress: t.addr }));
+                const json = await api.getTokenPrice(body);
+                if (Array.isArray(json?.data)) {
+                    const m = {};
+                    for (const item of json.data) {
+                        const a = (item.tokenContractAddress || '').toLowerCase();
+                        m[a] = parseFloat(item.price);
+                    }
+                    setPrices(m);
+                }
+            } catch { /* ignore */ }
+        }
+        fetch();
+        const iv = setInterval(fetch, 30000);
+        return () => clearInterval(iv);
+    }, []);
+
+    const fmtP = (p) => {
+        if (!p) return '—';
+        if (p < 1) {
+            const s = p.toFixed(18);
+            const match = s.match(/^0\.(0*)/);
+            const lz = match ? match[1].length : 0;
+            return '$' + s.slice(0, 2 + lz + 4);
+        }
+        return `$${(Math.floor(p * 100) / 100).toFixed(2)}`;
+    };
+
+    return (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {WATCHLIST_TOKENS.map(tk => {
+                const p = prices[tk.addr.toLowerCase()];
+                return (
+                    <a key={tk.addr} href={`https://web3.okx.com/token/x-layer/${tk.addr}`} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.05] hover:border-white/[0.08] transition-all group/wl">
+                        <img src={tk.logo} alt={tk.name} className="w-8 h-8 rounded-lg object-cover" />
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-surface-100">{tk.name}</p>
+                            <p className="text-[10px] text-surface-200/40">{tk.symbol}</p>
+                        </div>
+                        <span className="text-sm font-bold text-surface-100 tabular-nums">{fmtP(p)}</span>
+                    </a>
+                );
+            })}
+        </div>
+    );
+}
+
 export default function DashboardPage() {
     const { t } = useTranslation();
     const { theme } = useThemeStore();
@@ -305,6 +365,20 @@ export default function DashboardPage() {
                             </p>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* ── Token Watchlist Widget ── */}
+            {isVisible('live') && liveStats.portfolio !== null && (
+                <div className="glass-card p-5">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <TrendingUp size={18} className="text-emerald-400" />
+                            <h3 className="font-semibold text-surface-100">{t('dashboard.liveStats.watchlist') || 'Token Watchlist'}</h3>
+                        </div>
+                        <span className="text-[10px] text-surface-200/30">X Layer</span>
+                    </div>
+                    <WatchlistTokens />
                 </div>
             )}
 
