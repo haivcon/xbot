@@ -330,6 +330,24 @@
     
     /* Reduce heading sizes */
     h1 { @apply text-lg; }
+
+    /* Compact zoom for mobile tablets */
+    #root {
+      zoom: 0.85;
+    }
+  }
+
+  /* Extra compact for small phones */
+  @media (max-width: 480px) {
+    #root {
+      zoom: 0.72;
+    }
+    h1 { font-size: 1rem !important; }
+    h2 { font-size: 0.875rem !important; }
+    h3 { font-size: 0.8rem !important; }
+    .glass-card { @apply p-3 rounded-lg; }
+    .stat-card { @apply p-2; }
+    .sidebar-link { @apply px-2 py-2 text-xs gap-2; }
   }
   
   /* Tablet adjustments */
