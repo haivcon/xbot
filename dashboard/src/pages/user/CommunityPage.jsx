@@ -109,12 +109,9 @@ function SocialButton({ href, icon: Icon, label, bg, hoverBg }) {
             target="_blank"
             rel="noopener noreferrer"
             title={label}
-            className={`group/social relative w-10 h-10 rounded-xl ${bg} flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg ${hoverBg}`}
+            className={`group/social relative w-9 h-9 rounded-xl ${bg} flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg ${hoverBg}`}
         >
-            <Icon size={16} />
-            <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 text-[9px] font-medium text-surface-200/50 opacity-0 group-hover/social:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                {label}
-            </span>
+            <Icon size={14} />
         </a>
     );
 }
@@ -305,10 +302,11 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, v
                 {/* ── Top Row: Logo + Name + Price ── */}
                 <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="flex items-center gap-4">
-                        {/* Real token logo */}
-                        <div className={`relative w-14 h-14 rounded-2xl bg-gradient-to-br ${gradient} p-0.5 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
-                            <img src={logo} alt={name} className="w-full h-full rounded-[14px] object-cover" />
-                            <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-30 animate-ping`} style={{ animationDuration: '2s' }} />
+                        {/* Real token logo — uniform size */}
+                        <div className={`relative w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} p-0.5 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 flex-shrink-0`}>
+                            <div className="w-full h-full rounded-[12px] bg-surface-900/80 flex items-center justify-center overflow-hidden">
+                                <img src={logo} alt={name} className="w-10 h-10 object-contain" />
+                            </div>
                         </div>
                         <div>
                             <h3 className="text-xl font-bold text-surface-100 tracking-tight">
@@ -351,6 +349,18 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, v
                                 </div>
                             </>
                         )}
+                        {/* Vote heart — top-right next to price */}
+                        <button
+                            onClick={() => onVote(token)}
+                            className={`mt-1 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-all duration-200 ml-auto ${
+                                isVoted
+                                    ? 'bg-pink-500/15 border border-pink-500/30 text-pink-400'
+                                    : 'bg-white/[0.03] border border-white/[0.06] text-surface-200/30 hover:bg-pink-500/10 hover:text-pink-400'
+                            }`}
+                        >
+                            <Heart size={11} className={isVoted ? 'fill-current' : ''} />
+                            {votes > 0 && <span>{votes}</span>}
+                        </button>
                     </div>
                 </div>
 
@@ -465,43 +475,27 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, v
                         )}
                     </div>
 
-                    {/* Right side: Vote + Expand + OKX */}
-                    <div className="flex items-center gap-2">
-                        {/* Vote button */}
-                        <button
-                            onClick={() => onVote(token)}
-                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition-all duration-200 ${
-                                isVoted
-                                    ? 'bg-pink-500/15 border border-pink-500/30 text-pink-400'
-                                    : 'bg-white/[0.03] border border-white/[0.06] text-surface-200/40 hover:bg-pink-500/10 hover:border-pink-500/20 hover:text-pink-400'
-                            }`}
-                        >
-                            <Heart size={12} className={isVoted ? 'fill-current' : ''} />
-                            {votes > 0 && <span>{votes}</span>}
-                        </button>
-
-                        {/* Expand toggle */}
+                    {/* Right side: Expand + OKX (icon-only) */}
+                    <div className="flex items-center gap-1.5">
+                        {/* Expand toggle — icon only */}
                         <button
                             onClick={() => setExpanded(!expanded)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-surface-200/40 hover:bg-white/[0.06] hover:text-surface-200/70 transition-all text-[11px] font-medium"
+                            className="w-9 h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] text-surface-200/40 hover:bg-white/[0.06] hover:text-surface-200/70 transition-all flex items-center justify-center"
+                            title={expanded ? t('dashboard.community.collapse') : t('dashboard.community.details')}
                         >
-                            {expanded ? (
-                                <><ChevronUp size={12} /> {t('dashboard.community.collapse')}</>
-                            ) : (
-                                <><ChevronDown size={12} /> {t('dashboard.community.details')}</>
-                            )}
+                            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         </button>
 
-                        {/* OKX Web3 link (only when not expanded) */}
+                        {/* OKX Web3 link — icon only */}
                         {!expanded && (
                             <a
                                 href={OKX_TOKEN_URL(token)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.08] hover:border-white/[0.12] text-surface-200/40 hover:text-surface-200/70 transition-all duration-200 text-[11px] font-medium group/okx"
+                                className="w-9 h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.08] hover:border-white/[0.12] text-surface-200/40 hover:text-surface-200/70 transition-all flex items-center justify-center"
+                                title="OKX Web3"
                             >
-                                <span>OKX Web3</span>
-                                <ArrowUpRight size={11} className="group-hover/okx:translate-x-0.5 group-hover/okx:-translate-y-0.5 transition-transform" />
+                                <ArrowUpRight size={14} />
                             </a>
                         )}
                     </div>
