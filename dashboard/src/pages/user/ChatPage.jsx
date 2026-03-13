@@ -215,7 +215,7 @@ function ToolCallCard({ toolCall }) {
 }
 
 /* ─── Single message bubble ─── */
-function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, onEdit }) {
+function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, onEdit, onSave }) {
     const [copied, setCopied] = useState(false);
     const isUser = message.role === 'user';
     const isError = !isUser && message.content?.startsWith('\u274c');
@@ -278,6 +278,11 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
                     {isUser && onEdit && (
                         <button onClick={onEdit} className="p-1 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-brand-400 transition-colors" title="Edit">
                             <Edit size={10} />
+                        </button>
+                    )}
+                    {isUser && onSave && (
+                        <button onClick={() => onSave(message.content)} className="p-1 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-amber-400 transition-colors" title="Save prompt">
+                            <Star size={10} />
                         </button>
                     )}
                     {onPin && (
@@ -368,6 +373,21 @@ export default function ChatPage() {
     const [showApiKeyModal, setShowApiKeyModal] = useState(false);
     const [apiKeyInput, setApiKeyInput] = useState('');
     const [userApiKeys, setUserApiKeys] = useState([]);
+
+    // #18 Saved Prompts
+    const [savedPrompts, setSavedPrompts] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('chat_saved_prompts') || '[]'); } catch { return []; }
+    });
+    const savePrompt = (text) => {
+        const updated = [{ text, ts: Date.now() }, ...savedPrompts.filter(p => p.text !== text)].slice(0, 20);
+        setSavedPrompts(updated);
+        localStorage.setItem('chat_saved_prompts', JSON.stringify(updated));
+    };
+    const removePrompt = (ts) => {
+        const updated = savedPrompts.filter(p => p.ts !== ts);
+        setSavedPrompts(updated);
+        localStorage.setItem('chat_saved_prompts', JSON.stringify(updated));
+    };
     const [apiKeyLoading, setApiKeyLoading] = useState(false);
     const [apiKeyError, setApiKeyError] = useState('');
     const [isDragging, setIsDragging] = useState(false);
@@ -1085,6 +1105,51 @@ export default function ChatPage() {
                         </button>
                     ))}
                 </div>
+
+                {/* #18 Saved Prompts */}
+                {savedPrompts.length > 0 && (
+                    <div className="border-t border-white/5">
+                        <div className="px-3 py-2 flex items-center gap-2">
+                            <Star size={12} className="text-amber-400" />
+                            <span className="text-[10px] font-semibold text-surface-200/50 uppercase tracking-wider">{t('dashboard.chatPage.savedPrompts', 'Saved Prompts')}</span>
+                        </div>
+                        <div className="px-2 pb-2 space-y-0.5">
+                            {savedPrompts.slice(0, 5).map(p => (
+                                <div key={p.ts} className="flex items-center gap-1 group">
+                                    <button onClick={() => sendMessage(p.text)}
+                                        className="flex-1 text-left px-2 py-1.5 rounded-lg text-[11px] text-surface-200/60 hover:text-surface-100 hover:bg-white/[0.03] truncate transition-colors">
+                                        {p.text.slice(0, 50)}{p.text.length > 50 ? '…' : ''}
+                                    </button>
+                                    <button onClick={() => removePrompt(p.ts)}
+                                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-surface-200/20 hover:text-red-400 transition-all">
+                                        <X size={10} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* #20 Copilot Quick Prompts */}
+                <div className="border-t border-white/5 p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Sparkles size={12} className="text-purple-400" />
+                        <span className="text-[10px] font-semibold text-surface-200/50 uppercase tracking-wider">{t('dashboard.chatPage.copilot', 'Copilot')}</span>
+                    </div>
+                    <div className="space-y-1">
+                        {[
+                            { label: '🔍 Analyze token', cmd: 'Analyze this token for me: ' },
+                            { label: '📊 Market trend', cmd: 'What is the current market trend for top tokens?' },
+                            { label: '🐋 Whale signals', cmd: 'Show me the latest whale buy signals' },
+                            { label: '💱 Best swap', cmd: 'What is the best swap route for 0.1 OKB to USDT?' },
+                        ].map(p => (
+                            <button key={p.cmd} onClick={() => sendMessage(p.cmd)}
+                                className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] text-surface-200/50 hover:text-brand-400 hover:bg-brand-500/5 transition-colors">
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             {sidebarOpen && isMobile && (
@@ -1433,6 +1498,7 @@ export default function ChatPage() {
                                         onFeedback={msg.role === 'assistant' ? (type) => handleFeedback(i, type) : undefined}
                                         feedback={messageFeedback[i]}
                                         onEdit={msg.role === 'user' ? () => editMessage(i) : undefined}
+                                        onSave={msg.role === 'user' ? savePrompt : undefined}
                                     />
                                     {/* Always-visible retry button on error messages */}
                                     {msg.role === 'assistant' && msg.content?.startsWith('\u274c') && (
