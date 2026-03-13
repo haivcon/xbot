@@ -1294,6 +1294,66 @@ function createDashboardRoutes() {
         }
     });
 
+    // ==================
+    // CHECKIN ADMIN (Owner)
+    // ==================
+    router.get('/owner/checkin/groups', ownerGuard, async (req, res) => {
+        try {
+            const groups = await db.listCheckinGroups?.() || [];
+            res.json({ groups });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/owner/checkin/groups/:chatId', ownerGuard, async (req, res) => {
+        try {
+            const chatId = decodeURIComponent(req.params.chatId);
+            const settings = await db.getCheckinGroup?.(chatId);
+            res.json({ settings: settings || {} });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.put('/owner/checkin/groups/:chatId', ownerGuard, async (req, res) => {
+        try {
+            const chatId = decodeURIComponent(req.params.chatId);
+            const patch = req.body;
+            const updated = await db.updateCheckinGroup?.(chatId, patch);
+            log.info(`Dashboard: Checkin settings for ${chatId} updated by ${req.dashboardUser.userId}`);
+            res.json({ success: true, settings: updated });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/owner/checkin/leaderboard/:chatId', ownerGuard, async (req, res) => {
+        try {
+            const chatId = decodeURIComponent(req.params.chatId);
+            const mode = req.query.mode || 'streak';
+            const limit = Math.min(Number(req.query.limit) || 20, 100);
+            const settings = await db.getCheckinGroup?.(chatId);
+            const top = await db.getTopCheckins?.(chatId, limit, mode, settings?.leaderboardPeriodStart) || [];
+            res.json({ leaderboard: top });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ==================
+    // AI MEMORY (User) — delete preferences
+    // ==================
+    router.delete('/user/preferences/:key', async (req, res) => {
+        try {
+            const key = decodeURIComponent(req.params.key);
+            await db.deleteUserPreference(req.dashboardUser.id, key);
+            res.json({ ok: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     return router;
 }
 

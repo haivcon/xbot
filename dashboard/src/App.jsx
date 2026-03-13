@@ -29,6 +29,11 @@ const OKXTradingPage = lazy(() => import('@/pages/user/OKXTradingPage'));
 const TransferHistoryPage = lazy(() => import('@/pages/user/TransferHistoryPage'));
 const CommunityPage = lazy(() => import('@/pages/user/CommunityPage'));
 const AuditLogPage = lazy(() => import('@/pages/owner/AuditLogPage'));
+const TokenLookupPage = lazy(() => import('@/pages/user/TokenLookupPage'));
+const PortfolioPage = lazy(() => import('@/pages/user/PortfolioPage'));
+const MiniGamesPage = lazy(() => import('@/pages/user/MiniGamesPage'));
+const AiMemoryPage = lazy(() => import('@/pages/user/AiMemoryPage'));
+const CheckinAdminPage = lazy(() => import('@/pages/owner/CheckinAdminPage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
@@ -114,6 +119,11 @@ export default function App() {
                     <Route path="okx-trading" element={<SuspenseWrapper><OKXTradingPage /></SuspenseWrapper>} />
                     <Route path="history" element={<SuspenseWrapper><TransferHistoryPage /></SuspenseWrapper>} />
                     <Route path="community" element={<SuspenseWrapper><CommunityPage /></SuspenseWrapper>} />
+                    <Route path="token-lookup" element={<SuspenseWrapper><TokenLookupPage /></SuspenseWrapper>} />
+                    <Route path="portfolio" element={<SuspenseWrapper><PortfolioPage /></SuspenseWrapper>} />
+                    <Route path="games" element={<SuspenseWrapper><MiniGamesPage /></SuspenseWrapper>} />
+                    <Route path="ai-memory" element={<SuspenseWrapper><AiMemoryPage /></SuspenseWrapper>} />
+                    <Route path="checkin-admin" element={isOwnerView() ? <SuspenseWrapper><CheckinAdminPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     <Route path="audit-log" element={isOwnerView() ? <SuspenseWrapper><AuditLogPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     {/* 404 */}
                     <Route path="*" element={<SuspenseWrapper><NotFoundPage /></SuspenseWrapper>} />

@@ -26,6 +26,11 @@ import {
     Sun,
     Moon,
     Shield,
+    Search,
+    PieChart,
+    Gamepad2,
+    Brain,
+    CalendarCheck,
 } from 'lucide-react';
 import useThemeStore from '@/stores/themeStore';
 
@@ -101,16 +106,21 @@ export default function Sidebar({ open, onClose }) {
         { to: '/analytics', icon: BarChart3, label: t('dashboard.sidebar.analytics') },
         { to: '/config', icon: Settings, label: t('dashboard.sidebar.config') },
         { to: '/audit-log', icon: Shield, label: t('dashboard.sidebar.auditLog') || 'Audit Log' },
+        { to: '/checkin-admin', icon: CalendarCheck, label: t('dashboard.sidebar.checkinAdmin') || 'Check-in Admin' },
     ];
 
     const userLinks = [
         { to: '/chat', icon: Bot, label: t('dashboard.sidebar.aiChat') || 'AI Chat', highlight: true },
         { to: '/profile', icon: User, label: t('dashboard.sidebar.profile') },
         { to: '/wallets', icon: Wallet, label: t('dashboard.sidebar.wallets') },
+        { to: '/portfolio', icon: PieChart, label: t('dashboard.sidebar.portfolio') || 'Portfolio' },
         { to: '/history', icon: History, label: t('dashboard.sidebar.history') || 'Transfer History' },
         { to: '/trading', icon: BarChart3, label: t('dashboard.sidebar.trading') },
         { to: '/okx-trading', icon: BarChart3, label: t('dashboard.sidebar.okxTrading') || 'OKX Trading' },
+        { to: '/token-lookup', icon: Search, label: t('dashboard.sidebar.tokenLookup') || 'Token Lookup' },
         { to: '/leaderboard', icon: Trophy, label: t('dashboard.sidebar.leaderboard') },
+        { to: '/games', icon: Gamepad2, label: t('dashboard.sidebar.games') || 'Mini Games' },
+        { to: '/ai-memory', icon: Brain, label: t('dashboard.sidebar.aiMemory') || 'AI Memory' },
         { to: '/community', icon: Globe, label: t('dashboard.sidebar.community') || 'X Layer Community', highlight: false },
         { to: '/settings', icon: Settings, label: t('dashboard.sidebar.settings') },
     ];

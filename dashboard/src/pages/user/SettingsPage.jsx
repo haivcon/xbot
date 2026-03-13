@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import useAuthStore from '@/stores/authStore';
 import useThemeStore from '@/stores/themeStore';
 import api from '@/api/client';
@@ -48,6 +49,7 @@ export default function SettingsPage() {
     const { user } = useAuthStore();
     const isOwner = useAuthStore(s => s.role) === 'owner';
     const { theme, setTheme } = useThemeStore();
+    const navigate = useNavigate();
 
     const [prefs, setPrefs] = useState({
         language: i18n.language?.substring(0, 2) || 'en',
@@ -173,35 +175,15 @@ export default function SettingsPage() {
                 />
             </Section>
 
-            {/* ═══ AI Persona ═══ */}
-            <Section icon={Bot} title={t('dashboard.settingsPage.persona', 'AI Persona')} description={t('dashboard.settingsPage.personaDesc', 'Choose the personality style of the AI')}>
-                <CustomSelect
-                    value={prefs.persona}
-                    onChange={(v) => setPrefs(p => ({ ...p, persona: v }))}
-                    options={PERSONA_OPTIONS}
-                />
-            </Section>
-
-            {/* ═══ AI Provider ═══ */}
-            <Section icon={Brain} title={t('dashboard.settingsPage.aiProvider', 'AI Provider')} description={t('dashboard.settingsPage.aiProviderDesc', 'Select AI engine and thinking depth')}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label className="text-xs text-surface-200/50 mb-1.5 block font-medium">{t('dashboard.settingsPage.provider', 'Provider')}</label>
-                        <CustomSelect
-                            value={prefs.provider}
-                            onChange={(v) => setPrefs(p => ({ ...p, provider: v }))}
-                            options={PROVIDER_OPTIONS}
-                        />
-                    </div>
-                    <div>
-                        <label className="text-xs text-surface-200/50 mb-1.5 block font-medium">{t('dashboard.settingsPage.thinkingLevel', 'Thinking Level')}</label>
-                        <CustomSelect
-                            value={prefs.thinkingLevel}
-                            onChange={(v) => setPrefs(p => ({ ...p, thinkingLevel: v }))}
-                            options={THINKING_OPTIONS}
-                        />
-                    </div>
-                </div>
+            {/* ═══ AI Settings (moved to ChatPage) ═══ */}
+            <Section icon={Bot} title={t('dashboard.settingsPage.persona', 'AI Persona')} description={t('dashboard.settingsPage.aiMovedDesc', 'AI Persona, Provider, and API Keys are now in the Chat page')}>
+                <button
+                    onClick={() => navigate('/chat')}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 text-sm font-medium hover:bg-brand-500/15 transition-colors"
+                >
+                    <MessageSquare size={16} />
+                    {t('dashboard.settingsPage.goToChat', 'Open AI Chat → Settings')}
+                </button>
             </Section>
 
             {/* ═══ Theme ═══ */}

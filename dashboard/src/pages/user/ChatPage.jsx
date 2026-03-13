@@ -345,6 +345,30 @@ const FALLBACK_MODELS = [
     { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Powerful multimodal & agentic', icon: '🚀' },
 ];
 
+const PERSONA_OPTIONS = [
+    { value: 'default', label: '佳佳 OKX', icon: '🤖', desc: 'Default AI personality' },
+    { value: 'xwizard', label: 'Xwizard', icon: '🧙‍♂️', desc: 'Crypto wizard personality' },
+];
+
+const PROVIDER_OPTIONS = [
+    { value: 'google', label: 'Google (Gemini)', icon: '✨', desc: 'Multimodal, best for complex tasks' },
+    { value: 'openai', label: 'OpenAI (GPT)', icon: '🧠', desc: 'Strong reasoning & code' },
+    { value: 'groq', label: 'Groq (LLaMA)', icon: '⚡', desc: 'Ultra-fast inference' },
+];
+
+const THINKING_OPTIONS = [
+    { value: 'none', label: 'None', icon: '💤', desc: 'Fastest, no extra reasoning' },
+    { value: 'low', label: 'Low', icon: '💡', desc: 'Light reasoning' },
+    { value: 'medium', label: 'Medium', icon: '🔥', desc: 'Balanced speed & quality' },
+    { value: 'high', label: 'High', icon: '🚀', desc: 'Deep reasoning, slower' },
+];
+
+const SETTINGS_TABS = [
+    { id: 'model', icon: '🎯', label: 'Model' },
+    { id: 'persona', icon: '🎭', label: 'Persona' },
+    { id: 'keys', icon: '🔑', label: 'API Keys' },
+];
+
 /* ─── Main ChatPage ─── */
 export default function ChatPage() {
     const { t } = useTranslation();
@@ -373,6 +397,13 @@ export default function ChatPage() {
     const [showApiKeyModal, setShowApiKeyModal] = useState(false);
     const [apiKeyInput, setApiKeyInput] = useState('');
     const [userApiKeys, setUserApiKeys] = useState([]);
+    // AI Settings panel state
+    const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+    const [settingsTab, setSettingsTab] = useState('model');
+    const [selectedPersona, setSelectedPersona] = useState('default');
+    const [selectedProvider, setSelectedProvider] = useState('google');
+    const [selectedThinking, setSelectedThinking] = useState('medium');
+    const [apiKeyProvider, setApiKeyProvider] = useState('google');
 
     // #18 Saved Prompts
     const [savedPrompts, setSavedPrompts] = useState(() => {
@@ -431,6 +462,21 @@ export default function ChatPage() {
     }, []);
     useEffect(() => { loadModels(); }, [loadModels]);
 
+    // ── Load user AI preferences ──
+    useEffect(() => {
+        api.getProfile().then(data => {
+            const p = data?.preferences || {};
+            if (p.persona) setSelectedPersona(p.persona);
+            if (p.provider) setSelectedProvider(p.provider);
+            if (p.thinkingLevel) setSelectedThinking(p.thinkingLevel);
+        }).catch(() => {});
+    }, []);
+
+    const saveAiPrefs = useCallback(async (updates) => {
+        const newPrefs = { persona: selectedPersona, provider: selectedProvider, thinkingLevel: selectedThinking, ...updates };
+        try { await api.updatePreferences(newPrefs); } catch {}
+    }, [selectedPersona, selectedProvider, selectedThinking]);
+
     // ── API key management helpers ──
     const loadApiKeys = useCallback(async () => {
         try {
@@ -444,16 +490,16 @@ export default function ChatPage() {
         setApiKeyLoading(true);
         setApiKeyError('');
         try {
-            await api.request('/ai/keys', { method: 'POST', body: JSON.stringify({ apiKey: apiKeyInput.trim() }) });
+            await api.request('/ai/keys', { method: 'POST', body: JSON.stringify({ apiKey: apiKeyInput.trim(), provider: apiKeyProvider }) });
             setApiKeyInput('');
             await loadApiKeys();
-            await loadModels(); // Refresh model list
+            await loadModels();
             hapticNotification('success');
         } catch (err) {
             setApiKeyError(err.message || 'Failed to add key');
             hapticNotification('error');
         } finally { setApiKeyLoading(false); }
-    }, [apiKeyInput, loadApiKeys, loadModels]);
+    }, [apiKeyInput, apiKeyProvider, loadApiKeys, loadModels]);
 
     const deleteApiKey = useCallback(async (keyId) => {
         try {
@@ -1196,62 +1242,16 @@ export default function ChatPage() {
                             <Columns size={12} />
                             <span className="hidden sm:inline text-[10px]">{compareMode ? 'Compare ON' : ''}</span>
                         </button>
-                        {/* Model selector */}
+                        {/* AI Settings Button */}
                         <div className="relative">
-                            <button onClick={() => setShowModelPicker(!showModelPicker)}
-                                className="p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-brand-400 transition-colors flex items-center gap-1"
-                                title="Model">
+                            <button onClick={() => { setShowSettingsPanel(!showSettingsPanel); if (!showSettingsPanel) { loadApiKeys(); } }}
+                                className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
+                                    showSettingsPanel ? 'bg-brand-500/15 text-brand-400' : 'hover:bg-white/5 text-surface-200/40 hover:text-brand-400'
+                                }`}
+                                title="AI Settings">
                                 <Settings size={12} />
                                 <span className="hidden sm:inline text-[10px]">{modelOptions.find(m => m.id === selectedModel)?.label || 'Flash'}</span>
                             </button>
-                            {showModelPicker && (
-                                <>
-                                    <div className={`fixed inset-0 ${isMobile ? 'bg-black/50 z-40' : 'z-10'}`} onClick={() => setShowModelPicker(false)} />
-                                    <div className={`${isMobile
-                                        ? 'fixed bottom-0 left-0 right-0 z-50 w-full rounded-t-2xl bottom-sheet-enter'
-                                        : 'absolute right-0 top-full mt-1 w-56 rounded-xl'
-                                    } bg-surface-800 border border-white/10 shadow-xl overflow-hidden`}
-                                    onClick={e => e.stopPropagation()}>
-                                    {/* Mobile handle */}
-                                    {isMobile && (
-                                        <div className="flex justify-center py-2">
-                                            <div className="w-10 h-1 rounded-full bg-white/20" />
-                                        </div>
-                                    )}
-                                    <div className={`${isMobile ? 'px-2 pb-safe' : ''}`}>
-                                    {modelOptions.map(m => (
-                                        <button key={m.id} onClick={() => { setSelectedModel(m.id); setShowModelPicker(false); }}
-                                            className={`w-full text-left ${isMobile ? 'px-4 py-3.5' : 'px-3 py-2.5'} text-xs transition-colors flex items-center justify-between ${
-                                                selectedModel === m.id ? 'bg-brand-500/10 text-brand-400' : 'text-surface-200/70 hover:bg-white/5'
-                                            } ${isMobile ? 'rounded-xl mb-1' : ''}`}>
-                                            <div>
-                                                <span className={`font-medium ${isMobile ? 'text-sm' : ''}`}>{m.icon} {m.label}</span>
-                                                <span className={`block ${isMobile ? 'text-xs' : 'text-[10px]'} text-surface-200/40`}>{m.desc}</span>
-                                            </div>
-                                            {selectedModel === m.id && <Check size={isMobile ? 16 : 12} className="text-brand-400" />}
-                                        </button>
-                                    ))}
-                                    {/* Divider + API key section */}
-                                    <div className="border-t border-white/5 mt-1">
-                                        {modelMeta.hasPersonalKey ? (
-                                            <div className={`${isMobile ? 'px-4 py-3' : 'px-3 py-2'} text-[10px] text-emerald-400/70 flex items-center gap-1`}>
-                                                <Key size={10} /> Personal API key active
-                                            </div>
-                                        ) : !modelMeta.isOwner ? (
-                                            <button onClick={() => { setShowModelPicker(false); setShowApiKeyModal(true); loadApiKeys(); }}
-                                                className={`w-full text-left ${isMobile ? 'px-4 py-3.5 text-sm' : 'px-3 py-2.5 text-xs'} text-amber-400/80 hover:bg-amber-500/10 transition-colors flex items-center gap-1.5`}>
-                                                <Key size={11} /> Add API Key to unlock all models
-                                            </button>
-                                        ) : (
-                                            <div className={`${isMobile ? 'px-4 py-3' : 'px-3 py-2'} text-[10px] text-brand-400/70 flex items-center gap-1`}>
-                                                <Settings size={10} /> Owner: all models unlocked
-                                            </div>
-                                        )}
-                                    </div>
-                                    </div>
-                                    </div>
-                                </>
-                            )}
                         </div>
                         {/* Context indicator */}
                         {messages.length > 0 && (
@@ -1658,93 +1658,241 @@ export default function ChatPage() {
                 </div>
             </div>
 
-            {/* ── API Key Management Modal ── */}
-            {showApiKeyModal && (
+            {/* ── AI Settings Side Panel ── */}
+            {showSettingsPanel && (
                 <>
-                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setShowApiKeyModal(false)} />
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <div className="w-full max-w-md bg-surface-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                            {/* Header */}
-                            <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-                                        <Key size={16} className="text-white" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-surface-100">Google AI API Key</h3>
-                                        <p className="text-[10px] text-surface-200/50">Unlock all AI models with your own key</p>
-                                    </div>
+                    <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none" onClick={() => setShowSettingsPanel(false)} />
+                    <div className={`fixed z-50 bg-surface-900/95 backdrop-blur-xl border-l border-white/10 shadow-2xl shadow-black/30 overflow-hidden flex flex-col ${
+                        isMobile ? 'inset-x-0 bottom-0 top-auto max-h-[85vh] rounded-t-2xl border-t' : 'right-0 top-0 bottom-0 w-80'
+                    }`} onClick={e => e.stopPropagation()}>
+                        {/* Mobile handle */}
+                        {isMobile && (
+                            <div className="flex justify-center pt-2 pb-1">
+                                <div className="w-10 h-1 rounded-full bg-white/20" />
+                            </div>
+                        )}
+                        {/* Panel Header */}
+                        <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between flex-shrink-0">
+                            <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center">
+                                    <Settings size={14} className="text-white" />
                                 </div>
-                                <button onClick={() => setShowApiKeyModal(false)} className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/40 transition-colors">
-                                    <X size={16} />
+                                <h3 className="text-sm font-bold text-surface-100">AI Settings</h3>
+                            </div>
+                            <button onClick={() => setShowSettingsPanel(false)} className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/40 transition-colors">
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex border-b border-white/5 px-4 gap-1 flex-shrink-0">
+                            {SETTINGS_TABS.map(tab => (
+                                <button key={tab.id} onClick={() => setSettingsTab(tab.id)}
+                                    className={`px-3 py-2.5 text-xs font-medium transition-all relative ${
+                                        settingsTab === tab.id
+                                            ? 'text-brand-400'
+                                            : 'text-surface-200/50 hover:text-surface-200/80'
+                                    }`}>
+                                    <span>{tab.icon} {tab.label}</span>
+                                    {settingsTab === tab.id && <div className="absolute bottom-0 left-1 right-1 h-0.5 bg-brand-400 rounded-full" />}
                                 </button>
-                            </div>
+                            ))}
+                        </div>
 
-                            {/* Body */}
-                            <div className="px-5 py-4 space-y-4">
-                                {/* Existing keys */}
-                                {userApiKeys.length > 0 && (
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-medium text-surface-200/60">Your Keys</p>
-                                        {userApiKeys.map(k => (
-                                            <div key={k.id} className="flex items-center justify-between bg-surface-800/60 rounded-lg px-3 py-2">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <Key size={12} className="text-emerald-400 flex-shrink-0" />
-                                                    <span className="text-xs text-surface-200/70 truncate font-mono">{k.maskedKey}</span>
-                                                </div>
-                                                <button onClick={() => deleteApiKey(k.id)}
-                                                    className="p-1 rounded hover:bg-red-500/20 text-surface-200/30 hover:text-red-400 transition-colors flex-shrink-0"
-                                                    title="Delete key">
-                                                    <Trash2 size={12} />
+                        {/* Tab Content */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+                            {/* ── Model Tab ── */}
+                            {settingsTab === 'model' && (
+                                <>
+                                    {/* Provider */}
+                                    <div>
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">Provider</p>
+                                        <div className="space-y-1">
+                                            {PROVIDER_OPTIONS.map(p => (
+                                                <button key={p.value} onClick={() => { setSelectedProvider(p.value); saveAiPrefs({ provider: p.value }); }}
+                                                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
+                                                        selectedProvider === p.value
+                                                            ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                                                            : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
+                                                    }`}>
+                                                    <div>
+                                                        <span className="font-medium">{p.icon} {p.label}</span>
+                                                        <span className="block text-[10px] text-surface-200/40">{p.desc}</span>
+                                                    </div>
+                                                    {selectedProvider === p.value && <Check size={12} className="text-brand-400" />}
                                                 </button>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                )}
 
-                                {/* Add key form */}
-                                <div className="space-y-2">
-                                    <p className="text-xs font-medium text-surface-200/60">{userApiKeys.length > 0 ? 'Add Another Key' : 'Add Your API Key'}</p>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="password"
-                                            value={apiKeyInput}
-                                            onChange={e => { setApiKeyInput(e.target.value); setApiKeyError(''); }}
-                                            placeholder="AIzaSy..."
-                                            className="flex-1 bg-surface-800/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-surface-100 placeholder-surface-200/30 focus:outline-none focus:border-brand-400/50 font-mono"
-                                            onKeyDown={e => { if (e.key === 'Enter') addApiKey(); }}
-                                        />
-                                        <button onClick={addApiKey} disabled={apiKeyLoading || !apiKeyInput.trim()}
-                                            className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                                                apiKeyLoading || !apiKeyInput.trim()
-                                                    ? 'bg-surface-800/40 text-surface-200/20 cursor-not-allowed'
-                                                    : 'bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/25'
-                                            }`}>
-                                            {apiKeyLoading ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-                                            Add
-                                        </button>
+                                    {/* Model */}
+                                    <div>
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">Model</p>
+                                        <div className="space-y-1">
+                                            {modelOptions.map(m => (
+                                                <button key={m.id} onClick={() => { setSelectedModel(m.id); setShowSettingsPanel(false); }}
+                                                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
+                                                        selectedModel === m.id
+                                                            ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                                                            : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
+                                                    }`}>
+                                                    <div>
+                                                        <span className="font-medium">{m.icon} {m.label}</span>
+                                                        <span className="block text-[10px] text-surface-200/40">{m.desc}</span>
+                                                    </div>
+                                                    {selectedModel === m.id && <Check size={12} className="text-brand-400" />}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
-                                    {apiKeyError && (
-                                        <p className="text-[10px] text-red-400 flex items-center gap-1">
-                                            <X size={10} /> {apiKeyError}
-                                        </p>
+
+                                    {/* Thinking Level */}
+                                    <div>
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">Thinking Level</p>
+                                        <div className="grid grid-cols-2 gap-1">
+                                            {THINKING_OPTIONS.map(th => (
+                                                <button key={th.value} onClick={() => { setSelectedThinking(th.value); saveAiPrefs({ thinkingLevel: th.value }); }}
+                                                    className={`px-3 py-2 rounded-xl text-xs transition-all text-left ${
+                                                        selectedThinking === th.value
+                                                            ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                                                            : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
+                                                    }`}>
+                                                    <span className="font-medium">{th.icon} {th.label}</span>
+                                                    <span className="block text-[9px] text-surface-200/35 mt-0.5">{th.desc}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* ── Persona Tab ── */}
+                            {settingsTab === 'persona' && (
+                                <>
+                                    <div>
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">AI Personality</p>
+                                        <div className="space-y-1.5">
+                                            {PERSONA_OPTIONS.map(p => (
+                                                <button key={p.value} onClick={() => { setSelectedPersona(p.value); saveAiPrefs({ persona: p.value }); }}
+                                                    className={`w-full text-left px-4 py-3.5 rounded-xl transition-all flex items-center gap-3 ${
+                                                        selectedPersona === p.value
+                                                            ? 'bg-brand-500/10 border border-brand-500/20'
+                                                            : 'hover:bg-white/5 border border-transparent'
+                                                    }`}>
+                                                    <span className="text-2xl">{p.icon}</span>
+                                                    <div className="flex-1">
+                                                        <span className={`text-sm font-bold ${selectedPersona === p.value ? 'text-brand-400' : 'text-surface-100'}`}>{p.label}</span>
+                                                        <span className="block text-[10px] text-surface-200/40">{p.desc}</span>
+                                                    </div>
+                                                    {selectedPersona === p.value && <Check size={14} className="text-brand-400" />}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="bg-surface-800/40 border border-white/5 rounded-xl px-3 py-2.5">
+                                        <p className="text-[10px] text-surface-200/40 leading-relaxed">💡 Persona affects the AI's language style, personality, and response format. Changes apply to new messages only.</p>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* ── API Keys Tab ── */}
+                            {settingsTab === 'keys' && (
+                                <>
+                                    {/* Provider selector for keys */}
+                                    <div>
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">Provider</p>
+                                        <div className="flex gap-1">
+                                            {PROVIDER_OPTIONS.map(p => (
+                                                <button key={p.value} onClick={() => setApiKeyProvider(p.value)}
+                                                    className={`flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-all ${
+                                                        apiKeyProvider === p.value
+                                                            ? 'bg-brand-500/15 text-brand-400 border border-brand-500/20'
+                                                            : 'text-surface-200/50 hover:bg-white/5 border border-transparent'
+                                                    }`}>
+                                                    {p.icon} {p.value === 'google' ? 'Google' : p.value === 'openai' ? 'OpenAI' : 'Groq'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Existing keys */}
+                                    {userApiKeys.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold">Your Keys</p>
+                                            {userApiKeys.map(k => (
+                                                <div key={k.id} className="flex items-center justify-between bg-surface-800/60 rounded-xl px-3 py-2.5">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <Key size={12} className="text-emerald-400 flex-shrink-0" />
+                                                        <div className="min-w-0">
+                                                            <span className="text-xs text-surface-200/70 truncate font-mono block">{k.maskedKey}</span>
+                                                            <span className="text-[9px] text-surface-200/30">{k.provider || 'google'}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => deleteApiKey(k.id)}
+                                                        className="p-1.5 rounded-lg hover:bg-red-500/20 text-surface-200/30 hover:text-red-400 transition-colors flex-shrink-0"
+                                                        title="Delete key">
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
-                                </div>
 
-                                {/* Info */}
-                                <div className="bg-amber-500/5 border border-amber-500/10 rounded-lg px-3 py-2.5 space-y-1.5">
-                                    <p className="text-[11px] text-amber-400/80 font-medium">How to get a free API key:</p>
-                                    <p className="text-[10px] text-surface-200/50 leading-relaxed">
-                                        1. Visit Google AI Studio → Create API Key<br />
-                                        2. Copy the key and paste it above<br />
-                                        3. All AI models will be unlocked instantly
-                                    </p>
-                                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors mt-1">
-                                        <ExternalLink size={10} /> Get your free key →
-                                    </a>
-                                </div>
-                            </div>
+                                    {/* Add key form */}
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold">Add Key</p>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="password"
+                                                value={apiKeyInput}
+                                                onChange={e => { setApiKeyInput(e.target.value); setApiKeyError(''); }}
+                                                placeholder={apiKeyProvider === 'google' ? 'AIzaSy...' : apiKeyProvider === 'openai' ? 'sk-...' : 'gsk_...'}
+                                                className="flex-1 bg-surface-800/60 border border-white/10 rounded-lg px-3 py-2.5 text-xs text-surface-100 placeholder-surface-200/30 focus:outline-none focus:border-brand-400/50 font-mono"
+                                                onKeyDown={e => { if (e.key === 'Enter') addApiKey(); }}
+                                            />
+                                            <button onClick={addApiKey} disabled={apiKeyLoading || !apiKeyInput.trim()}
+                                                className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                                    apiKeyLoading || !apiKeyInput.trim()
+                                                        ? 'bg-surface-800/40 text-surface-200/20 cursor-not-allowed'
+                                                        : 'bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/25'
+                                                }`}>
+                                                {apiKeyLoading ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                                                Add
+                                            </button>
+                                        </div>
+                                        {apiKeyError && (
+                                            <p className="text-[10px] text-red-400 flex items-center gap-1">
+                                                <X size={10} /> {apiKeyError}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Info */}
+                                    <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl px-3 py-2.5 space-y-1.5">
+                                        <p className="text-[11px] text-amber-400/80 font-medium">How to get API keys:</p>
+                                        <p className="text-[10px] text-surface-200/50 leading-relaxed">
+                                            <strong className="text-surface-200/70">Google:</strong> <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-brand-400 hover:text-brand-300">aistudio.google.com</a><br/>
+                                            <strong className="text-surface-200/70">OpenAI:</strong> <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" className="text-brand-400 hover:text-brand-300">platform.openai.com</a><br/>
+                                            <strong className="text-surface-200/70">Groq:</strong> <a href="https://console.groq.com/keys" target="_blank" rel="noopener" className="text-brand-400 hover:text-brand-300">console.groq.com</a>
+                                        </p>
+                                    </div>
+
+                                    {/* Status */}
+                                    <div className={`rounded-xl px-3 py-2.5 flex items-center gap-2 ${
+                                        modelMeta.hasPersonalKey ? 'bg-emerald-500/5 border border-emerald-500/10' :
+                                        modelMeta.isOwner ? 'bg-brand-500/5 border border-brand-500/10' :
+                                        'bg-surface-800/40 border border-white/5'
+                                    }`}>
+                                        {modelMeta.hasPersonalKey ? (
+                                            <><Key size={12} className="text-emerald-400" /><span className="text-[10px] text-emerald-400/80 font-medium">✓ Personal API key active — all models unlocked</span></>
+                                        ) : modelMeta.isOwner ? (
+                                            <><Settings size={12} className="text-brand-400" /><span className="text-[10px] text-brand-400/80">Owner: all models unlocked via server key</span></>
+                                        ) : (
+                                            <><Key size={12} className="text-surface-200/30" /><span className="text-[10px] text-surface-200/40">No personal key — using server default</span></>
+                                        )}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </>

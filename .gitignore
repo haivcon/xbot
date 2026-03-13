@@ -10,6 +10,8 @@ openclaw-main
 agent-trade-kit-master
 onchainos-skills-main
 okx-best-route-main
+# ─── API ───
+api_xlayer.md
 # ─── Dependencies ───
 node_modules/
 dashboard/node_modules/
