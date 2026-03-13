@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
-import { BarChart3, MessageCircle, Gamepad2, CalendarCheck, Bot, RefreshCw, Download } from 'lucide-react';
+import { BarChart3, MessageCircle, Gamepad2, CalendarCheck, Bot, RefreshCw, Download, BrainCircuit, Users, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
 const COLORS = ['#3b82f6', '#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
@@ -11,6 +11,7 @@ export default function AnalyticsPage() {
     const [data, setData] = useState(null);
     const [period, setPeriod] = useState('7d');
     const [loading, setLoading] = useState(true);
+    const [chatStats, setChatStats] = useState(null);
 
     const fetchAnalytics = async () => {
         try {
@@ -25,6 +26,15 @@ export default function AnalyticsPage() {
     };
 
     useEffect(() => { fetchAnalytics(); }, [period]);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const stats = await api.getChatStats();
+                setChatStats(stats);
+            } catch { /* handled */ }
+        })();
+    }, []);
 
     const stats = [
         { icon: MessageCircle, label: t('dashboard.analytics.totalCommands'), value: data?.totalCommands || 0, color: 'text-brand-400 bg-brand-500/10' },
@@ -173,6 +183,80 @@ export default function AnalyticsPage() {
                     )}
                 </div>
             </div>
+
+            {/* AI Chat Intelligence Section */}
+            {chatStats && (
+                <div className="space-y-4">
+                    <h2 className="text-lg font-semibold text-surface-100 flex items-center gap-2">
+                        <BrainCircuit size={20} className="text-purple-400" />
+                        AI Chat Intelligence
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="stat-card">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-purple-400 bg-purple-500/10">
+                                    <MessageCircle size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-surface-200/50">Total Sessions</p>
+                                    <p className="text-2xl font-bold text-surface-100">{(chatStats.totalSessions || 0).toLocaleString()}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-cyan-400 bg-cyan-500/10">
+                                    <Users size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-surface-200/50">Unique Users</p>
+                                    <p className="text-2xl font-bold text-surface-100">{(chatStats.uniqueUsers || 0).toLocaleString()}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-emerald-400 bg-emerald-500/10">
+                                    <TrendingUp size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-surface-200/50">Total Messages</p>
+                                    <p className="text-2xl font-bold text-surface-100">{(chatStats.totalMessages || 0).toLocaleString()}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {chatStats.dailyStats?.length > 0 && (
+                        <div className="glass-card p-5">
+                            <h3 className="font-semibold text-surface-100 mb-4">7-Day AI Chat Trend</h3>
+                            <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={chatStats.dailyStats}>
+                                        <defs>
+                                            <linearGradient id="msgGrad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                            </linearGradient>
+                                            <linearGradient id="sessGrad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                        <Tooltip
+                                            contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', fontSize: '12px' }}
+                                            labelStyle={{ color: '#94a3b8' }}
+                                        />
+                                        <Area type="monotone" dataKey="messages" name="Messages" stroke="#8b5cf6" fill="url(#msgGrad)" strokeWidth={2} />
+                                        <Area type="monotone" dataKey="sessions" name="Sessions" stroke="#06b6d4" fill="url(#sessGrad)" strokeWidth={2} />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

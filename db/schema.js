@@ -631,6 +631,42 @@ async function init() {
         UNIQUE(userId, name)
     )`);
 
+    // User preferences — long-term AI memory (#12)
+    await dbRun(`CREATE TABLE IF NOT EXISTS user_preferences (
+        userId TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT,
+        updatedAt INTEGER,
+        PRIMARY KEY (userId, key)
+    )`);
+
+    // Trade history — portfolio P&L tracking (#11)
+    await dbRun(`CREATE TABLE IF NOT EXISTS trade_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        chain TEXT DEFAULT 'xlayer',
+        fromToken TEXT,
+        toToken TEXT,
+        fromAmount TEXT,
+        toAmount TEXT,
+        priceUsd TEXT,
+        txHash TEXT,
+        createdAt INTEGER
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_trade_user ON trade_history(userId, createdAt DESC)`);
+
+    // Scheduled reports (#13)
+    await dbRun(`CREATE TABLE IF NOT EXISTS scheduled_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        type TEXT NOT NULL,
+        frequency TEXT NOT NULL,
+        time TEXT DEFAULT '09:00',
+        active INTEGER DEFAULT 1,
+        lastRun INTEGER,
+        createdAt INTEGER
+    )`);
+
     console.log("Khởi tạo cấu trúc bảng SQLite hoàn tất.");
 }
 

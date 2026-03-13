@@ -91,6 +91,18 @@ function createLogger(module) {
 // Root logger (no module)
 const rootLogger = createLogger(null);
 
+// Request-scoped logger: creates a logger that includes requestId
+rootLogger.withReqId = (reqId) => {
+    const scoped = createLogger(null);
+    const wrap = (origFn, level) => (msg, extra) => {
+        origFn(`[${reqId}] ${msg}`, extra);
+    };
+    for (const level of Object.keys(LOG_LEVELS)) {
+        scoped[level] = wrap(scoped[level], level);
+    }
+    return scoped;
+};
+
 // Factory: logger.child('Bot') -> scoped logger
 module.exports = rootLogger;
 module.exports.child = rootLogger.child;

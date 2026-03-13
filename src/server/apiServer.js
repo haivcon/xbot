@@ -6,6 +6,7 @@ const log = logger.child('API');
 const cors = require('cors');
 const compression = require('compression');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const db = require('../../db.js');
 const { normalizeAddressSafe } = require('../utils/helpers');
 const { OKX_BASE_URL, API_PORT } = require('../config/env');
@@ -178,6 +179,35 @@ function startApiServer() {
     app.use(requestTimeoutGuard);
     app.use(backpressureGuard);
     app.use(rateLimit);
+
+    // Request ID correlation
+    app.use((req, res, next) => {
+        req.id = req.headers['x-request-id'] || uuidv4().slice(0, 8);
+        res.setHeader('X-Request-Id', req.id);
+        next();
+    });
+
+    // CSRF protection for mutating requests (skip API token endpoints)
+    const CSRF_SECRET = process.env.CSRF_SECRET || crypto.randomBytes(32).toString('hex');
+    app.use((req, res, next) => {
+        // Generate CSRF token for GET requests (dashboard pages)
+        if (req.method === 'GET' && req.path.startsWith('/api/dashboard')) {
+            const token = crypto.createHmac('sha256', CSRF_SECRET)
+                .update(req.ip + (req.headers['user-agent'] || '')).digest('hex').slice(0, 32);
+            res.setHeader('X-CSRF-Token', token);
+        }
+        // Validate CSRF on mutations (POST/PUT/DELETE) to dashboard API
+        if (['POST', 'PUT', 'DELETE'].includes(req.method) && req.path.startsWith('/api/dashboard')) {
+            const csrfHeader = req.headers['x-csrf-token'];
+            const expected = crypto.createHmac('sha256', CSRF_SECRET)
+                .update(req.ip + (req.headers['user-agent'] || '')).digest('hex').slice(0, 32);
+            if (!csrfHeader || csrfHeader !== expected) {
+                // Log but don't block (soft enforcement for backward compat)
+                log.child('CSRF').warn(`CSRF mismatch from ${req.ip} on ${req.method} ${req.path}`);
+            }
+        }
+        next();
+    });
 
     app.get(['/health', '/healthz'], async (req, res) => {
         const now = Date.now();

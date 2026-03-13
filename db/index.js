@@ -21,6 +21,9 @@ const ai = require('./ai');
 const commandUsage = require('./commandUsage');
 const games = require('./games');
 const scheduledPosts = require('./scheduledPosts');
+const preferences = require('./preferences');
+const tradeHistory = require('./tradeHistory');
+const scheduledReports = require('./scheduledReports');
 const schema = require('./schema');
 
 module.exports = {
@@ -60,6 +63,15 @@ module.exports = {
     // Scheduled Posts - ~6 functions
     ...scheduledPosts,
 
+    // Preferences - AI memory
+    ...preferences,
+
+    // Trade History - P&L tracking
+    ...tradeHistory,
+
+    // Scheduled Reports
+    ...scheduledReports,
+
     // Schema - init function
     ...schema,
 
@@ -77,6 +89,9 @@ module.exports = {
         commandUsage,
         games,
         scheduledPosts,
+        preferences,
+        tradeHistory,
+        scheduledReports,
         schema
     }
 };

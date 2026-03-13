@@ -9,7 +9,7 @@ import {
     Wallet, TrendingUp, BarChart3, Zap, Shield, Globe, Coins, ArrowLeftRight,
     HelpCircle, BookOpen, Star, Bell, Search, Activity, ArrowUpDown, Eye,
     Download, Pin, PinOff, Keyboard, Mic, MicOff, Paperclip, Image,
-    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home
+    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home, Columns
 } from 'lucide-react';
 import { hapticImpact, hapticNotification } from '@/utils/telegram';
 
@@ -66,25 +66,46 @@ function renderMarkdown(text) {
             return `<ol class="chat-list chat-ol">${items.join('')}</ol>`;
         });
 
-    // ── Auto-link blockchain addresses & tx hashes BEFORE inline markdown ──
-    // (Must run before backtick→<code> conversion so addresses inside `backticks` get linked)
+    // ── Multi-chain address & tx hash auto-linking ──
+    // Detect chain from context keywords in the full text
+    const chainMap = {
+        'ethereum': 'eth', 'erc-20': 'eth', 'erc20': 'eth',
+        'bsc': 'bsc', 'bnb chain': 'bsc', 'binance smart': 'bsc', 'bep-20': 'bsc', 'bep20': 'bsc',
+        'arbitrum': 'arbitrum',
+        'polygon': 'polygon', 'matic': 'polygon',
+        'base chain': 'base', 'base network': 'base', 'base mainnet': 'base',
+        'avalanche': 'avax', 'avax': 'avax',
+        'optimism': 'optimism', 'op mainnet': 'optimism',
+        'x layer': 'xlayer', 'xlayer': 'xlayer', 'oktc': 'xlayer',
+        'solana': 'solana',
+    };
+    let detectedEvmChain = 'xlayer'; // default for 0x addresses
+    let detectedSolChain = 'solana';
+    const lowerText = text.toLowerCase();
+    for (const [keyword, chain] of Object.entries(chainMap)) {
+        if (lowerText.includes(keyword)) {
+            if (chain === 'solana') detectedSolChain = chain;
+            else detectedEvmChain = chain;
+            break;
+        }
+    }
 
-    // 1. EVM: 0x + 64 hex = tx hash → /tx/ link
+    // 1. EVM: 0x + 64 hex = tx hash
     safe = safe.replace(/(^|[\s(`])0x([a-fA-F0-9]{64})(?=[\s,.)}`<]|$)/gm, (_, pre, hex) => {
         const hash = '0x' + hex;
-        return `${pre}<a href="https://www.okx.com/web3/explorer/xlayer/tx/${hash}" target="_blank" rel="noopener" class="chat-link">${hash}</a>`;
+        return `${pre}<a href="https://www.okx.com/web3/explorer/${detectedEvmChain}/tx/${hash}" target="_blank" rel="noopener" class="chat-link">${hash}</a>`;
     });
 
-    // 2. EVM: 0x + 40-42 hex = address (wallet/token/contract) → /address/ link
+    // 2. EVM: 0x + 40-42 hex = address (wallet/token/contract)
     safe = safe.replace(/(^|[\s(`])0x([a-fA-F0-9]{40,42})(?=[\s,.)}`<]|$)/gm, (_, pre, hex) => {
         const addr = '0x' + hex;
-        return `${pre}<a href="https://www.okx.com/web3/explorer/xlayer/address/${addr}" target="_blank" rel="noopener" class="chat-link">${addr}</a>`;
+        return `${pre}<a href="https://www.okx.com/web3/explorer/${detectedEvmChain}/address/${addr}" target="_blank" rel="noopener" class="chat-link">${addr}</a>`;
     });
 
-    // 3. Solana: base58, 32-44 chars (wallet/token/contract/tx) → /address/ link
+    // 3. Solana: base58, 32-44 chars
     safe = safe.replace(/(^|[\s(:`])([1-9A-HJ-NP-Za-km-z]{32,44})(?=[\s,.)}`<]|$)/gm, (_, pre, addr) => {
         if (/^[a-z]+$/.test(addr)) return `${pre}${addr}`;
-        return `${pre}<a href="https://www.okx.com/web3/explorer/solana/address/${addr}" target="_blank" rel="noopener" class="chat-link">${addr}</a>`;
+        return `${pre}<a href="https://www.okx.com/web3/explorer/${detectedSolChain}/address/${addr}" target="_blank" rel="noopener" class="chat-link">${addr}</a>`;
     });
 
     // Process inline markdown (runs AFTER address linking so backtick-wrapped addresses are already linked)
@@ -350,6 +371,7 @@ export default function ChatPage() {
     const [apiKeyLoading, setApiKeyLoading] = useState(false);
     const [apiKeyError, setApiKeyError] = useState('');
     const [isDragging, setIsDragging] = useState(false);
+    const [compareMode, setCompareMode] = useState(false);
     const [loadingConv, setLoadingConv] = useState(false);
     const [inputShake, setInputShake] = useState(false);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -1059,6 +1081,19 @@ export default function ChatPage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-1">
+                        {/* Compare toggle */}
+                        <button
+                            onClick={() => setCompareMode(!compareMode)}
+                            className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
+                                compareMode
+                                    ? 'bg-purple-500/20 text-purple-400'
+                                    : 'hover:bg-white/5 text-surface-200/40 hover:text-purple-400'
+                            }`}
+                            title="Compare Models"
+                        >
+                            <Columns size={12} />
+                            <span className="hidden sm:inline text-[10px]">{compareMode ? 'Compare ON' : ''}</span>
+                        </button>
                         {/* Model selector */}
                         <div className="relative">
                             <button onClick={() => setShowModelPicker(!showModelPicker)}

@@ -1194,6 +1194,106 @@ function createDashboardRoutes() {
         }
     });
 
+    // ==================
+    // ADMIN ANALYTICS (#15)
+    // ==================
+    router.get('/owner/analytics/stats', async (req, res) => {
+        try {
+            const sessions = await db.dbAll?.('SELECT * FROM web_chat_sessions ORDER BY updatedAt DESC LIMIT 500') || [];
+            const totalSessions = sessions.length;
+            const uniqueUsers = new Set(sessions.map(s => s.userId)).size;
+            const totalMessages = sessions.reduce((sum, s) => {
+                try { return sum + JSON.parse(s.messages || '[]').length; } catch { return sum; }
+            }, 0);
+            // Messages per day (last 7 days)
+            const now = Date.now();
+            const dailyStats = [];
+            for (let i = 6; i >= 0; i--) {
+                const dayStart = now - (i + 1) * 86400_000;
+                const dayEnd = now - i * 86400_000;
+                const daySessions = sessions.filter(s => s.updatedAt >= dayStart && s.updatedAt < dayEnd);
+                const dayMessages = daySessions.reduce((sum, s) => {
+                    try { return sum + JSON.parse(s.messages || '[]').length; } catch { return sum; }
+                }, 0);
+                dailyStats.push({
+                    date: new Date(dayEnd).toISOString().slice(0, 10),
+                    messages: dayMessages,
+                    users: new Set(daySessions.map(s => s.userId)).size,
+                });
+            }
+            res.json({ totalSessions, uniqueUsers, totalMessages, dailyStats });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ==================
+    // USER PREFERENCES (#12)
+    // ==================
+    router.get('/user/preferences', async (req, res) => {
+        try {
+            const prefs = await db.getUserPreferences(req.dashboardUser.id);
+            res.json({ preferences: prefs });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/user/preferences', async (req, res) => {
+        try {
+            const { key, value } = req.body;
+            if (!key) return res.status(400).json({ error: 'key is required' });
+            await db.setUserPreference(req.dashboardUser.id, key, value);
+            res.json({ ok: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ==================
+    // TRADE HISTORY (#11)
+    // ==================
+    router.get('/user/trades', async (req, res) => {
+        try {
+            const trades = await db.getTradeHistory(req.dashboardUser.id, 100);
+            res.json({ trades });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/user/trades/summary', async (req, res) => {
+        try {
+            const summary = await db.getTradeSummary(req.dashboardUser.id);
+            res.json({ summary });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ==================
+    // SCHEDULED REPORTS (#13)
+    // ==================
+    router.get('/user/reports', async (req, res) => {
+        try {
+            const reports = await db.getUserReports(req.dashboardUser.id);
+            res.json({ reports });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/user/reports', async (req, res) => {
+        try {
+            const { type, frequency, time } = req.body;
+            if (!type || !frequency) return res.status(400).json({ error: 'type and frequency required' });
+            await db.createScheduledReport(req.dashboardUser.id, type, frequency, time);
+            res.json({ ok: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     return router;
 }
 

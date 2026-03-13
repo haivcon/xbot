@@ -14,6 +14,7 @@ const { ONCHAIN_TOOLS, executeToolCall, buildSystemInstruction } = require('../f
 const { WEB_TOOL_DECLARATIONS, executeWebToolCall } = require('./webToolExecutor');
 const { buildAIAPrompt } = require('../config/prompts');
 const { t } = require('../core/i18n');
+const db = require('../../db.js');
 
 // Debug: verify tools loaded correctly
 log.info(`ONCHAIN_TOOLS loaded: ${Array.isArray(ONCHAIN_TOOLS) ? ONCHAIN_TOOLS.length + ' tool groups' : 'FAILED'}, total declarations: ${Array.isArray(ONCHAIN_TOOLS) ? ONCHAIN_TOOLS.reduce((sum, g) => sum + (g.functionDeclarations?.length || 0), 0) : 0}`);
@@ -251,6 +252,13 @@ function createChatRoutes() {
                     userId
                 });
 
+                // Load user preferences for AI memory (#12)
+                let prefsContext = '';
+                try {
+                    const prefs = await db.getUserPreferences(userId);
+                    prefsContext = db.formatPreferencesForPrompt(prefs);
+                } catch (e) { /* preferences table may not exist yet */ }
+
                 session = {
                     id: sessionKey,
                     userId,
@@ -264,7 +272,7 @@ function createChatRoutes() {
                         'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
                         'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
                         'Always display them in FULL (e.g. 0x16d91d1615fc55b76d5f92365bd60c069b46ef78, NOT 0x16d9...ef78). ' +
-                        'Keep responses conversational and helpful.',
+                        'Keep responses conversational and helpful.' + prefsContext,
                 };
                 sessionHistory = [];
             }
@@ -582,21 +590,29 @@ function createChatRoutes() {
                 // Always rebuild the full system instruction (it's not persisted to DB)
                 const systemInstruction = await buildSystemInstruction(userId);
                 const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
+                // Load user preferences for AI memory (#12)
+                let prefsContext = '';
+                try { const prefs = await db.getUserPreferences(userId); prefsContext = db.formatPreferencesForPrompt(prefs); } catch (e) { /* table may not exist yet */ }
                 session._systemInstruction = systemInstruction + '\n\n' + aiaPrompt +
                     '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
+                    'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
                     'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
-                    'Always display them in FULL. Keep responses conversational and helpful.';
+                    'Always display them in FULL. Keep responses conversational and helpful.' + prefsContext;
             } else {
                 const systemInstruction = await buildSystemInstruction(userId);
                 const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
+                // Load user preferences for AI memory (#12)
+                let prefsContext = '';
+                try { const prefs = await db.getUserPreferences(userId); prefsContext = db.formatPreferencesForPrompt(prefs); } catch (e) { /* table may not exist yet */ }
                 session = {
                     id: sessionKey, userId,
                     title: message.trim().substring(0, 60),
                     messages: [], createdAt: Date.now(), updatedAt: Date.now(),
                     _systemInstruction: systemInstruction + '\n\n' + aiaPrompt +
                         '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
+                        'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
                         'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
-                        'Always display them in FULL. Keep responses conversational and helpful.',
+                        'Always display them in FULL. Keep responses conversational and helpful.' + prefsContext,
                 };
                 sessionHistory = [];
             }
@@ -857,6 +873,47 @@ function createChatRoutes() {
             }
             res.json({ success: true });
         } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ==================================
+    // MULTI-MODEL COMPARISON (#14)
+    // ==================================
+    router.post('/compare', async (req, res) => {
+        const userId = req.dashboardUser?.id;
+        if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+        const { message, modelA, modelB } = req.body;
+        if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
+
+        const ALLOWED = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
+        const mA = ALLOWED.includes(modelA) ? modelA : 'gemini-3-flash-preview';
+        const mB = ALLOWED.includes(modelB) ? modelB : 'gemini-3.1-pro-preview';
+
+        try {
+            const apiKey = await resolveGeminiKey(userId);
+            if (!apiKey) return res.status(503).json({ error: 'No API key' });
+            const client = getGeminiClient(apiKey);
+            const systemInstruction = await buildSystemInstruction(userId);
+
+            const generate = async (model) => {
+                try {
+                    const result = await client.models.generateContent({
+                        model,
+                        contents: [{ role: 'user', parts: [{ text: message.trim() }] }],
+                        config: { systemInstruction }
+                    });
+                    return { model, response: result.text || '', error: null };
+                } catch (err) {
+                    return { model, response: '', error: err.message };
+                }
+            };
+
+            const [resultA, resultB] = await Promise.all([generate(mA), generate(mB)]);
+            res.json({ modelA: resultA, modelB: resultB });
+        } catch (err) {
+            log.child('Compare').error('Compare error:', err);
             res.status(500).json({ error: err.message });
         }
     });

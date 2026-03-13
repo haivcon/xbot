@@ -32,21 +32,33 @@ function renderMd(text) {
             return `<ol class="chat-list chat-ol">${items.join('')}</ol>`;
         });
 
-    // ── Auto-link addresses & tx hashes BEFORE inline markdown ──
-    // 1. EVM tx hash (0x + 64 hex)
+    // ── Multi-chain address & tx hash auto-linking ──
+    const chainMap = {
+        'ethereum': 'eth', 'erc-20': 'eth', 'erc20': 'eth',
+        'bsc': 'bsc', 'bnb chain': 'bsc', 'binance smart': 'bsc',
+        'arbitrum': 'arbitrum', 'polygon': 'polygon',
+        'base chain': 'base', 'base network': 'base',
+        'avalanche': 'avax', 'avax': 'avax',
+        'optimism': 'optimism',
+        'x layer': 'xlayer', 'xlayer': 'xlayer', 'oktc': 'xlayer',
+        'solana': 'solana',
+    };
+    let evmChain = 'xlayer', solChain = 'solana';
+    const lt = text.toLowerCase();
+    for (const [kw, ch] of Object.entries(chainMap)) {
+        if (lt.includes(kw)) { if (ch === 'solana') solChain = ch; else evmChain = ch; break; }
+    }
     safe = safe.replace(/(^|[\s(`])0x([a-fA-F0-9]{64})(?=[\s,.)}`<]|$)/gm, (_, pre, hex) => {
         const hash = '0x' + hex;
-        return `${pre}<a href="https://www.okx.com/web3/explorer/xlayer/tx/${hash}" target="_blank" rel="noopener" class="chat-link">${hash}</a>`;
+        return `${pre}<a href="https://www.okx.com/web3/explorer/${evmChain}/tx/${hash}" target="_blank" rel="noopener" class="chat-link">${hash}</a>`;
     });
-    // 2. EVM address (0x + 40-42 hex)
     safe = safe.replace(/(^|[\s(`])0x([a-fA-F0-9]{40,42})(?=[\s,.)}`<]|$)/gm, (_, pre, hex) => {
         const addr = '0x' + hex;
-        return `${pre}<a href="https://www.okx.com/web3/explorer/xlayer/address/${addr}" target="_blank" rel="noopener" class="chat-link">${addr}</a>`;
+        return `${pre}<a href="https://www.okx.com/web3/explorer/${evmChain}/address/${addr}" target="_blank" rel="noopener" class="chat-link">${addr}</a>`;
     });
-    // 3. Solana base58 (32-44 chars)
     safe = safe.replace(/(^|[\s(:`])([1-9A-HJ-NP-Za-km-z]{32,44})(?=[\s,.)}`<]|$)/gm, (_, pre, addr) => {
         if (/^[a-z]+$/.test(addr)) return `${pre}${addr}`;
-        return `${pre}<a href="https://www.okx.com/web3/explorer/solana/address/${addr}" target="_blank" rel="noopener" class="chat-link">${addr}</a>`;
+        return `${pre}<a href="https://www.okx.com/web3/explorer/${solChain}/address/${addr}" target="_blank" rel="noopener" class="chat-link">${addr}</a>`;
     });
 
     // Process inline markdown (after address linking)

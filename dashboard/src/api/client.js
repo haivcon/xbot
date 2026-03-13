@@ -119,6 +119,10 @@ class ApiClient {
         return this.get(`/owner/analytics?period=${period}`);
     }
 
+    getChatStats() {
+        return this.get('/owner/analytics/stats');
+    }
+
     getBannedUsers() {
         return this.get('/owner/users/banned');
     }
@@ -223,6 +227,14 @@ class ApiClient {
 
     getChatHistory() {
         return this.get('/ai/history');
+    }
+
+    compareChat(message, modelA, modelB) {
+        return this.request('/ai/chat/compare', {
+            method: 'POST',
+            body: JSON.stringify({ message, modelA, modelB }),
+            timeout: 120000,
+        });
     }
 
     getChatMessages(conversationId) {
