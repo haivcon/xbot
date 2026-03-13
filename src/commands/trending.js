@@ -4,7 +4,7 @@ const { getLang, t } = require('../../i18n');
 const { sendReply } = require('../utils/chat');
 
 module.exports = {
-    command: /^\/(trending|topvolume|topmcap)(?:@[\w_]+)?$/,
+    command: /^\/trending(?:@[\w_]+)?$/,
     handler: async (msg, match) => {
         if (await enforceBanForMessage(msg)) return;
         if (await enforceOwnerCommandLimit(msg, 'trending')) return;

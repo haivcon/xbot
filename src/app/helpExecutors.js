@@ -441,22 +441,6 @@ function createHelpExecutors(deps) {
             bot.processUpdate({ update_id: Date.now(), message: synthetic });
             return { message: t(lang, 'help_action_executed') };
         },
-        topvolume: async (query, lang) => {
-            const synthetic = buildSyntheticCommandMessage(query);
-            synthetic.text = '/topvolume';
-            synthetic.entities = [{ type: 'bot_command', offset: 0, length: 10 }];
-            trackCommand('topvolume', query, synthetic);
-            bot.processUpdate({ update_id: Date.now(), message: synthetic });
-            return { message: t(lang, 'help_action_executed') };
-        },
-        topmcap: async (query, lang) => {
-            const synthetic = buildSyntheticCommandMessage(query);
-            synthetic.text = '/topmcap';
-            synthetic.entities = [{ type: 'bot_command', offset: 0, length: 8 }];
-            trackCommand('topmcap', query, synthetic);
-            bot.processUpdate({ update_id: Date.now(), message: synthetic });
-            return { message: t(lang, 'help_action_executed') };
-        },
         admin: buildAdminDetailExecutor('admin'),
         admin_ban: buildAdminDetailExecutor('admin_ban'),
         admin_kick: buildAdminDetailExecutor('admin_kick'),

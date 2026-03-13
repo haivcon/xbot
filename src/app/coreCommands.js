@@ -619,12 +619,12 @@ function registerCoreCommands(deps = {}) {
         }
     });
 
-    // ── /trending /topvolume /topmcap ──────────────────
-    bot.onText(/^\/(trending|topvolume|topmcap)(?:@[\w_]+)?$/, async (msg, match) => {
+    // ── /trending ─────────────────────────────────────
+    bot.onText(/^\/trending(?:@[\w_]+)?$/, async (msg, match) => {
         if (await enforceBanForMessage(msg)) return;
         if (await enforceOwnerCommandLimit(msg, 'trending')) return;
         const lang = await getLang(msg);
-        const subCmd = match?.[1] || 'trending';
+        const subCmd = 'trending';
         const userId = String(msg.from?.id);
         const compact = global._ocCompactMode.get(userId);
         const chainIndex = '196'; // #7: Default X Layer

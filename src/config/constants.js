@@ -59,9 +59,7 @@ const HELP_COMMAND_DETAILS = {
     pnl: { command: '/pnl', icon: '📊', descKey: 'help_command_pnl' },
     dexhistory: { command: '/dexhistory', icon: '📜', descKey: 'help_command_dexhistory' },
     txhistory: { command: '/txhistory', icon: '🔍', descKey: 'help_command_txhistory' },
-    trending: { command: '/trending', icon: '🔥', descKey: 'help_command_trending' },
-    topvolume: { command: '/topvolume', icon: '💎', descKey: 'help_command_topvolume' },
-    topmcap: { command: '/topmcap', icon: '🏆', descKey: 'help_command_topmcap' }
+    trending: { command: '/trending', icon: '🔥', descKey: 'help_command_trending' }
 };
 
 const HELP_GROUP_DETAILS = {
@@ -75,7 +73,7 @@ const HELP_GROUP_DETAILS = {
         icon: '🔎',
         titleKey: 'help_group_xlayer_check_title',
         descKey: 'help_group_xlayer_check_desc',
-        commands: ['mywallet', 'rmchat', 'okxchains', 'okx402status', 'txhash', 'toptoken', 'token', 'contract', 'meme', 'pnl', 'dexhistory', 'txhistory', 'trending', 'topvolume', 'topmcap']
+        commands: ['mywallet', 'rmchat', 'okxchains', 'okx402status', 'txhash', 'toptoken', 'token', 'contract', 'meme', 'pnl', 'dexhistory', 'txhistory', 'trending']
     },
     tools: {
         icon: '🛠️',
