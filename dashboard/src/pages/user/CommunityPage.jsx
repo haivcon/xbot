@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import {
     ExternalLink, Globe, Gamepad2, Landmark, Users, UserPlus,
     TrendingUp, TrendingDown, Copy, Check, ChevronRight, ChevronDown, ChevronUp,
-    Sparkles, ArrowUpRight, Heart, ShoppingCart, Star, Zap
+    Sparkles, ArrowUpRight, Heart, ShoppingCart, Star, Zap,
+    MessageCircle, Send, Plus, Trash2, Bell, User, Loader2, X as XIcon
 } from 'lucide-react';
 import api from '@/api/client';
 
@@ -178,7 +179,7 @@ function useTokenInfo(tokens) {
                             marketCap: parseFloat(item.marketCap || 0),
                             liquidity: parseFloat(item.liquidity || 0),
                             volume24h: parseFloat(item.volume24H || 0),
-                            holderCount: parseInt(basic.totalHolder || basic.holderCount || basic.holders || 0, 10),
+                            holderCount: parseInt(item.holders || basic.totalHolder || basic.holderCount || basic.holders || item.totalHolder || 0, 10),
                         };
                     }
                     setInfo(results);
@@ -428,7 +429,7 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, h
                     <div className="flex-1 flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-black/20 border border-white/[0.04] hover:border-white/[0.08] transition-all">
                         <span className="text-[9px] text-surface-200/20 font-bold uppercase tracking-widest">CA</span>
                         <div className="w-px h-3 bg-white/[0.06]" />
-                        <code className="text-[11px] text-surface-200/40 font-mono flex-1 truncate group-hover/ca:text-surface-200/60 transition-colors">
+                        <code className="text-[11px] text-surface-200/40 font-mono flex-1 break-all group-hover/ca:text-surface-200/60 transition-colors">
                             {token}
                         </code>
                         <button
@@ -539,26 +540,915 @@ function CommunityCard({ community, price, prevPrice, priceLoading, tokenInfo, h
     );
 }
 
+/* ═══════════════════════════════════════════════════════
+   Social Feed Components
+   ═══════════════════════════════════════════════════════ */
+
+function timeSince(ts) {
+    const s = Math.floor(Date.now() / 1000 - ts);
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h`;
+    return `${Math.floor(s / 86400)}d`;
+}
+
+/* ── User Profile Modal ── */
+function UserProfileModal({ userId, onClose, onStartDM }) {
+    const [profile, setProfile] = useState(null);
+    const [isFollowing, setIsFollowing] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.getUserProfile(userId).then(r => {
+            setProfile(r.profile);
+            setIsFollowing(r.isFollowing);
+        }).catch(() => {}).finally(() => setLoading(false));
+    }, [userId]);
+
+    const handleFollow = async () => {
+        try {
+            const r = await api.toggleFollow(userId);
+            setIsFollowing(r.following);
+            setProfile(p => p ? { ...p, followersCount: r.following ? (p.followersCount || 0) + 1 : Math.max(0, (p.followersCount || 0) - 1) } : p);
+        } catch { /* ignore */ }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+            <div className="w-full max-w-md mx-4 rounded-3xl bg-surface-800 border border-white/[0.08] shadow-2xl animate-scaleIn overflow-hidden" onClick={e => e.stopPropagation()}>
+                {/* Header gradient */}
+                <div className="h-24 bg-gradient-to-br from-brand-500/30 via-purple-500/20 to-cyan-500/10 relative">
+                    <button onClick={onClose} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center text-white/70 hover:text-white transition-colors"><XIcon size={16} /></button>
+                </div>
+                <div className="px-6 pb-6 -mt-10 relative">
+                    {loading ? (
+                        <div className="space-y-4 pt-14">
+                            <div className="h-5 w-32 bg-white/[0.05] rounded-lg animate-pulse" />
+                            <div className="h-3 w-full bg-white/[0.03] rounded animate-pulse" />
+                        </div>
+                    ) : profile ? (
+                        <>
+                            {/* Avatar */}
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500/50 to-purple-500/50 flex items-center justify-center text-xl text-white font-bold border-4 border-surface-800 shadow-xl">
+                                {(profile.displayName || 'U')[0].toUpperCase()}
+                            </div>
+                            <div className="mt-3">
+                                <h3 className="text-lg font-bold text-surface-100">{profile.displayName || `User ${String(userId).slice(-4)}`}</h3>
+                                {profile.bio && <p className="text-xs text-surface-200/50 mt-1 leading-relaxed">{profile.bio}</p>}
+                            </div>
+                            {/* Stats */}
+                            <div className="flex items-center gap-6 mt-4">
+                                <div className="text-center"><span className="text-lg font-bold text-surface-100">{profile.followersCount || 0}</span><p className="text-[9px] text-surface-200/30 uppercase tracking-wider">Followers</p></div>
+                                <div className="text-center"><span className="text-lg font-bold text-surface-100">{profile.followingCount || 0}</span><p className="text-[9px] text-surface-200/30 uppercase tracking-wider">Following</p></div>
+                                <div className="text-center"><span className="text-lg font-bold text-amber-400">{profile.reputation || 0}</span><p className="text-[9px] text-surface-200/30 uppercase tracking-wider">Rep</p></div>
+                            </div>
+                            {/* Actions */}
+                            <div className="flex items-center gap-2 mt-5">
+                                <button onClick={handleFollow} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-sm font-bold transition-all ${isFollowing ? 'bg-white/[0.06] border border-white/[0.1] text-surface-200/60 hover:text-red-400 hover:border-red-500/30' : 'bg-gradient-to-r from-brand-500 to-purple-500 text-white shadow-lg hover:shadow-brand-500/30'}`}>
+                                    <UserPlus size={14} /> {isFollowing ? 'Unfollow' : 'Follow'}
+                                </button>
+                                <button onClick={() => { onStartDM?.(userId, profile.displayName); onClose(); }} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-sm font-bold bg-white/[0.06] border border-white/[0.1] text-surface-200/60 hover:text-brand-400 hover:border-brand-500/30 transition-all">
+                                    <Send size={14} /> Message
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <p className="text-sm text-surface-200/30 text-center py-8 pt-14">Profile not found</p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ── Tip Modal ── */
+function TipModal({ postId, toUserId, toName, onClose, onTipped }) {
+    const [amount, setAmount] = useState('');
+    const [tipping, setTipping] = useState(false);
+    const [done, setDone] = useState(false);
+
+    const quickAmounts = ['0.01', '0.05', '0.1', '0.5', '1'];
+
+    const handleTip = async () => {
+        if (!amount || Number(amount) <= 0) return;
+        setTipping(true);
+        try {
+            await api.recordTip({
+                postId: postId || null,
+                toUserId,
+                tokenSymbol: 'OKB',
+                amount,
+                chainIndex: '196',
+            });
+            setDone(true);
+            onTipped?.();
+            setTimeout(() => onClose(), 1500);
+        } catch { /* ignore */ }
+        setTipping(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+            <div className="w-full max-w-sm mx-4 rounded-3xl bg-surface-800 border border-white/[0.08] shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
+                    <h3 className="text-lg font-bold text-surface-100 flex items-center gap-2"><Zap size={18} className="text-amber-400" /> Tip {toName}</h3>
+                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-surface-200/50 hover:text-surface-100 transition-colors"><XIcon size={16} /></button>
+                </div>
+                <div className="p-5">
+                    {done ? (
+                        <div className="text-center py-6">
+                            <div className="text-4xl mb-2">🎉</div>
+                            <p className="text-sm font-bold text-emerald-400">Tip sent!</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="relative mb-4">
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={amount}
+                                    onChange={e => setAmount(e.target.value)}
+                                    placeholder="0.00"
+                                    className="w-full bg-surface-900/60 border border-white/[0.06] rounded-2xl px-4 py-3 text-lg text-surface-100 outline-none text-center font-bold placeholder:text-surface-200/15 focus:border-amber-500/30 transition-colors"
+                                    autoFocus
+                                />
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400/60">OKB</span>
+                            </div>
+                            <div className="flex items-center gap-2 mb-5">
+                                {quickAmounts.map(q => (
+                                    <button key={q} onClick={() => setAmount(q)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${amount === q ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' : 'bg-white/[0.03] border-white/[0.06] text-surface-200/35 hover:bg-white/[0.06]'}`}>
+                                        {q}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={handleTip}
+                                disabled={!amount || Number(amount) <= 0 || tipping}
+                                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-bold shadow-lg hover:shadow-amber-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            >
+                                {tipping ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                                Send Tip
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ── DM View (Messages Tab) ── */
+function DMView() {
+    const [conversations, setConversations] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [activeChat, setActiveChat] = useState(null); // { userId, displayName }
+    const [messages, setMessages] = useState([]);
+    const [msgLoading, setMsgLoading] = useState(false);
+    const [text, setText] = useState('');
+    const [sending, setSending] = useState(false);
+    const messagesEndRef = useRef(null);
+
+    // Load conversations
+    useEffect(() => {
+        api.getConversations().then(r => setConversations(r.conversations || [])).catch(() => {}).finally(() => setLoading(false));
+    }, []);
+
+    // Load messages for active chat
+    useEffect(() => {
+        if (!activeChat) return;
+        setMsgLoading(true);
+        api.getMessages(activeChat.userId).then(r => setMessages(r.messages || [])).catch(() => {}).finally(() => setMsgLoading(false));
+    }, [activeChat?.userId]);
+
+    // Scroll to bottom on new messages
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    const sendMsg = async () => {
+        if (!text.trim() || !activeChat) return;
+        setSending(true);
+        try {
+            await api.sendMessage(activeChat.userId, { content: text.trim() });
+            setText('');
+            // Refresh messages
+            const r = await api.getMessages(activeChat.userId);
+            setMessages(r.messages || []);
+            // Refresh conversations
+            api.getConversations().then(r2 => setConversations(r2.conversations || [])).catch(() => {});
+        } catch { /* ignore */ }
+        setSending(false);
+    };
+
+    // Poll for new messages in active chat
+    useEffect(() => {
+        if (!activeChat) return;
+        const iv = setInterval(() => {
+            api.getMessages(activeChat.userId).then(r => setMessages(r.messages || [])).catch(() => {});
+        }, 8000);
+        return () => clearInterval(iv);
+    }, [activeChat?.userId]);
+
+    return (
+        <div className="space-y-5 animate-fadeIn">
+            <h2 className="text-2xl font-bold text-surface-100 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center">
+                    <Send size={20} className="text-brand-400" />
+                </div>
+                Messages
+            </h2>
+
+            <div className="flex gap-4 min-h-[500px]">
+                {/* Conversations sidebar */}
+                <div className="w-72 flex-shrink-0 rounded-2xl border border-white/[0.06] bg-surface-800/60 overflow-hidden flex flex-col">
+                    <div className="p-3 border-b border-white/[0.04]">
+                        <p className="text-[10px] text-surface-200/30 font-bold uppercase tracking-wider">Conversations</p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                        {loading ? (
+                            <div className="space-y-2 p-3">
+                                {[1,2,3].map(i => <div key={i} className="h-14 bg-white/[0.03] rounded-xl animate-pulse" />)}
+                            </div>
+                        ) : conversations.length === 0 ? (
+                            <div className="text-center py-10">
+                                <p className="text-[11px] text-surface-200/20">No messages yet</p>
+                                <p className="text-[9px] text-surface-200/15 mt-1">Start a conversation from a user profile</p>
+                            </div>
+                        ) : conversations.map(c => (
+                            <button
+                                key={c.partnerId}
+                                onClick={() => setActiveChat({ userId: c.partnerId, displayName: c.displayName })}
+                                className={`w-full flex items-center gap-3 p-3 transition-all text-left hover:bg-white/[0.04] ${activeChat?.userId === c.partnerId ? 'bg-brand-500/10 border-l-2 border-brand-500' : ''}`}
+                            >
+                                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500/40 to-purple-500/40 flex items-center justify-center text-xs text-surface-100 font-bold flex-shrink-0">
+                                    {(c.displayName || 'U')[0].toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-semibold text-surface-100 truncate">{c.displayName}</span>
+                                        {c.unreadCount > 0 && <span className="w-4 h-4 rounded-full bg-brand-500 text-[7px] text-white font-bold flex items-center justify-center flex-shrink-0">{c.unreadCount}</span>}
+                                    </div>
+                                    <p className="text-[10px] text-surface-200/30 truncate mt-0.5">
+                                        {c.lastMessageIsOwn ? 'You: ' : ''}{c.lastMessage}
+                                    </p>
+                                </div>
+                                <span className="text-[8px] text-surface-200/15 flex-shrink-0">{timeSince(c.lastMessageAt)}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Chat area */}
+                <div className="flex-1 rounded-2xl border border-white/[0.06] bg-surface-800/60 overflow-hidden flex flex-col">
+                    {!activeChat ? (
+                        <div className="flex-1 flex items-center justify-center">
+                            <div className="text-center">
+                                <div className="text-4xl mb-3">💬</div>
+                                <p className="text-sm text-surface-200/25">Select a conversation</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Chat header */}
+                            <div className="flex items-center gap-3 p-4 border-b border-white/[0.06]">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500/40 to-purple-500/40 flex items-center justify-center text-xs text-surface-100 font-bold">
+                                    {(activeChat.displayName || 'U')[0].toUpperCase()}
+                                </div>
+                                <span className="text-sm font-semibold text-surface-100">{activeChat.displayName}</span>
+                            </div>
+
+                            {/* Messages */}
+                            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                                {msgLoading ? (
+                                    <div className="flex items-center justify-center py-8"><Loader2 size={16} className="animate-spin text-surface-200/20" /></div>
+                                ) : messages.length === 0 ? (
+                                    <p className="text-center text-[11px] text-surface-200/20 py-8">No messages yet. Say hello! 👋</p>
+                                ) : messages.map((m, i) => {
+                                    const isOwn = String(m.fromUserId) !== String(activeChat.userId);
+                                    return (
+                                        <div key={m.id || i} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm ${isOwn
+                                                ? 'bg-gradient-to-r from-brand-500/25 to-purple-500/20 text-surface-100 rounded-br-sm'
+                                                : 'bg-white/[0.06] text-surface-200/70 rounded-bl-sm'
+                                            }`}>
+                                                <p className="break-words whitespace-pre-wrap">{m.content}</p>
+                                                <p className={`text-[8px] mt-1 ${isOwn ? 'text-brand-400/40' : 'text-surface-200/15'}`}>{timeSince(m.createdAt)}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                <div ref={messagesEndRef} />
+                            </div>
+
+                            {/* Composer */}
+                            <div className="p-3 border-t border-white/[0.06]">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        value={text}
+                                        onChange={e => setText(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
+                                        placeholder="Type a message..."
+                                        className="flex-1 bg-surface-900/50 border border-white/[0.06] rounded-2xl px-4 py-2.5 text-sm text-surface-100 outline-none placeholder:text-surface-200/15 focus:border-brand-500/20 transition-colors"
+                                    />
+                                    <button onClick={sendMsg} disabled={!text.trim() || sending} className="p-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white hover:shadow-brand-500/30 disabled:opacity-20 transition-all">
+                                        {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+/* ── Social Leaderboard View ── */
+function SocialLeaderboardView() {
+    const [leaders, setLeaders] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.getLeaderboard().then(r => setLeaders(r.leaderboard || [])).catch(() => {}).finally(() => setLoading(false));
+    }, []);
+
+    const podiumOrder = leaders.length >= 3 ? [leaders[1], leaders[0], leaders[2]] : [];
+    const podiumLabels = ['🥈', '🥇', '🥉'];
+    const podiumSizes = ['h-28', 'h-36', 'h-24'];
+    const podiumBg = [
+        'from-slate-400/20 to-slate-300/20 border-slate-400/30',
+        'from-amber-500/25 to-yellow-500/20 border-amber-500/40 ring-2 ring-amber-500/20',
+        'from-amber-700/15 to-orange-600/15 border-amber-600/25',
+    ];
+
+    return (
+        <div className="space-y-6 animate-fadeIn">
+            <h2 className="text-2xl font-bold text-surface-100 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-500/20 flex items-center justify-center">
+                    <Star size={20} className="text-amber-400" />
+                </div>
+                Top Creators
+            </h2>
+
+            {loading ? (
+                <div className="flex items-center justify-center h-40"><Loader2 size={24} className="animate-spin text-surface-200/20" /></div>
+            ) : leaders.length === 0 ? (
+                <div className="text-center py-16 rounded-2xl border border-white/[0.06] bg-surface-800/40">
+                    <Star size={40} className="mx-auto mb-3 text-surface-200/15" />
+                    <p className="text-sm text-surface-200/30">No leaderboard data yet</p>
+                </div>
+            ) : (
+                <>
+                    {/* Podium */}
+                    {podiumOrder.length >= 3 && (
+                        <div className="flex items-end justify-center gap-4 pt-4 pb-2">
+                            {podiumOrder.map((p, i) => (
+                                <div key={p?.userId || i} className="flex flex-col items-center">
+                                    <div className="text-2xl mb-2">{podiumLabels[i]}</div>
+                                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-500/40 to-purple-500/40 flex items-center justify-center text-lg text-white font-bold shadow-xl ${i === 1 ? 'ring-2 ring-amber-500/30' : ''}`}>
+                                        {(p?.displayName || 'U')[0].toUpperCase()}
+                                    </div>
+                                    <p className="text-xs font-bold text-surface-100 mt-2 truncate max-w-[80px]">{p?.displayName || 'User'}</p>
+                                    <p className="text-[10px] text-amber-400 font-bold mt-0.5">{p?.reputation || 0} rep</p>
+                                    <div className={`w-20 ${podiumSizes[i]} mt-2 rounded-t-2xl bg-gradient-to-b ${podiumBg[i]} border border-b-0 flex items-end justify-center pb-2`}>
+                                        <span className="text-[9px] text-surface-200/40">{parseFloat(p?.totalTipsReceived || 0).toFixed(2)} tips</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Full list */}
+                    <div className="space-y-2">
+                        {leaders.map((l, i) => (
+                            <div key={l.userId} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all hover:bg-white/[0.02] ${i < 3 ? 'border-amber-500/15 bg-gradient-to-r from-amber-500/5 to-transparent' : 'border-white/[0.06] bg-surface-800/40'}`}>
+                                <div className="w-8 flex items-center justify-center">
+                                    {i === 0 ? <span className="text-lg">👑</span> : i < 3 ? <span className="text-[10px] font-bold text-amber-400">#{i + 1}</span> : <span className="text-[10px] font-bold text-surface-200/30">#{i + 1}</span>}
+                                </div>
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500/30 to-purple-500/30 flex items-center justify-center text-sm text-surface-100 font-bold">
+                                    {(l.displayName || 'U')[0].toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-surface-100 truncate">{l.displayName || 'User'}</p>
+                                    <div className="flex items-center gap-3 mt-0.5">
+                                        <span className="text-[10px] text-surface-200/40"><Users size={9} className="inline mr-0.5" />{l.followersCount || 0}</span>
+                                        <span className="text-[10px] text-amber-400/60"><Zap size={9} className="inline mr-0.5" />{parseFloat(l.totalTipsReceived || 0).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-lg font-bold text-amber-400 tabular-nums">{l.reputation || 0}</p>
+                                    <p className="text-[9px] text-surface-200/25 uppercase tracking-wider">rep</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+/* ── My Profile Editor View ── */
+function MyProfileView() {
+    const [profile, setProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [form, setForm] = useState({ displayName: '', bio: '', walletAddress: '' });
+
+    useEffect(() => {
+        api.getMyProfile().then(r => {
+            const p = r.profile;
+            setProfile(p);
+            setForm({ displayName: p?.displayName || '', bio: p?.bio || '', walletAddress: p?.walletAddress || '' });
+        }).catch(() => {}).finally(() => setLoading(false));
+    }, []);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const r = await api.updateProfile(form);
+            setProfile(r.profile);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+        } catch { /* ignore */ }
+        setSaving(false);
+    };
+
+    return (
+        <div className="space-y-6 animate-fadeIn">
+            <h2 className="text-2xl font-bold text-surface-100 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center">
+                    <User size={20} className="text-brand-400" />
+                </div>
+                My Hub Profile
+            </h2>
+
+            {loading ? (
+                <div className="flex items-center justify-center h-40"><Loader2 size={24} className="animate-spin text-surface-200/20" /></div>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Edit Form */}
+                    <div className="rounded-2xl border border-white/[0.06] bg-surface-800/60 p-6 space-y-5">
+                        <h3 className="text-sm font-bold text-surface-200/50 uppercase tracking-wider">Edit Profile</h3>
+
+                        <div>
+                            <label className="text-[11px] text-surface-200/40 mb-1 block">Display Name</label>
+                            <input
+                                value={form.displayName}
+                                onChange={e => setForm({ ...form, displayName: e.target.value })}
+                                className="w-full bg-surface-900/60 border border-white/[0.06] rounded-2xl px-4 py-2.5 text-sm text-surface-100 outline-none placeholder:text-surface-200/15 focus:border-brand-500/30 transition-colors"
+                                placeholder="Your name"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[11px] text-surface-200/40 mb-1 block">Bio</label>
+                            <textarea
+                                value={form.bio}
+                                onChange={e => setForm({ ...form, bio: e.target.value })}
+                                className="w-full h-24 bg-surface-900/60 border border-white/[0.06] rounded-2xl p-4 text-sm text-surface-100 outline-none resize-none placeholder:text-surface-200/15 focus:border-brand-500/30 transition-colors"
+                                placeholder="Tell others about yourself..."
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[11px] text-surface-200/40 mb-1 block">Wallet Address (XLayer)</label>
+                            <input
+                                value={form.walletAddress}
+                                onChange={e => setForm({ ...form, walletAddress: e.target.value })}
+                                className="w-full bg-surface-900/60 border border-white/[0.06] rounded-2xl px-4 py-2.5 text-xs text-surface-100 outline-none font-mono placeholder:text-surface-200/15 focus:border-brand-500/30 transition-colors"
+                                placeholder="0x..."
+                            />
+                        </div>
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-lg hover:shadow-brand-500/30 disabled:opacity-30 transition-all"
+                        >
+                            {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <User size={14} />}
+                            {saved ? 'Saved!' : 'Save Profile'}
+                        </button>
+                    </div>
+
+                    {/* Preview Card */}
+                    <div className="rounded-2xl border border-white/[0.06] bg-surface-800/60 overflow-hidden">
+                        <div className="h-20 bg-gradient-to-br from-brand-500/25 via-purple-500/15 to-cyan-500/10" />
+                        <div className="px-6 pb-6 -mt-8">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-500/50 to-purple-500/50 flex items-center justify-center text-lg text-white font-bold border-4 border-surface-800 shadow-xl">
+                                {(form.displayName || 'U')[0].toUpperCase()}
+                            </div>
+                            <h3 className="text-lg font-bold text-surface-100 mt-3">{form.displayName || 'Your Name'}</h3>
+                            {form.bio && <p className="text-xs text-surface-200/50 mt-1 leading-relaxed">{form.bio}</p>}
+                            {form.walletAddress && (
+                                <div className="mt-3 px-3 py-2 rounded-xl bg-black/20 border border-white/[0.04]">
+                                    <code className="text-[10px] text-surface-200/40 font-mono break-all">{form.walletAddress}</code>
+                                </div>
+                            )}
+                            {/* Stats */}
+                            <div className="flex items-center gap-6 mt-4 pt-3 border-t border-white/[0.06]">
+                                <div className="text-center"><span className="text-base font-bold text-surface-100">{profile?.followersCount || 0}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">Followers</p></div>
+                                <div className="text-center"><span className="text-base font-bold text-surface-100">{profile?.followingCount || 0}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">Following</p></div>
+                                <div className="text-center"><span className="text-base font-bold text-amber-400">{profile?.reputation || 0}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">Rep</p></div>
+                                <div className="text-center"><span className="text-base font-bold text-emerald-400">{parseFloat(profile?.totalTipsReceived || 0).toFixed(2)}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">Tips Rcvd</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ── Create Post Modal ── */
+function CreatePostModal({ onClose, onCreated }) {
+    const [content, setContent] = useState('');
+    const [posting, setPosting] = useState(false);
+
+    const handlePost = async () => {
+        if (!content.trim()) return;
+        setPosting(true);
+        try {
+            await api.createPost({ content: content.trim() });
+            onCreated?.();
+            onClose();
+        } catch { /* ignore */ }
+        setPosting(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+            <div className="w-full max-w-lg mx-4 rounded-3xl bg-surface-800 border border-white/[0.08] shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
+                    <h3 className="text-lg font-bold text-surface-100 flex items-center gap-2"><Plus size={18} className="text-brand-400" /> Create Post</h3>
+                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-surface-200/50 hover:text-surface-100 transition-colors"><XIcon size={16} /></button>
+                </div>
+                <div className="p-5">
+                    <textarea
+                        value={content}
+                        onChange={e => setContent(e.target.value)}
+                        placeholder="What's on your mind? Share trading insights, token analysis..."
+                        className="w-full h-32 bg-surface-900/60 border border-white/[0.06] rounded-2xl p-4 text-sm text-surface-100 placeholder:text-surface-200/20 outline-none resize-none focus:border-brand-500/30 transition-colors"
+                        autoFocus
+                    />
+                    <div className="flex items-center justify-between mt-4">
+                        <span className="text-[10px] text-surface-200/25">{content.length}/2000</span>
+                        <button
+                            onClick={handlePost}
+                            disabled={!content.trim() || posting}
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-lg hover:shadow-brand-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                            Post
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ── Comment Section ── */
+function CommentSection({ postId }) {
+    const [comments, setComments] = useState([]);
+    const [text, setText] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        setLoading(true);
+        api.getComments(postId).then(r => setComments(r.comments || [])).catch(() => {}).finally(() => setLoading(false));
+    }, [postId]);
+
+    const submit = async () => {
+        if (!text.trim()) return;
+        setSubmitting(true);
+        try {
+            const r = await api.addComment(postId, { content: text.trim() });
+            setComments(r.comments || []);
+            setText('');
+        } catch { /* ignore */ }
+        setSubmitting(false);
+    };
+
+    return (
+        <div className="mt-3 pt-3 border-t border-white/[0.04] space-y-2.5">
+            {loading ? (
+                <div className="flex items-center gap-2 text-[10px] text-surface-200/20"><Loader2 size={10} className="animate-spin" /> Loading comments...</div>
+            ) : (
+                <>
+                    {comments.map(c => (
+                        <div key={c.id} className="flex gap-2">
+                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-brand-500/30 to-purple-500/30 flex items-center justify-center text-[8px] text-surface-100 font-bold flex-shrink-0">
+                                {(c.displayName || 'U')[0].toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[11px] font-semibold text-surface-100">{c.displayName || `User ${String(c.userId).slice(-4)}`}</span>
+                                    <span className="text-[9px] text-surface-200/20">{timeSince(c.createdAt)}</span>
+                                </div>
+                                <p className="text-[11px] text-surface-200/60 mt-0.5 break-words">{c.content}</p>
+                            </div>
+                        </div>
+                    ))}
+                    {comments.length === 0 && <p className="text-[10px] text-surface-200/15 text-center py-1">No comments yet</p>}
+                </>
+            )}
+            <div className="flex items-center gap-2 mt-1">
+                <input
+                    value={text}
+                    onChange={e => setText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
+                    placeholder="Add a comment..."
+                    className="flex-1 bg-surface-900/50 border border-white/[0.06] rounded-xl px-3 py-1.5 text-[11px] text-surface-100 outline-none placeholder:text-surface-200/15 focus:border-brand-500/20 transition-colors"
+                />
+                <button onClick={submit} disabled={!text.trim() || submitting} className="p-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500/30 disabled:opacity-20 transition-colors">
+                    {submitting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/* ── Post Card ── */
+function SocialPostCard({ post, onLike, onDelete, currentUserId, onViewProfile, onTip }) {
+    const [showComments, setShowComments] = useState(false);
+    const [liked, setLiked] = useState(post.isLiked);
+    const [likesCount, setLikesCount] = useState(post.likesCount || 0);
+
+    const handleLike = async () => {
+        try {
+            const res = await api.toggleLike(post.id);
+            setLiked(res.liked);
+            setLikesCount(prev => res.liked ? prev + 1 : Math.max(0, prev - 1));
+        } catch { /* ignore */ }
+    };
+
+    const handleDelete = async () => {
+        if (!confirm('Delete this post?')) return;
+        try {
+            await api.deletePost(post.id);
+            onDelete?.(post.id);
+        } catch { /* ignore */ }
+    };
+
+    return (
+        <div className="group relative rounded-2xl border border-white/[0.06] bg-surface-800/60 backdrop-blur-sm p-5 hover:border-white/[0.1] transition-all">
+            {/* Author row */}
+            <div className="flex items-center gap-3 mb-3">
+                <button onClick={() => onViewProfile?.(post.userId)} className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500/40 to-purple-500/40 flex items-center justify-center text-xs text-surface-100 font-bold flex-shrink-0 hover:scale-110 transition-transform cursor-pointer">
+                    {(post.displayName || 'U')[0].toUpperCase()}
+                </button>
+                <div className="flex-1 min-w-0">
+                    <button onClick={() => onViewProfile?.(post.userId)} className="text-sm font-semibold text-surface-100 hover:text-brand-400 transition-colors cursor-pointer">{post.displayName || `User ${String(post.userId).slice(-4)}`}</button>
+                    <p className="text-[10px] text-surface-200/25">{timeSince(post.createdAt)} ago</p>
+                </div>
+                {String(post.userId) === String(currentUserId) && (
+                    <button onClick={handleDelete} className="p-1.5 rounded-lg text-surface-200/15 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100">
+                        <Trash2 size={13} />
+                    </button>
+                )}
+            </div>
+
+            {/* Content */}
+            <p className="text-sm text-surface-200/70 leading-relaxed whitespace-pre-wrap break-words mb-4">{post.content}</p>
+
+            {/* Actions row */}
+            <div className="flex items-center gap-4">
+                <button
+                    onClick={handleLike}
+                    className={`flex items-center gap-1.5 text-xs transition-all ${liked ? 'text-pink-400' : 'text-surface-200/30 hover:text-pink-400'}`}
+                >
+                    <Heart size={14} className={liked ? 'fill-current' : ''} />
+                    <span className="font-medium">{likesCount || ''}</span>
+                </button>
+                <button
+                    onClick={() => setShowComments(!showComments)}
+                    className={`flex items-center gap-1.5 text-xs transition-all ${showComments ? 'text-brand-400' : 'text-surface-200/30 hover:text-brand-400'}`}
+                >
+                    <MessageCircle size={14} />
+                    <span className="font-medium">{post.commentsCount || ''}</span>
+                </button>
+                <button
+                    onClick={() => onTip?.({ postId: post.id, toUserId: post.userId, toName: post.displayName || `User ${String(post.userId).slice(-4)}` })}
+                    className="flex items-center gap-1.5 text-xs text-surface-200/30 hover:text-amber-400 transition-all"
+                >
+                    <Zap size={14} />
+                    <span className="font-medium">{post.tipsCount || ''}</span>
+                </button>
+            </div>
+
+            {/* Comments */}
+            {showComments && <CommentSection postId={post.id} />}
+        </div>
+    );
+}
+
+/* ── Social Feed View ── */
+function SocialFeedView() {
+    const [posts, setPosts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [tab, setTab] = useState('newest');
+    const [offset, setOffset] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const [showCreate, setShowCreate] = useState(false);
+    const [profile, setProfile] = useState(null);
+    const [notifications, setNotifications] = useState({ notifications: [], unreadCount: 0 });
+    const [showNotif, setShowNotif] = useState(false);
+    const [profileModal, setProfileModal] = useState(null); // userId
+    const [tipModal, setTipModal] = useState(null); // { postId, toUserId, toName }
+
+    // Load profile once
+    useEffect(() => {
+        api.getMyProfile().then(r => setProfile(r.profile)).catch(() => {});
+        api.getNotifications().then(r => setNotifications(r)).catch(() => {});
+    }, []);
+
+    // Load posts on tab change
+    const loadPosts = useCallback(async (reset = false) => {
+        const newOffset = reset ? 0 : offset;
+        setLoading(true);
+        try {
+            const r = await api.getPosts(tab, 20, newOffset);
+            if (reset) {
+                setPosts(r.posts || []);
+            } else {
+                setPosts(prev => [...prev, ...(r.posts || [])]);
+            }
+            setHasMore(r.hasMore);
+            setOffset(newOffset + (r.posts?.length || 0));
+        } catch { /* ignore */ }
+        setLoading(false);
+    }, [tab, offset]);
+
+    useEffect(() => {
+        setOffset(0);
+        setLoading(true);
+        api.getPosts(tab, 20, 0).then(r => {
+            setPosts(r.posts || []);
+            setHasMore(r.hasMore);
+            setOffset(r.posts?.length || 0);
+        }).catch(() => {}).finally(() => setLoading(false));
+    }, [tab]);
+
+    const handleDelete = (id) => setPosts(prev => prev.filter(p => p.id !== id));
+
+    const feedTabs = [
+        { id: 'newest', label: '🆕 Newest' },
+        { id: 'following', label: '👥 Following' },
+        { id: 'trending', label: '🔥 Trending' },
+        { id: 'top_tipped', label: '💰 Top Tipped' },
+        { id: 'mine', label: '📝 My Posts' },
+    ];
+
+    return (
+        <div className="space-y-5 animate-fadeIn">
+            {/* Header + Notifications */}
+            <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-surface-100 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center">
+                        <MessageCircle size={20} className="text-brand-400" />
+                    </div>
+                    Social Feed
+                </h2>
+                <div className="flex items-center gap-2">
+                    {/* Notification bell */}
+                    <button
+                        onClick={() => { setShowNotif(!showNotif); if (!showNotif) api.markNotificationsRead().then(() => setNotifications(n => ({ ...n, unreadCount: 0 }))).catch(() => {}); }}
+                        className="relative p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-surface-200/40 hover:text-surface-100 hover:bg-white/[0.06] transition-colors"
+                    >
+                        <Bell size={16} />
+                        {notifications.unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[8px] text-white font-bold flex items-center justify-center">{notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}</span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setShowCreate(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-lg hover:shadow-brand-500/30 hover:scale-[1.02] active:scale-95 transition-all"
+                    >
+                        <Plus size={16} /> Post
+                    </button>
+                </div>
+            </div>
+
+            {/* Notification dropdown */}
+            {showNotif && (
+                <div className="rounded-2xl border border-white/[0.08] bg-surface-800/95 backdrop-blur-xl p-4 space-y-2 max-h-[300px] overflow-y-auto">
+                    <h4 className="text-xs font-bold text-surface-200/50 uppercase tracking-wider">Notifications</h4>
+                    {notifications.notifications?.length === 0 && <p className="text-[11px] text-surface-200/20 text-center py-4">No notifications yet</p>}
+                    {notifications.notifications?.map(n => (
+                        <div key={n.id} className={`flex items-center gap-3 p-2.5 rounded-xl ${n.read ? 'bg-transparent' : 'bg-brand-500/5'} transition-colors`}>
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-500/30 to-purple-500/30 flex items-center justify-center text-[9px] font-bold text-surface-100">
+                                {n.type === 'like' ? '❤️' : n.type === 'comment' ? '💬' : n.type === 'follow' ? '👤' : n.type === 'tip' ? '💰' : '🔔'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-[11px] text-surface-200/60">
+                                    <span className="font-semibold text-surface-100">{n.actorName || 'Someone'}</span>
+                                    {n.type === 'like' ? ' liked your post' : n.type === 'comment' ? ' commented on your post' : n.type === 'follow' ? ' started following you' : n.type === 'tip' ? ` tipped you` : ' interacted'}
+                                </p>
+                            </div>
+                            <span className="text-[9px] text-surface-200/20 flex-shrink-0">{timeSince(n.createdAt)}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Feed tabs */}
+            <div className="flex items-center gap-2 flex-wrap">
+                {feedTabs.map(t => (
+                    <button
+                        key={t.id}
+                        onClick={() => setTab(t.id)}
+                        className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${tab === t.id ? 'bg-white/[0.08] border-white/[0.15] text-surface-100 shadow-lg' : 'bg-white/[0.03] border-white/[0.06] text-surface-200/40 hover:bg-white/[0.06]'}`}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Posts */}
+            <div className="space-y-4">
+                {loading && posts.length === 0 ? (
+                    <div className="space-y-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="rounded-2xl border border-white/[0.06] bg-surface-800/40 p-5 animate-pulse">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <div className="w-9 h-9 rounded-full bg-white/[0.05]" />
+                                    <div className="space-y-1.5 flex-1"><div className="h-3 w-24 bg-white/[0.05] rounded" /><div className="h-2 w-16 bg-white/[0.03] rounded" /></div>
+                                </div>
+                                <div className="space-y-2"><div className="h-3 w-full bg-white/[0.04] rounded" /><div className="h-3 w-3/4 bg-white/[0.03] rounded" /></div>
+                            </div>
+                        ))}
+                    </div>
+                ) : posts.length === 0 ? (
+                    <div className="text-center py-16">
+                        <div className="text-4xl mb-3">📝</div>
+                        <p className="text-sm text-surface-200/30">No posts yet. Be the first to share!</p>
+                        <button onClick={() => setShowCreate(true)} className="mt-4 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold">
+                            <Plus size={14} className="inline mr-1" /> Create Post
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        {posts.map(post => (
+                            <SocialPostCard
+                                key={post.id}
+                                post={post}
+                                onDelete={handleDelete}
+                                currentUserId={profile?.userId}
+                                onViewProfile={(uid) => setProfileModal(uid)}
+                                onTip={(data) => setTipModal(data)}
+                            />
+                        ))}
+                        {hasMore && (
+                            <button
+                                onClick={() => loadPosts(false)}
+                                disabled={loading}
+                                className="w-full py-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] text-surface-200/30 text-xs font-medium hover:bg-white/[0.04] hover:text-surface-200/50 transition-colors disabled:opacity-30"
+                            >
+                                {loading ? <Loader2 size={14} className="animate-spin inline mr-1" /> : null}
+                                Load More
+                            </button>
+                        )}
+                    </>
+                )}
+            </div>
+
+            {/* Create Post Modal */}
+            {showCreate && (
+                <CreatePostModal
+                    onClose={() => setShowCreate(false)}
+                    onCreated={() => { setTab('newest'); setOffset(0); api.getPosts('newest', 20, 0).then(r => { setPosts(r.posts || []); setHasMore(r.hasMore); setOffset(r.posts?.length || 0); }).catch(() => {}); }}
+                />
+            )}
+
+            {/* User Profile Modal */}
+            {profileModal && (
+                <UserProfileModal
+                    userId={profileModal}
+                    onClose={() => setProfileModal(null)}
+                    onStartDM={(uid, name) => {
+                        // Switch to messages tab (if parent provides callback)
+                    }}
+                />
+            )}
+
+            {/* Tip Modal */}
+            {tipModal && (
+                <TipModal
+                    postId={tipModal.postId}
+                    toUserId={tipModal.toUserId}
+                    toName={tipModal.toName}
+                    onClose={() => setTipModal(null)}
+                    onTipped={() => { /* optionally refresh post */ }}
+                />
+            )}
+        </div>
+    );
+}
+
 /* ═══════════════════════════════════════════════════
-   Main Page
+   Main Page — with Communities/Social tab switcher
    ═══════════════════════════════════════════════════ */
-export default function CommunityPage() {
-    const { t } = useTranslation();
-    const navigate = useNavigate();
-    const tokenAddresses = useMemo(() => COMMUNITIES.map(c => c.token), []);
-    const { prices, loading: priceLoading } = useTokenPrices(tokenAddresses);
-    const tokenInfo = useTokenInfo(tokenAddresses);
-    const holderCounts = useTokenHolders(tokenAddresses);
-    const { votes, voted, toggleVote } = useVotes();
-    const [activeFilter, setActiveFilter] = useState('all');
-
-    const filteredCommunities = useMemo(() => {
-        if (activeFilter === 'all') return COMMUNITIES;
-        if (activeFilter === 'gamefi') return COMMUNITIES.filter(c => c.links.gamefi);
-        if (activeFilter === 'defi') return COMMUNITIES.filter(c => c.links.defi);
-        return COMMUNITIES;
-    }, [activeFilter]);
-
+function CommunitiesView({ t, navigate, tokenAddresses, prices, priceLoading, tokenInfo, holderCounts, votes, voted, toggleVote, activeFilter, setActiveFilter, filteredCommunities }) {
     return (
         <div className="space-y-8 animate-fadeIn">
 
@@ -691,6 +1581,72 @@ export default function CommunityPage() {
                     {t('dashboard.community.footer')}
                 </p>
             </div>
+        </div>
+    );
+}
+
+export default function CommunityPage() {
+    const { t } = useTranslation();
+    const navigate = useNavigate();
+    const tokenAddresses = useMemo(() => COMMUNITIES.map(c => c.token), []);
+    const { prices, loading: priceLoading } = useTokenPrices(tokenAddresses);
+    const tokenInfo = useTokenInfo(tokenAddresses);
+    const holderCounts = useTokenHolders(tokenAddresses);
+    const { votes, voted, toggleVote } = useVotes();
+    const [activeFilter, setActiveFilter] = useState('all');
+    const [viewMode, setViewMode] = useState('communities');
+    const [dmUnread, setDmUnread] = useState(0);
+
+    useEffect(() => {
+        api.getUnreadDMs().then(r => setDmUnread(r.unreadCount || 0)).catch(() => {});
+    }, [viewMode]);
+
+    const filteredCommunities = useMemo(() => {
+        if (activeFilter === 'all') return COMMUNITIES;
+        if (activeFilter === 'gamefi') return COMMUNITIES.filter(c => c.links.gamefi);
+        if (activeFilter === 'defi') return COMMUNITIES.filter(c => c.links.defi);
+        return COMMUNITIES;
+    }, [activeFilter]);
+
+    return (
+        <div className="space-y-6">
+            {/* Top-level tab switcher */}
+            <div className="flex items-center gap-2 flex-wrap">
+                {[
+                    { id: 'communities', icon: Globe, label: 'Communities' },
+                    { id: 'social', icon: MessageCircle, label: 'Social Feed' },
+                    { id: 'messages', icon: Send, label: 'Messages', badge: dmUnread },
+                    { id: 'leaderboard', icon: Star, label: 'Leaderboard' },
+                    { id: 'profile', icon: User, label: 'My Profile' },
+                ].map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setViewMode(tab.id)}
+                        className={`relative flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold border transition-all ${viewMode === tab.id ? 'bg-gradient-to-r from-brand-500/20 to-purple-500/20 border-brand-500/30 text-surface-100 shadow-lg shadow-brand-500/10' : 'bg-white/[0.03] border-white/[0.06] text-surface-200/40 hover:bg-white/[0.06]'}`}
+                    >
+                        <tab.icon size={14} /> {tab.label}
+                        {tab.badge > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[7px] text-white font-bold flex items-center justify-center">{tab.badge > 9 ? '9+' : tab.badge}</span>}
+                    </button>
+                ))}
+            </div>
+
+            {viewMode === 'communities' ? (
+                <CommunitiesView
+                    t={t} navigate={navigate} tokenAddresses={tokenAddresses}
+                    prices={prices} priceLoading={priceLoading} tokenInfo={tokenInfo}
+                    holderCounts={holderCounts} votes={votes} voted={voted} toggleVote={toggleVote}
+                    activeFilter={activeFilter} setActiveFilter={setActiveFilter}
+                    filteredCommunities={filteredCommunities}
+                />
+            ) : viewMode === 'social' ? (
+                <SocialFeedView />
+            ) : viewMode === 'messages' ? (
+                <DMView />
+            ) : viewMode === 'leaderboard' ? (
+                <SocialLeaderboardView />
+            ) : (
+                <MyProfileView />
+            )}
         </div>
     );
 }

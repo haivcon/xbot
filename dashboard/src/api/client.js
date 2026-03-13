@@ -346,6 +346,57 @@ class ApiClient {
     stopOkxGridBot(algoId, instId) { return this.delete('/okx/bot/grid', { algoId, instId }); }
     getOkxActiveGridBots() { return this.get('/okx/bot/grid/active'); }
     getOkxGridBotHistory() { return this.get('/okx/bot/grid/history'); }
+
+    // === DCA APIs ===
+    getDcaTasks() { return this.get('/user/dca'); }
+    createDca(data) { return this.post('/user/dca', data); }
+    updateDca(id, data) { return this.request(`/user/dca/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }); }
+    deleteDca(id) { return this.delete(`/user/dca/${encodeURIComponent(id)}`); }
+
+    // === Extended Market APIs ===
+    getHotTokens(chainIndex = '196') { return this.get(`/market/token/top?chains=${chainIndex}&sortBy=2&timeFrame=4`); }
+    getMarketPrice(chainIndex, tokenAddr) { return this.post('/market/token/price', { tokens: [{ chainIndex, tokenContractAddress: tokenAddr }] }); }
+
+    // === Portfolio APIs ===
+    getPortfolio(chainIndex = '196', walletAddress) { return this.get(`/market/portfolio/overview?chainIndex=${chainIndex}${walletAddress ? '&walletAddress=' + walletAddress : ''}`); }
+    getRecentPnl(chainIndex = '196', walletAddress) { return this.get(`/market/portfolio/pnl?chainIndex=${chainIndex}${walletAddress ? '&walletAddress=' + walletAddress : ''}`); }
+    getDexHistory(chainIndex = '196', walletAddress) { return this.get(`/market/portfolio/dex-history?chainIndex=${chainIndex}${walletAddress ? '&walletAddress=' + walletAddress : ''}`); }
+
+    // === Token Advanced APIs ===
+    getTopTraders(chainIndex = '196', tokenContractAddress) { return this.get(`/market/token/top-traders?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}`); }
+    getTopLiquidity(chainIndex = '196', tokenContractAddress) { return this.get(`/market/token/top-liquidity?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}`); }
+
+    // === Memepump APIs ===
+    getMemepumpList(chainIndex = '196', stage = '1') { return this.get(`/market/memepump/list?chainIndex=${chainIndex}&stage=${stage}`); }
+
+    // === Swap Execute ===
+    executeSwap(data) { return this.post('/market/swap/execute', data); }
+    batchSwap(data) { return this.post('/market/swap/batch', data); }
+
+    // === Transfer ===
+    executeTransfer(data) { return this.post('/market/transfer/execute', data); }
+    batchTransfer(data) { return this.post('/market/transfer/batch', data); }
+
+    // === Social Hub APIs ===
+    getMyProfile() { return this.get('/social/profile'); }
+    getUserProfile(userId) { return this.get(`/social/profile/${userId}`); }
+    updateProfile(data) { return this.put('/social/profile', data); }
+    getPosts(tab = 'newest', limit = 20, offset = 0, community = '') { return this.get(`/social/posts?tab=${tab}&limit=${limit}&offset=${offset}${community ? '&community=' + community : ''}`); }
+    createPost(data) { return this.post('/social/posts', data); }
+    deletePost(id) { return this.delete(`/social/posts/${id}`); }
+    toggleLike(postId) { return this.post(`/social/posts/${postId}/like`); }
+    getComments(postId) { return this.get(`/social/posts/${postId}/comments`); }
+    addComment(postId, data) { return this.post(`/social/posts/${postId}/comments`, data); }
+    toggleFollow(userId) { return this.post(`/social/follow/${userId}`); }
+    getNotifications(limit = 30) { return this.get(`/social/notifications?limit=${limit}`); }
+    markNotificationsRead() { return this.post('/social/notifications/read'); }
+    getLeaderboard() { return this.get('/social/leaderboard'); }
+    recordTip(data) { return this.post('/social/tips', data); }
+    getConversations() { return this.get('/social/messages/conversations'); }
+    getMessages(userId, limit = 50) { return this.get(`/social/messages/${userId}?limit=${limit}`); }
+    sendMessage(userId, data) { return this.post(`/social/messages/${userId}`, data); }
+    getUnreadDMs() { return this.get('/social/messages/unread'); }
+    getPost(id) { return this.get(`/social/posts/${id}`); }
 }
 
 const api = new ApiClient();

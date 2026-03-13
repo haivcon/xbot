@@ -485,6 +485,10 @@ function createDashboardRoutes() {
     const { createOkxRoutes } = require('./okxRoutes');
     router.use('/okx', createOkxRoutes());
 
+    // --- Social Hub Routes (Community Feed, Posts, DMs) ---
+    const { createSocialRoutes } = require('./socialRoutes');
+    router.use('/social', createSocialRoutes());
+
     // --- Owner Routes ---
     router.get('/owner/users', ownerGuard, async (req, res) => {
         try {
@@ -1349,6 +1353,128 @@ function createDashboardRoutes() {
             const key = decodeURIComponent(req.params.key);
             await db.deleteUserPreference(req.dashboardUser.id, key);
             res.json({ ok: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ==================
+    // DCA (Dollar-Cost Averaging) CRUD (User)
+    // ==================
+    const { dbGet: dcaDbGet, dbRun: dcaDbRun, dbAll: dcaDbAll } = require('../../db/core');
+
+    // List user's DCA tasks
+    router.get('/user/dca', async (req, res) => {
+        try {
+            const userId = String(req.dashboardUser.userId);
+            const tasks = await dcaDbAll(
+                "SELECT * FROM ai_scheduled_tasks WHERE userId = ? AND type = 'dca_swap' ORDER BY createdAt DESC",
+                [userId]
+            ) || [];
+            const mapped = tasks.map(t => {
+                const p = JSON.parse(t.params || '{}');
+                return {
+                    id: t.id,
+                    status: t.enabled === 2 ? 'paused' : t.enabled === 1 ? 'active' : 'cancelled',
+                    chainIndex: p.chainIndex || '196',
+                    fromTokenAddress: p.fromTokenAddress,
+                    toTokenAddress: p.toTokenAddress,
+                    fromSymbol: p.fromSymbol || '?',
+                    toSymbol: p.toSymbol || '?',
+                    amount: p.amount,
+                    intervalMs: t.intervalMs,
+                    nextRunAt: t.nextRunAt,
+                    stopLossPct: p.stopLossPct,
+                    takeProfitPct: p.takeProfitPct,
+                    walletId: p.walletId,
+                    createdAt: t.createdAt,
+                };
+            });
+            res.json({ tasks: mapped });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Create new DCA task
+    router.post('/user/dca', async (req, res) => {
+        try {
+            const userId = String(req.dashboardUser.userId);
+            const { walletId, chainIndex = '196', fromTokenAddress, toTokenAddress,
+                fromSymbol, toSymbol, amount, intervalMs = 86400000,
+                stopLossPct, takeProfitPct } = req.body;
+
+            if (!walletId || !fromTokenAddress || !toTokenAddress || !amount) {
+                return res.status(400).json({ error: 'Missing required fields: walletId, fromTokenAddress, toTokenAddress, amount' });
+            }
+
+            // Check wallet ownership
+            const wallet = await dcaDbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
+            if (!wallet) return res.status(404).json({ error: 'Wallet not found or not yours' });
+
+            // Check max limit
+            const existing = await dcaDbAll("SELECT id FROM ai_scheduled_tasks WHERE userId = ? AND type = 'dca_swap' AND enabled = 1", [userId]) || [];
+            if (existing.length >= 5) {
+                return res.status(400).json({ error: 'Max 5 DCA tasks allowed. Cancel some first.' });
+            }
+
+            const taskId = `dca_${userId}_${Date.now()}`;
+            const params = JSON.stringify({
+                walletId, chainIndex,
+                fromTokenAddress, toTokenAddress,
+                fromSymbol: fromSymbol || '?', toSymbol: toSymbol || '?',
+                amount,
+                stopLossPct: stopLossPct ? Number(stopLossPct) : null,
+                takeProfitPct: takeProfitPct ? Number(takeProfitPct) : null,
+                initialPrice: null,
+                consecutiveFailures: 0
+            });
+            const chatId = userId;
+            await dcaDbRun(
+                'INSERT INTO ai_scheduled_tasks (id, userId, chatId, type, intervalMs, nextRunAt, params, enabled, lang, createdAt) VALUES (?,?,?,?,?,?,?,1,?,?)',
+                [taskId, userId, chatId, 'dca_swap', intervalMs, Date.now() + intervalMs, params, 'en', Math.floor(Date.now() / 1000)]
+            );
+
+            log.info(`Dashboard DCA created: ${taskId} by user ${userId}`);
+            res.json({ success: true, taskId });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Pause / Resume DCA task
+    router.patch('/user/dca/:id', async (req, res) => {
+        try {
+            const userId = String(req.dashboardUser.userId);
+            const taskId = req.params.id;
+            const { action } = req.body; // 'pause' or 'resume'
+            const task = await dcaDbGet("SELECT * FROM ai_scheduled_tasks WHERE id = ? AND userId = ? AND type = 'dca_swap'", [taskId, userId]);
+            if (!task) return res.status(404).json({ error: 'Task not found' });
+
+            if (action === 'pause') {
+                await dcaDbRun("UPDATE ai_scheduled_tasks SET enabled = 2 WHERE id = ?", [taskId]);
+            } else if (action === 'resume') {
+                await dcaDbRun("UPDATE ai_scheduled_tasks SET enabled = 1, nextRunAt = ? WHERE id = ?", [Date.now() + task.intervalMs, taskId]);
+            } else {
+                return res.status(400).json({ error: 'Invalid action. Use pause or resume.' });
+            }
+            log.info(`Dashboard DCA ${action}: ${taskId} by user ${userId}`);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Cancel (delete) DCA task
+    router.delete('/user/dca/:id', async (req, res) => {
+        try {
+            const userId = String(req.dashboardUser.userId);
+            const taskId = req.params.id;
+            const task = await dcaDbGet("SELECT * FROM ai_scheduled_tasks WHERE id = ? AND userId = ?", [taskId, userId]);
+            if (!task) return res.status(404).json({ error: 'Task not found' });
+            await dcaDbRun("DELETE FROM ai_scheduled_tasks WHERE id = ? AND userId = ?", [taskId, userId]);
+            log.info(`Dashboard DCA deleted: ${taskId} by user ${userId}`);
+            res.json({ success: true });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }

@@ -655,6 +655,115 @@ async function init() {
         createdAt INTEGER
     )`);
 
+
+    // ═══════════════════════════════════════════
+    // Social Hub Tables (Community Trading Hub)
+    // ═══════════════════════════════════════════
+
+    // Hub user profiles (extends Telegram user data)
+    await dbRun(`CREATE TABLE IF NOT EXISTS hub_profiles (
+        userId TEXT PRIMARY KEY,
+        displayName TEXT,
+        bio TEXT,
+        avatarUrl TEXT,
+        walletAddress TEXT,
+        reputation INTEGER DEFAULT 0,
+        totalTipsGiven TEXT DEFAULT '0',
+        totalTipsReceived TEXT DEFAULT '0',
+        followersCount INTEGER DEFAULT 0,
+        followingCount INTEGER DEFAULT 0,
+        createdAt INTEGER,
+        updatedAt INTEGER
+    )`);
+
+    // Hub posts (community feed)
+    await dbRun(`CREATE TABLE IF NOT EXISTS hub_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        content TEXT,
+        mediaUrls TEXT DEFAULT '[]',
+        tokenCommunity TEXT,
+        postType TEXT DEFAULT 'text',
+        likesCount INTEGER DEFAULT 0,
+        commentsCount INTEGER DEFAULT 0,
+        tipsCount INTEGER DEFAULT 0,
+        tipsTotal TEXT DEFAULT '0',
+        pinned INTEGER DEFAULT 0,
+        createdAt INTEGER,
+        updatedAt INTEGER
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_hub_posts_user ON hub_posts(userId, createdAt DESC)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_hub_posts_time ON hub_posts(createdAt DESC)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_hub_posts_community ON hub_posts(tokenCommunity, createdAt DESC)`);
+
+    // Hub comments
+    await dbRun(`CREATE TABLE IF NOT EXISTS hub_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        postId INTEGER NOT NULL,
+        userId TEXT NOT NULL,
+        content TEXT NOT NULL,
+        parentId INTEGER,
+        likesCount INTEGER DEFAULT 0,
+        createdAt INTEGER
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_hub_comments_post ON hub_comments(postId, createdAt ASC)`);
+
+    // Hub likes
+    await dbRun(`CREATE TABLE IF NOT EXISTS hub_likes (
+        postId INTEGER NOT NULL,
+        userId TEXT NOT NULL,
+        createdAt INTEGER,
+        PRIMARY KEY (postId, userId)
+    )`);
+
+    // Hub follows
+    await dbRun(`CREATE TABLE IF NOT EXISTS hub_follows (
+        followerId TEXT NOT NULL,
+        followingId TEXT NOT NULL,
+        createdAt INTEGER,
+        PRIMARY KEY (followerId, followingId)
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_hub_follows_following ON hub_follows(followingId)`);
+
+    // Hub tips (multi-token)
+    await dbRun(`CREATE TABLE IF NOT EXISTS hub_tips (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        postId INTEGER,
+        fromUserId TEXT NOT NULL,
+        toUserId TEXT NOT NULL,
+        tokenAddress TEXT,
+        tokenSymbol TEXT DEFAULT 'OKB',
+        amount TEXT NOT NULL,
+        txHash TEXT,
+        chainIndex TEXT DEFAULT '196',
+        createdAt INTEGER
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_hub_tips_to ON hub_tips(toUserId, createdAt DESC)`);
+
+    // Hub messages (DM)
+    await dbRun(`CREATE TABLE IF NOT EXISTS hub_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fromUserId TEXT NOT NULL,
+        toUserId TEXT NOT NULL,
+        content TEXT NOT NULL,
+        readAt INTEGER,
+        createdAt INTEGER
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_hub_messages_conv ON hub_messages(fromUserId, toUserId, createdAt DESC)`);
+
+    // Hub notifications
+    await dbRun(`CREATE TABLE IF NOT EXISTS hub_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        type TEXT NOT NULL,
+        actorId TEXT,
+        postId INTEGER,
+        data TEXT DEFAULT '{}',
+        read INTEGER DEFAULT 0,
+        createdAt INTEGER
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_hub_notif_user ON hub_notifications(userId, read, createdAt DESC)`);
+
     console.log("Khởi tạo cấu trúc bảng SQLite hoàn tất.");
 }
 
