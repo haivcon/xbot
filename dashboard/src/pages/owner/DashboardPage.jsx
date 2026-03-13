@@ -18,6 +18,10 @@ import {
     UserPlus,
     Terminal,
     History,
+    Settings2,
+    Eye,
+    EyeOff,
+    GripVertical,
 } from 'lucide-react';
 
 const ACTION_ICONS = {
@@ -78,8 +82,33 @@ export default function DashboardPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [recentActivity, setRecentActivity] = useState([]);
+    const [widgetSettingsOpen, setWidgetSettingsOpen] = useState(false);
     const wsNotifications = useWsStore((s) => s.notifications);
     const wsLastEvent = useWsStore((s) => s.lastEvent);
+
+    // Widget customization
+    const DEFAULT_WIDGETS = [
+        { id: 'overview', label: 'Overview Stats', visible: true },
+        { id: 'status', label: 'System Status', visible: true },
+        { id: 'health', label: 'Health Details', visible: true },
+        { id: 'activity', label: 'Activity Feed', visible: true },
+    ];
+    const [widgets, setWidgets] = useState(() => {
+        try {
+            const saved = localStorage.getItem('dashboard_widgets');
+            return saved ? JSON.parse(saved) : DEFAULT_WIDGETS;
+        } catch { return DEFAULT_WIDGETS; }
+    });
+    const saveWidgets = (w) => { setWidgets(w); localStorage.setItem('dashboard_widgets', JSON.stringify(w)); };
+    const toggleWidget = (id) => saveWidgets(widgets.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
+    const moveWidget = (idx, dir) => {
+        const arr = [...widgets];
+        const target = idx + dir;
+        if (target < 0 || target >= arr.length) return;
+        [arr[idx], arr[target]] = [arr[target], arr[idx]];
+        saveWidgets(arr);
+    };
+    const isVisible = (id) => widgets.find(w => w.id === id)?.visible !== false;
 
     const fetchAll = useCallback(async () => {
         try {
@@ -156,10 +185,40 @@ export default function DashboardPage() {
                         {health?.now ? new Date(health.now).toLocaleString() : ''}
                     </p>
                 </div>
-                <button onClick={fetchAll} className="btn-secondary flex items-center gap-2 !py-2 !px-3.5 !text-sm">
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                    {t('dashboard.common.refresh')}
-                </button>
+                <div className="flex items-center gap-2">
+                    {/* Widget settings */}
+                    <div className="relative">
+                        <button onClick={() => setWidgetSettingsOpen(!widgetSettingsOpen)}
+                            className="btn-secondary flex items-center gap-2 !py-2 !px-3.5 !text-sm">
+                            <Settings2 size={14} />
+                        </button>
+                        {widgetSettingsOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-64 bg-surface-800 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden animate-[fadeIn_0.15s_ease]">
+                                <div className="px-3 py-2 border-b border-white/5 text-xs font-medium text-surface-200/50">Customize Widgets</div>
+                                {widgets.map((w, i) => (
+                                    <div key={w.id} className="flex items-center gap-2 px-3 py-2 hover:bg-white/[0.03] transition-colors">
+                                        <div className="flex flex-col gap-0.5">
+                                            <button onClick={() => moveWidget(i, -1)} disabled={i === 0}
+                                                className="text-surface-200/20 hover:text-surface-200/50 disabled:opacity-20 transition-colors"><GripVertical size={10} /></button>
+                                        </div>
+                                        <button onClick={() => toggleWidget(w.id)}
+                                            className={`p-1 rounded transition-colors ${w.visible ? 'text-brand-400' : 'text-surface-200/20'}`}>
+                                            {w.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                                        </button>
+                                        <span className={`text-xs flex-1 ${w.visible ? 'text-surface-100' : 'text-surface-200/30'}`}>{w.label}</span>
+                                    </div>
+                                ))}
+                                <div className="px-3 py-2 border-t border-white/5">
+                                    <button onClick={() => saveWidgets(DEFAULT_WIDGETS)} className="text-[10px] text-surface-200/30 hover:text-brand-400 transition-colors">Reset to default</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <button onClick={fetchAll} className="btn-secondary flex items-center gap-2 !py-2 !px-3.5 !text-sm">
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                        {t('dashboard.common.refresh')}
+                    </button>
+                </div>
             </div>
 
             {error && (
@@ -167,7 +226,7 @@ export default function DashboardPage() {
             )}
 
             {/* Overview Stats (from /owner/overview) */}
-            {overview && (
+            {overview && isVisible('overview') && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                     <StatCard
                         icon={Users}
@@ -211,7 +270,7 @@ export default function DashboardPage() {
                 </div>
             )}
 
-            {health && (
+            {health && isVisible('status') && (
                 <>
                     {/* Status indicator */}
                     <div className="glass-card p-5 flex items-center gap-4">
@@ -252,6 +311,7 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Detail cards + Activity Feed */}
+                    {isVisible('health') && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Database */}
                         <div className="glass-card p-5">
@@ -293,8 +353,10 @@ export default function DashboardPage() {
                             </div>
                         </div>
                     </div>
+                    )}
 
                     {/* Recent Activity Feed */}
+                    {isVisible('activity') && (
                     <div className="glass-card p-5">
                         <div className="flex items-center gap-3 mb-4">
                             <History size={18} className="text-purple-400" />
@@ -320,6 +382,7 @@ export default function DashboardPage() {
                             </div>
                         )}
                     </div>
+                    )}
                 </>
             )}
         </div>

@@ -703,25 +703,12 @@ module.exports = {
             // ── Save swap to history (with status) ──
             try {
                 const { dbRun } = require('../../../../db/core');
-                await dbRun(`CREATE TABLE IF NOT EXISTS swap_history (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, walletAddress TEXT, chainIndex TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, fromAmount TEXT, toAmount TEXT, txHash TEXT, orderId TEXT, slippage REAL, status TEXT DEFAULT 'success', createdAt TEXT DEFAULT (datetime('now')))`);
-                await dbRun('INSERT INTO swap_history (userId,walletAddress,chainIndex,fromToken,toToken,fromSymbol,toSymbol,fromAmount,toAmount,txHash,orderId,slippage,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                    [String(userId), tw.address, chainIndex, fromTokenAddress, toTokenAddress, fromSym||'?', toSym||'?', String(originalAmount||args.amount), String(routerResult.toTokenAmount||'0'), txHash, orderId, dynamicSlippage, txConfirmed ? 'success' : 'reverted']);
+                await dbRun(`CREATE TABLE IF NOT EXISTS swap_history (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, walletAddress TEXT, chainIndex TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, fromAmount TEXT, toAmount TEXT, txHash TEXT, orderId TEXT, slippage REAL, priceUsd TEXT DEFAULT '0', status TEXT DEFAULT 'success', createdAt TEXT DEFAULT (datetime('now')))`);
+                const fromPrice = Number(routerResult.fromToken?.tokenUnitPrice || 0);
+                await dbRun('INSERT INTO swap_history (userId,walletAddress,chainIndex,fromToken,toToken,fromSymbol,toSymbol,fromAmount,toAmount,txHash,orderId,slippage,priceUsd,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    [String(userId), tw.address, chainIndex, fromTokenAddress, toTokenAddress, fromSym||'?', toSym||'?', String(originalAmount||args.amount), String(routerResult.toTokenAmount||'0'), txHash, orderId, dynamicSlippage, String(fromPrice), txConfirmed ? 'success' : 'reverted']);
             } catch (dbErr) { log.child('AUTOSWAP').warn('Swap history save failed:', dbErr.message); }
 
-            // ── Also record to trade_history for P&L tracking (#11) ──
-            try {
-                const { recordTrade } = require('../../../../db/tradeHistory');
-                const fromPrice = Number(routerResult.fromToken?.tokenUnitPrice || 0);
-                await recordTrade(userId, {
-                    chain: chainIndex === '1' ? 'eth' : chainIndex === '56' ? 'bsc' : chainIndex === '196' ? 'xlayer' : chainIndex,
-                    fromToken: fromTokenAddress,
-                    toToken: toTokenAddress,
-                    fromAmount: originalAmount || args.amount,
-                    toAmount: String(Number(routerResult.toTokenAmount || 0) / Math.pow(10, toDec)),
-                    priceUsd: String(fromPrice),
-                    txHash
-                });
-            } catch (tradeErr) { log.child('AUTOSWAP').warn('Trade history record failed:', tradeErr.message); }
 
 
             // Use the user's actual DB-stored language preference (not prompt-detected lang which fails on "ok")

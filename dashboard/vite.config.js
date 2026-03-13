@@ -1,10 +1,28 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
+
+// Generate a short build hash for cache busting
+function swVersionPlugin() {
+    const hash = crypto.randomBytes(4).toString('hex');
+    return {
+        name: 'sw-version',
+        writeBundle() {
+            const swPath = path.resolve(__dirname, 'dist/sw.js');
+            if (fs.existsSync(swPath)) {
+                let content = fs.readFileSync(swPath, 'utf8');
+                content = content.replace('__BUILD_HASH__', hash);
+                fs.writeFileSync(swPath, content);
+            }
+        }
+    };
+}
 
 export default defineConfig(({ mode }) => ({
     base: '/',
-    plugins: [react()],
+    plugins: [react(), swVersionPlugin()],
     resolve: {
         alias: {
             '@': path.resolve(__dirname, './src'),

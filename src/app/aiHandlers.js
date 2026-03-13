@@ -4505,6 +4505,12 @@ try {
   dbRI("CREATE TABLE IF NOT EXISTS user_onboarded (userId TEXT PRIMARY KEY, onboardedAt TEXT DEFAULT (datetime(\'now\')))").catch(() => {});
 } catch(_) {}
 
+// Start scheduled reports runner (#6)
+try {
+  const { startReportsRunner } = require('../features/scheduledReportsRunner');
+  startReportsRunner();
+} catch(e) { console.warn('ReportsRunner init warning:', e.message); }
+
 module.exports = {
   createAiHandlers,
   registerTokenSearchCallbacks,

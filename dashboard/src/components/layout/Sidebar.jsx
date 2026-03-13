@@ -25,6 +25,7 @@ import {
     History,
     Sun,
     Moon,
+    Shield,
 } from 'lucide-react';
 import useThemeStore from '@/stores/themeStore';
 
@@ -99,6 +100,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/posts', icon: CalendarClock, label: t('dashboard.sidebar.posts') },
         { to: '/analytics', icon: BarChart3, label: t('dashboard.sidebar.analytics') },
         { to: '/config', icon: Settings, label: t('dashboard.sidebar.config') },
+        { to: '/audit-log', icon: Shield, label: t('dashboard.sidebar.auditLog') || 'Audit Log' },
     ];
 
     const userLinks = [

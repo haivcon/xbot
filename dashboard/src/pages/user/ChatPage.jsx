@@ -530,6 +530,43 @@ export default function ChatPage() {
         const currentImage = imagePreview;
         setImagePreview(null);
 
+        // ── Compare Mode: side-by-side model comparison ──
+        if (compareMode) {
+            try {
+                // Add placeholder
+                setMessages(prev => [...prev, { role: 'compare', content: null, ts: Date.now() }]);
+                const models = availableModels?.length >= 2
+                    ? availableModels
+                    : ['gemini-3-flash-preview', 'gemini-3.1-pro-preview'];
+                const modelA = selectedModel || models[0];
+                const modelB = models.find(m => m !== modelA) || models[1] || models[0];
+                const result = await api.compareChat(msg, modelA, modelB);
+                setMessages(prev => {
+                    const copy = [...prev];
+                    const lastIdx = copy.length - 1;
+                    if (copy[lastIdx]?.role === 'compare') {
+                        copy[lastIdx] = { role: 'compare', content: result, ts: Date.now() };
+                    }
+                    return copy;
+                });
+                hapticNotification('success');
+            } catch (err) {
+                hapticNotification('error');
+                setMessages(prev => {
+                    const copy = [...prev];
+                    const lastIdx = copy.length - 1;
+                    if (copy[lastIdx]?.role === 'compare') {
+                        copy[lastIdx] = { role: 'assistant', content: `❌ Compare failed: ${err.message}`, ts: Date.now() };
+                    }
+                    return copy;
+                });
+            } finally {
+                setLoading(false);
+                inputRef.current?.focus();
+            }
+            return;
+        }
+
         try {
             let fullText = '';
             const streamToolCalls = [];
@@ -1348,6 +1385,33 @@ export default function ChatPage() {
                             {messages.map((msg, i) => {
                                 // Skip empty assistant messages (streaming placeholder before text arrives)
                                 if (msg.role === 'assistant' && !msg.content && (!msg.toolCalls || msg.toolCalls.length === 0)) return null;
+                                // ── Compare result rendering ──
+                                if (msg.role === 'compare') {
+                                    if (!msg.content) return <div key={i} className="flex justify-center py-6"><div className="animate-pulse flex items-center gap-3 text-surface-200/40 text-xs"><Columns size={14} /> Comparing models...</div></div>;
+                                    const { modelA, modelB } = msg.content;
+                                    const shortName = (m) => (m?.model || '').replace('gemini-', '').replace('-preview', '');
+                                    return (
+                                        <div key={i} id={`msg-${i}`} className="mb-4">
+                                            <div className="text-center text-[10px] text-surface-200/30 mb-2 flex items-center justify-center gap-1.5">
+                                                <Columns size={10} /> Model Comparison
+                                            </div>
+                                            <div className={`grid ${isMobile ? 'grid-cols-1 gap-2' : 'grid-cols-2 gap-3'}`}>
+                                                {[modelA, modelB].map((r, idx) => (
+                                                    <div key={idx} className="rounded-xl border border-surface-700/30 bg-surface-800/20 p-3">
+                                                        <div className="text-[10px] font-medium text-accent-400/70 mb-2 flex items-center gap-1.5">
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${idx === 0 ? 'bg-blue-400' : 'bg-emerald-400'}`}/>
+                                                            {shortName(r)}
+                                                        </div>
+                                                        {r?.error
+                                                            ? <p className="text-xs text-red-400">❌ {r.error}</p>
+                                                            : <ChatBubble message={{ role: 'assistant', content: r?.response || '' }} />
+                                                        }
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                }
                                 return (
                                 <div key={i} id={`msg-${i}`}>
                                     {msg.toolCalls && msg.toolCalls.length > 0 && (

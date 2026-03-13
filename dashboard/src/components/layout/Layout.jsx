@@ -1,16 +1,31 @@
-import { useState, useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import useThemeStore from '@/stores/themeStore';
 import useWsStore from '@/stores/wsStore';
+import OnboardingTour from '@/components/OnboardingTour';
+import useKeyboardShortcuts from '@/utils/useKeyboardShortcuts';
 
 export default function Layout() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const location = useLocation();
+    const navigate = useNavigate();
     const { theme } = useThemeStore();
     const { connect, disconnect } = useWsStore();
     const isChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
+
+    // Global keyboard shortcuts
+    const handleCommandPalette = useCallback(() => navigate('/chat'), [navigate]);
+    const handleFocusChat = useCallback(() => {
+        const chatInput = document.querySelector('#chat-input');
+        if (chatInput) chatInput.focus();
+        else navigate('/chat');
+    }, [navigate]);
+    useKeyboardShortcuts({
+        onCommandPalette: handleCommandPalette,
+        onFocusChat: handleFocusChat,
+    });
 
     // Auto-connect WebSocket on mount
     useEffect(() => {
@@ -25,6 +40,9 @@ export default function Layout() {
 
     return (
         <div className={`flex h-screen overflow-hidden transition-colors duration-300 ${theme === 'light' ? 'bg-slate-50' : 'bg-surface-900'}`}>
+            {/* Onboarding Tour for first-time users */}
+            <OnboardingTour />
+
             {/* Mobile overlay */}
             {sidebarOpen && (
                 <div
@@ -56,3 +74,4 @@ export default function Layout() {
         </div>
     );
 }
+

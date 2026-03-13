@@ -7,6 +7,7 @@ import Layout from '@/components/layout/Layout';
 import LoginModal from '@/components/LoginModal';
 import ToastContainer from '@/components/ToastContainer';
 import ChatWidget from '@/components/ChatWidget';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/Skeleton';
 import { setupBackButton, isTelegramMiniApp } from '@/utils/telegram';
 
@@ -26,6 +27,7 @@ const LeaderboardPage = lazy(() => import('@/pages/user/LeaderboardPage'));
 const ChatPage = lazy(() => import('@/pages/user/ChatPage'));
 const OKXTradingPage = lazy(() => import('@/pages/user/OKXTradingPage'));
 const TransferHistoryPage = lazy(() => import('@/pages/user/TransferHistoryPage'));
+const AuditLogPage = lazy(() => import('@/pages/owner/AuditLogPage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
@@ -85,6 +87,7 @@ export default function App() {
     // Authenticated → full dashboard
     return (
         <>
+            <ErrorBoundary>
             <Routes>
                 <Route path="/" element={<Layout />}>
                     {/* Owner Routes */}
@@ -108,10 +111,12 @@ export default function App() {
                     <Route path="leaderboard" element={<SuspenseWrapper><LeaderboardPage /></SuspenseWrapper>} />
                     <Route path="okx-trading" element={<SuspenseWrapper><OKXTradingPage /></SuspenseWrapper>} />
                     <Route path="history" element={<SuspenseWrapper><TransferHistoryPage /></SuspenseWrapper>} />
+                    <Route path="audit-log" element={isOwnerView() ? <SuspenseWrapper><AuditLogPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     {/* 404 */}
                     <Route path="*" element={<SuspenseWrapper><NotFoundPage /></SuspenseWrapper>} />
                 </Route>
             </Routes>
+            </ErrorBoundary>
             <ToastContainer />
             <ChatWidget />
         </>

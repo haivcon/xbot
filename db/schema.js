@@ -640,20 +640,8 @@ async function init() {
         PRIMARY KEY (userId, key)
     )`);
 
-    // Trade history — portfolio P&L tracking (#11)
-    await dbRun(`CREATE TABLE IF NOT EXISTS trade_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId TEXT NOT NULL,
-        chain TEXT DEFAULT 'xlayer',
-        fromToken TEXT,
-        toToken TEXT,
-        fromAmount TEXT,
-        toAmount TEXT,
-        priceUsd TEXT,
-        txHash TEXT,
-        createdAt INTEGER
-    )`);
-    await dbRun(`CREATE INDEX IF NOT EXISTS idx_trade_user ON trade_history(userId, createdAt DESC)`);
+    // Trade history — uses unified swap_history table (in tradingTools.js) with priceUsd column
+    // swap_history is created at swap-time with CREATE TABLE IF NOT EXISTS
 
     // Scheduled reports (#13)
     await dbRun(`CREATE TABLE IF NOT EXISTS scheduled_reports (

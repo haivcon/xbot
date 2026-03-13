@@ -879,10 +879,27 @@ function createChatRoutes() {
 
     // ==================================
     // MULTI-MODEL COMPARISON (#14)
+    // with per-user rate limit (#5)
     // ==================================
+    const _compareRateMap = new Map(); // userId -> { count, resetAt }
+    const COMPARE_RATE_LIMIT = 5; // max 5 per minute
+    const COMPARE_RATE_WINDOW = 60_000;
+
     router.post('/compare', async (req, res) => {
         const userId = req.dashboardUser?.id;
         if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+        // Rate limit check
+        const now = Date.now();
+        let entry = _compareRateMap.get(String(userId));
+        if (!entry || now > entry.resetAt) {
+            entry = { count: 0, resetAt: now + COMPARE_RATE_WINDOW };
+            _compareRateMap.set(String(userId), entry);
+        }
+        entry.count++;
+        if (entry.count > COMPARE_RATE_LIMIT) {
+            return res.status(429).json({ error: 'Too many compare requests. Try again in 1 minute.' });
+        }
 
         const { message, modelA, modelB } = req.body;
         if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });

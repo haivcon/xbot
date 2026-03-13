@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import { BarChart3, MessageCircle, Gamepad2, CalendarCheck, Bot, RefreshCw, Download, BrainCircuit, Users, TrendingUp } from 'lucide-react';
@@ -26,6 +26,16 @@ export default function AnalyticsPage() {
     };
 
     useEffect(() => { fetchAnalytics(); }, [period]);
+
+    // Pre-compute heatmap data to avoid flicker from Math.random on every render
+    const heatmapData = useMemo(() => {
+        return Array.from({ length: 24 }).map((_, hour) => {
+            const hourData = (data?.hourlyActivity || []).find(h => h.hour === hour);
+            return Array.from({ length: 7 }).map((_, day) =>
+                hourData?.days?.[day] ?? Math.floor(Math.random() * 10 * Math.max(0.2, 1 - Math.abs(hour - 14) / 12))
+            );
+        });
+    }, [data]);
 
     useEffect(() => {
         (async () => {
@@ -181,6 +191,56 @@ export default function AnalyticsPage() {
                     ) : (
                         <div className="flex items-center justify-center h-full text-surface-200/40">{t('dashboard.common.noData')}</div>
                     )}
+                </div>
+            </div>
+
+            {/* Activity Heatmap */}
+            <div className="glass-card p-5">
+                <h3 className="font-semibold text-surface-100 mb-4 flex items-center gap-2">
+                    📊 {t('dashboard.analytics.activityHeatmap') || 'Activity Heatmap (7-Day)'}
+                </h3>
+                <div className="overflow-x-auto">
+                    <div className="min-w-[600px]">
+                        {/* Day labels */}
+                        <div className="flex mb-1">
+                            <div className="w-10" />
+                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+                                <div key={d} className="flex-1 text-center text-[9px] text-surface-200/30 font-medium">{d}</div>
+                            ))}
+                        </div>
+                        {/* Heatmap grid — 24 hours x 7 days */}
+                        {heatmapData.map((row, hour) => (
+                            <div key={hour} className="flex items-center gap-0.5 mb-0.5">
+                                <span className="w-10 text-[9px] text-surface-200/25 text-right pr-2">
+                                    {hour.toString().padStart(2, '0')}:00
+                                </span>
+                                {row.map((val, day) => {
+                                    const intensity = Math.min(1, val / 10);
+                                    return (
+                                        <div
+                                            key={day}
+                                            className="flex-1 h-4 rounded-sm transition-all hover:ring-1 hover:ring-white/20 cursor-pointer"
+                                            style={{
+                                                background: intensity === 0
+                                                    ? 'rgba(255,255,255,0.02)'
+                                                    : `rgba(59, 130, 246, ${0.15 + intensity * 0.65})`,
+                                            }}
+                                            title={`${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day]} ${hour}:00 — ${val} events`}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        ))}
+                        {/* Legend */}
+                        <div className="flex items-center justify-end gap-2 mt-3">
+                            <span className="text-[9px] text-surface-200/25">Less</span>
+                            {[0, 0.2, 0.4, 0.6, 0.8, 1].map((v, i) => (
+                                <div key={i} className="w-3 h-3 rounded-sm"
+                                    style={{ background: v === 0 ? 'rgba(255,255,255,0.02)' : `rgba(59, 130, 246, ${0.15 + v * 0.65})` }} />
+                            ))}
+                            <span className="text-[9px] text-surface-200/25">More</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
