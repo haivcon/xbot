@@ -2138,5 +2138,12 @@
     "trending_loading": "🔥 Загрузка трендовых токенов...",
     "trending_empty": "📭 Нет данных о трендах.",
     "trending_hint": "/topvolume — по объёму, /topmcap — по капитализации",
-    "trending_error": "Ошибка загрузки трендов"
+    "trending_error": "Ошибка загрузки трендов",
+    "help_command_meme": "Сканер мем-токенов (PumpFun)",
+    "help_command_pnl": "Отчёт PnL портфеля",
+    "help_command_dexhistory": "История DEX транзакций",
+    "help_command_txhistory": "История транзакций on-chain",
+    "help_command_trending": "Топ роста (24ч)",
+    "help_command_topvolume": "Топ по объёму",
+    "help_command_topmcap": "Топ по капитализации"
 }

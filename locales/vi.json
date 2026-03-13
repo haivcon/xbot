@@ -2273,5 +2273,12 @@
     "trending_loading": "🔥 Đang tải token trending...",
     "trending_empty": "📭 Không có dữ liệu trending.",
     "trending_hint": "Thử: /topvolume cho top volume, /topmcap cho top vốn hóa",
-    "trending_error": "Lỗi tải token trending"
+    "trending_error": "Lỗi tải token trending",
+    "help_command_meme": "Quét meme/pump token (PumpFun)",
+    "help_command_pnl": "Báo cáo lãi lỗ (PnL)",
+    "help_command_dexhistory": "Lịch sử giao dịch DEX",
+    "help_command_txhistory": "Lịch sử giao dịch on-chain",
+    "help_command_trending": "Top tăng giá (24h)",
+    "help_command_topvolume": "Top khối lượng giao dịch",
+    "help_command_topmcap": "Top vốn hóa thị trường"
 }

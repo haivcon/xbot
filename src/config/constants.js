@@ -54,7 +54,14 @@ const HELP_COMMAND_DETAILS = {
     admin_filterx: { command: '/filterx', icon: '??', descKey: 'help_command_admin_filterx' },
     profile: { command: '/profile', icon: '🙋', descKey: 'help_command_profile' },
     ping: { command: '/ping', icon: '🏓', descKey: 'help_command_ping' },
-    recent: { command: '/recent', icon: '📋', descKey: 'help_command_recent' }
+    recent: { command: '/recent', icon: '📋', descKey: 'help_command_recent' },
+    meme: { command: '/meme', icon: '🎯', descKey: 'help_command_meme' },
+    pnl: { command: '/pnl', icon: '📊', descKey: 'help_command_pnl' },
+    dexhistory: { command: '/dexhistory', icon: '📜', descKey: 'help_command_dexhistory' },
+    txhistory: { command: '/txhistory', icon: '🔍', descKey: 'help_command_txhistory' },
+    trending: { command: '/trending', icon: '🔥', descKey: 'help_command_trending' },
+    topvolume: { command: '/topvolume', icon: '💎', descKey: 'help_command_topvolume' },
+    topmcap: { command: '/topmcap', icon: '🏆', descKey: 'help_command_topmcap' }
 };
 
 const HELP_GROUP_DETAILS = {
@@ -68,7 +75,7 @@ const HELP_GROUP_DETAILS = {
         icon: '🔎',
         titleKey: 'help_group_xlayer_check_title',
         descKey: 'help_group_xlayer_check_desc',
-        commands: ['mywallet', 'rmchat', 'okxchains', 'okx402status', 'txhash', 'toptoken', 'token', 'contract']
+        commands: ['mywallet', 'rmchat', 'okxchains', 'okx402status', 'txhash', 'toptoken', 'token', 'contract', 'meme', 'pnl', 'dexhistory', 'txhistory', 'trending', 'topvolume', 'topmcap']
     },
     tools: {
         icon: '🛠️',

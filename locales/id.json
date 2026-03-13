@@ -2138,5 +2138,12 @@
     "trending_loading": "🔥 Memuat token trending...",
     "trending_empty": "📭 Tidak ada data trending.",
     "trending_hint": "/topvolume - volume tertinggi, /topmcap - market cap tertinggi",
-    "trending_error": "Error memuat trending"
+    "trending_error": "Error memuat trending",
+    "help_command_meme": "Pindai meme/pump token (PumpFun)",
+    "help_command_pnl": "Laporan PnL portofolio",
+    "help_command_dexhistory": "Riwayat transaksi DEX",
+    "help_command_txhistory": "Riwayat transaksi on-chain",
+    "help_command_trending": "Top kenaikan (24j)",
+    "help_command_topvolume": "Top volume transaksi",
+    "help_command_topmcap": "Top kapitalisasi pasar"
 }

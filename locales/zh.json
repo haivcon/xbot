@@ -2226,5 +2226,12 @@
     "trending_loading": "🔥 正在加载热门代币...",
     "trending_empty": "📭 暂无热门数据。",
     "trending_hint": "试试: /topvolume 查看交易量排行, /topmcap 查看市值排行",
-    "trending_error": "加载热门代币出错"
+    "trending_error": "加载热门代币出错",
+    "help_command_meme": "扫描Meme/Pump代币 (PumpFun)",
+    "help_command_pnl": "盈亏报告 (PnL)",
+    "help_command_dexhistory": "DEX交易历史",
+    "help_command_txhistory": "链上交易历史",
+    "help_command_trending": "24H涨幅榜",
+    "help_command_topvolume": "交易量排行榜",
+    "help_command_topmcap": "市值排行榜"
 }

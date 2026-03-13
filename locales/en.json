@@ -2258,5 +2258,12 @@
     "trending_loading": "🔥 Loading trending tokens...",
     "trending_empty": "📭 No trending data available.",
     "trending_hint": "Try: /topvolume for top volume, /topmcap for top market cap",
-    "trending_error": "Error loading trending tokens"
+    "trending_error": "Error loading trending tokens",
+    "help_command_meme": "Scan meme/pump tokens (PumpFun)",
+    "help_command_pnl": "Portfolio PnL report",
+    "help_command_dexhistory": "DEX transaction history",
+    "help_command_txhistory": "On-chain transaction history",
+    "help_command_trending": "Top gainers (24h)",
+    "help_command_topvolume": "Top volume tokens",
+    "help_command_topmcap": "Top market cap tokens"
 }

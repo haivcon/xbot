@@ -2138,5 +2138,12 @@
     "trending_loading": "🔥 트렌딩 로딩 중...",
     "trending_empty": "📭 트렌딩 데이터가 없습니다.",
     "trending_hint": "/topvolume - 거래량 순, /topmcap - 시가총액 순",
-    "trending_error": "트렌딩 로딩 오류"
+    "trending_error": "트렌딩 로딩 오류",
+    "help_command_meme": "밈/펌프 토큰 스캔 (PumpFun)",
+    "help_command_pnl": "손익 보고서 (PnL)",
+    "help_command_dexhistory": "DEX 거래 내역",
+    "help_command_txhistory": "온체인 거래 내역",
+    "help_command_trending": "24시간 상승률 순위",
+    "help_command_topvolume": "거래량 순위",
+    "help_command_topmcap": "시가총액 순위"
 }
