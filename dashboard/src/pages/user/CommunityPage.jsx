@@ -8,7 +8,6 @@ import { ExternalLink, Globe, Gamepad2, Landmark, Users, UserPlus, TrendingUp, T
 
 const XLAYER_CHAIN = '196';
 const OKX_TOKEN_URL = (addr) => `https://web3.okx.com/token/x-layer/${addr}`;
-const OKX_PRICE_API = 'https://www.okx.com/api/v5/dex/market/token-price';
 
 const COMMUNITIES = [
     {
@@ -106,7 +105,7 @@ function SocialButton({ href, icon: Icon, label, bg, hoverBg }) {
     );
 }
 
-/* ── Token Price Hook ── */
+/* ── Token Price Hook — uses backend proxy to avoid CORS ── */
 function useTokenPrices(tokens) {
     const [prices, setPrices] = useState({});
     const [loading, setLoading] = useState(true);
@@ -115,20 +114,26 @@ function useTokenPrices(tokens) {
         let cancelled = false;
         async function fetchPrices() {
             setLoading(true);
-            const results = {};
-            await Promise.allSettled(
-                tokens.map(async (addr) => {
-                    try {
-                        const res = await fetch(
-                            `${OKX_PRICE_API}?chainIndex=${XLAYER_CHAIN}&tokenContractAddress=${addr}`
-                        );
-                        const json = await res.json();
-                        const price = json?.data?.[0]?.price || json?.data?.[0]?.tokenPrice;
-                        if (price && !cancelled) results[addr.toLowerCase()] = parseFloat(price);
-                    } catch { /* ignore */ }
-                })
-            );
-            if (!cancelled) { setPrices(results); setLoading(false); }
+            try {
+                const body = tokens.map(addr => ({ chainIndex: XLAYER_CHAIN, tokenContractAddress: addr }));
+                const res = await fetch('/api/market/token/price', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ tokens: body }),
+                });
+                const json = await res.json();
+                if (!cancelled && Array.isArray(json?.data)) {
+                    const results = {};
+                    for (const item of json.data) {
+                        const addr = (item.tokenContractAddress || '').toLowerCase();
+                        const p = parseFloat(item.price);
+                        if (addr && p > 0) results[addr] = p;
+                    }
+                    setPrices(results);
+                }
+            } catch { /* ignore */ }
+            if (!cancelled) setLoading(false);
         }
         fetchPrices();
         const interval = setInterval(fetchPrices, 30000);
