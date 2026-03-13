@@ -242,12 +242,22 @@ async function getMarketCandles(chainIndex, tokenContractAddress, options = {}) 
 
 /**
  * Get recent trades for a token
+ * @param {string} chainIndex
+ * @param {string} tokenContractAddress
+ * @param {object} [options]
+ * @param {string} [options.limit] - Max 500, default 100
+ * @param {string} [options.tagFilter] - 1=KOL, 2=Dev, 3=Smart Money, 4=Whale, 5=New Wallet, 6=Suspicious, 7=Sniper, 8=Phishing, 9=Bundle
+ * @param {string} [options.walletAddressFilter] - Comma-separated addresses (max 10)
+ * @param {string} [options.after] - Pagination cursor
  */
 async function getMarketTrades(chainIndex, tokenContractAddress, options = {}) {
     const path = buildGetPath('/api/v6/dex/market/trades', {
         chainIndex,
         tokenContractAddress: tokenContractAddress.toLowerCase(),
-        limit: options.limit
+        limit: options.limit,
+        tagFilter: options.tagFilter,
+        walletAddressFilter: options.walletAddressFilter,
+        after: options.after
     });
     return okxFetch('GET', path);
 }
@@ -512,6 +522,105 @@ async function getOrderStatus(address, chainIndex, options = {}) {
 }
 
 // ═══════════════════════════════════════════════════════
+// Meme Pump Scanner API  (/api/v6/dex/market/memepump)
+// ═══════════════════════════════════════════════════════
+
+async function getMemePumpChains() {
+    return okxFetch('GET', '/api/v6/dex/market/memepump/supported/chainsProtocol');
+}
+
+async function getMemePumpTokenList(chainIndex, stage, options = {}) {
+    const params = { chainIndex, stage, ...options };
+    const cleanParams = Object.fromEntries(Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    const path = buildGetPath('/api/v6/dex/market/memepump/tokenList', cleanParams);
+    return okxFetch('GET', path);
+}
+
+async function getMemePumpTokenDetails(chainIndex, tokenContractAddress, walletAddress) {
+    const path = buildGetPath('/api/v6/dex/market/memepump/tokenDetails', { chainIndex, tokenContractAddress, walletAddress });
+    return okxFetch('GET', path);
+}
+
+async function getMemePumpDevInfo(chainIndex, tokenContractAddress) {
+    const path = buildGetPath('/api/v6/dex/market/memepump/tokenDevInfo', { chainIndex, tokenContractAddress });
+    return okxFetch('GET', path);
+}
+
+async function getMemePumpSimilarTokens(chainIndex, tokenContractAddress) {
+    const path = buildGetPath('/api/v6/dex/market/memepump/similarToken', { chainIndex, tokenContractAddress });
+    return okxFetch('GET', path);
+}
+
+async function getMemePumpBundleInfo(chainIndex, tokenContractAddress) {
+    const path = buildGetPath('/api/v6/dex/market/memepump/tokenBundleInfo', { chainIndex, tokenContractAddress });
+    return okxFetch('GET', path);
+}
+
+async function getMemePumpApedWallets(chainIndex, tokenContractAddress, walletAddress) {
+    const path = buildGetPath('/api/v6/dex/market/memepump/apedWallet', { chainIndex, tokenContractAddress, walletAddress });
+    return okxFetch('GET', path);
+}
+
+// ═══════════════════════════════════════════════════════
+// Portfolio API  (/api/v6/dex/market/portfolio)
+// ═══════════════════════════════════════════════════════
+
+async function getPortfolioOverview(chainIndex, walletAddress, timeFrame) {
+    const path = buildGetPath('/api/v6/dex/market/portfolio/overview', { chainIndex, walletAddress, timeFrame });
+    return okxFetch('GET', path);
+}
+
+async function getRecentPnl(chainIndex, walletAddress, options = {}) {
+    const path = buildGetPath('/api/v6/dex/market/portfolio/recent-pnl', { chainIndex, walletAddress, cursor: options.cursor, limit: options.limit });
+    return okxFetch('GET', path);
+}
+
+async function getTokenLatestPnl(chainIndex, walletAddress, tokenContractAddress) {
+    const path = buildGetPath('/api/v6/dex/market/portfolio/token/latest-pnl', { chainIndex, walletAddress, tokenContractAddress });
+    return okxFetch('GET', path);
+}
+
+async function getDexHistory(chainIndex, walletAddress, begin, end, options = {}) {
+    const path = buildGetPath('/api/v6/dex/market/portfolio/dex-history', {
+        chainIndex, walletAddress, begin, end,
+        tokenContractAddress: options.tokenContractAddress, type: options.type,
+        cursor: options.cursor, limit: options.limit
+    });
+    return okxFetch('GET', path);
+}
+
+// ═══════════════════════════════════════════════════════
+// Transaction History API  (/api/v6/dex/post-transaction)
+// ═══════════════════════════════════════════════════════
+
+async function getTransactionHistory(address, options = {}) {
+    const path = buildGetPath('/api/v6/dex/post-transaction/transactions-by-address', {
+        address, chains: options.chains, tokenContractAddress: options.tokenContractAddress,
+        begin: options.begin, end: options.end, cursor: options.cursor, limit: options.limit
+    });
+    return okxFetch('GET', path);
+}
+
+async function getTransactionDetail(chainIndex, txHash, itype) {
+    const path = buildGetPath('/api/v6/dex/post-transaction/transaction-detail-by-txhash', { chainIndex, txHash, itype });
+    return okxFetch('GET', path);
+}
+
+// ═══════════════════════════════════════════════════════
+// Token Advanced API  (/api/v6/dex/market/token)
+// ═══════════════════════════════════════════════════════
+
+async function getTokenAdvancedInfo(chainIndex, tokenContractAddress) {
+    const path = buildGetPath('/api/v6/dex/market/token/advanced-info', { chainIndex, tokenContractAddress });
+    return okxFetch('GET', path);
+}
+
+async function getTokenLiquidityPool(chainIndex, tokenContractAddress) {
+    const path = buildGetPath('/api/v6/dex/market/token/top-liquidity', { chainIndex, tokenContractAddress });
+    return okxFetch('GET', path);
+}
+
+// ═══════════════════════════════════════════════════════
 // Convenience helpers
 // ═══════════════════════════════════════════════════════
 
@@ -549,6 +658,24 @@ module.exports = {
     getTokenPriceInfo,
     getTokenTopList,
     getTokenHolder,
+    getTokenAdvancedInfo,
+    getTokenLiquidityPool,
+    // Meme Pump Scanner
+    getMemePumpChains,
+    getMemePumpTokenList,
+    getMemePumpTokenDetails,
+    getMemePumpDevInfo,
+    getMemePumpSimilarTokens,
+    getMemePumpBundleInfo,
+    getMemePumpApedWallets,
+    // Portfolio
+    getPortfolioOverview,
+    getRecentPnl,
+    getTokenLatestPnl,
+    getDexHistory,
+    // Transaction History
+    getTransactionHistory,
+    getTransactionDetail,
     // Swap
     getSwapQuote,
     getSwapTransaction,

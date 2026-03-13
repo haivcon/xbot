@@ -696,4 +696,417 @@ module.exports = {
         }
     },
 
+
+    // ═══════════════════════════════════════════════════════
+    // Meme Pump Scanner Tools
+    // ═══════════════════════════════════════════════════════
+
+    async get_meme_list(args, context) {
+        try {
+            const chainIndex = args.chainIndex || '501';
+            const stage = args.stage || 'MIGRATED';
+            const options = {};
+            if (args.sortBy) options.sortBy = args.sortBy;
+            if (args.minMarketCap) options.minMarketCap = args.minMarketCap;
+            if (args.maxMarketCap) options.maxMarketCap = args.maxMarketCap;
+            if (args.minVolume24h) options.minVolume24h = args.minVolume24h;
+            if (args.minHolders) options.minHolders = args.minHolders;
+            if (args.limit) options.limit = args.limit;
+            const data = await onchainos.getMemePumpTokenList(chainIndex, stage, options);
+            const lang = context?.lang || 'en';
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                const noData = { vi: '📭 Không tìm thấy meme token nào.', en: '📭 No meme tokens found.', zh: '📭 未找到meme代币。', ko: '📭 밈 토큰을 찾을 수 없습니다.' };
+                return noData[lang] || noData.en;
+            }
+            const stageEmoji = { 'NEW': '🆕', 'MIGRATING': '🔄', 'MIGRATED': '🚀' };
+            const chainNames = { '501': 'Solana', '728126428': 'Tron' };
+            const headerL = { vi: 'Meme Token Scanner', en: 'Meme Token Scanner', zh: 'Meme代币扫描', ko: '밈 토큰 스캐너' };
+            let card = `${stageEmoji[stage] || '🔍'} <b>${headerL[lang] || headerL.en}</b> (${chainNames[chainIndex] || 'Chain #' + chainIndex})\n`;
+            card += `📊 Stage: <code>${stage}</code> | Found: ${data.length}\n━━━━━━━━━━━━━━━━━━\n\n`;
+            const items = data.slice(0, 15);
+            for (let i = 0; i < items.length; i++) {
+                const t = items[i];
+                const sym = t.tokenSymbol || '?';
+                const name = t.tokenName || sym;
+                const mcap = Number(t.marketCap || 0);
+                const vol = Number(t.volume24h || t.volumeUsd || 0);
+                const holders = t.holderCount || t.holders || '?';
+                const progress = t.progress ? (Number(t.progress) * 100).toFixed(1) + '%' : '';
+                const mcapStr = mcap > 1e6 ? '$' + (mcap / 1e6).toFixed(2) + 'M' : mcap > 1e3 ? '$' + (mcap / 1e3).toFixed(1) + 'K' : '$' + mcap.toFixed(0);
+                const volStr = vol > 1e6 ? '$' + (vol / 1e6).toFixed(2) + 'M' : vol > 1e3 ? '$' + (vol / 1e3).toFixed(1) + 'K' : '$' + vol.toFixed(0);
+                card += `${i + 1}. <b>${sym}</b> — ${name}\n`;
+                card += `   💰 MCap: ${mcapStr} | 📊 Vol: ${volStr}\n`;
+                card += `   👥 Holders: ${holders}${progress ? ' | ⏳ ' + progress : ''}\n\n`;
+            }
+            if (data.length > 15) card += `<i>... +${data.length - 15} more</i>\n`;
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error fetching meme list: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_meme_detail(args, context) {
+        try {
+            const { chainIndex, tokenContractAddress } = args;
+            const data = await onchainos.getMemePumpTokenDetails(chainIndex, tokenContractAddress);
+            const lang = context?.lang || 'en';
+            if (!data) {
+                return lang === 'vi' ? '📭 Không tìm thấy chi tiết token.' : '📭 Token details not found.';
+            }
+            const d = Array.isArray(data) ? data[0] : data;
+            const sym = d.tokenSymbol || '?';
+            const name = d.tokenName || sym;
+            const mcap = Number(d.marketCap || 0);
+            const price = Number(d.price || 0);
+            const holders = d.holderCount || d.holders || '?';
+            const progress = d.progress ? (Number(d.progress) * 100).toFixed(1) + '%' : 'N/A';
+            const creator = d.creatorAddress || d.devAddress || 'Unknown';
+            const mcapStr = mcap > 1e6 ? '$' + (mcap / 1e6).toFixed(2) + 'M' : '$' + mcap.toFixed(0);
+            const pStr = price < 0.0001 ? price.toFixed(10) : price < 0.01 ? price.toFixed(8) : price.toFixed(6);
+            let card = `🎯 <b>Meme Token: ${sym}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+            card += `📛 Name: ${name}\n`;
+            card += `💰 Price: <code>$${pStr}</code>\n`;
+            card += `📊 Market Cap: ${mcapStr}\n`;
+            card += `👥 Holders: ${holders}\n`;
+            card += `⏳ Progress: ${progress}\n`;
+            card += `👨‍💻 Creator: <code>${creator.slice(0, 8)}...${creator.slice(-4)}</code>\n`;
+            if (d.description) card += `\n📝 <i>${d.description.slice(0, 200)}</i>\n`;
+            if (d.socialLinks || d.twitter || d.telegram || d.website) {
+                card += '\n🔗 Links: ';
+                if (d.twitter) card += `<a href="${d.twitter}">Twitter</a> `;
+                if (d.telegram) card += `<a href="${d.telegram}">Telegram</a> `;
+                if (d.website) card += `<a href="${d.website}">Website</a>`;
+                card += '\n';
+            }
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_meme_dev_info(args, context) {
+        try {
+            const data = await onchainos.getMemePumpDevInfo(args.chainIndex, args.tokenContractAddress);
+            const lang = context?.lang || 'en';
+            if (!data) return lang === 'vi' ? '📭 Không tìm thấy thông tin dev.' : '📭 Dev info not found.';
+            const d = Array.isArray(data) ? data[0] : data;
+            const total = d.totalTokensCreated || d.tokenCount || 0;
+            const rugs = d.rugPullCount || d.rugs || 0;
+            const migrated = d.migratedCount || d.migrated || 0;
+            const golden = d.goldenGemCount || d.golden || 0;
+            const devAddr = d.devAddress || d.creator || 'Unknown';
+            const riskLevel = rugs > 3 ? '🔴 HIGH RISK' : rugs > 0 ? '🟡 MEDIUM RISK' : '🟢 LOW RISK';
+            let card = `👨‍💻 <b>Developer Analysis</b>\n━━━━━━━━━━━━━━━━━━\n`;
+            card += `📍 Dev: <code>${devAddr.slice(0, 8)}...${devAddr.slice(-4)}</code>\n\n`;
+            card += `📊 Total Tokens Created: <b>${total}</b>\n`;
+            card += `🏆 Golden Gems: <b>${golden}</b>\n`;
+            card += `✅ Migrated to DEX: <b>${migrated}</b>\n`;
+            card += `⚠️ Rug Pulls: <b>${rugs}</b>\n\n`;
+            card += `Risk Level: <b>${riskLevel}</b>\n`;
+            if (rugs > 0) card += `\n🚨 <i>This developer has ${rugs} rug pull(s). Proceed with caution!</i>`;
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_similar_memes(args, context) {
+        try {
+            const data = await onchainos.getMemePumpSimilarTokens(args.chainIndex, args.tokenContractAddress);
+            const lang = context?.lang || 'en';
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                return lang === 'vi' ? '📭 Không tìm thấy token tương tự.' : '📭 No similar tokens found.';
+            }
+            let card = '🔄 <b>Similar Meme Tokens</b>\n━━━━━━━━━━━━━━━━━━\n\n';
+            data.slice(0, 10).forEach((t, i) => {
+                const sym = t.tokenSymbol || '?';
+                const mcap = Number(t.marketCap || 0);
+                const mcapStr = mcap > 1e6 ? '$' + (mcap / 1e6).toFixed(2) + 'M' : '$' + mcap.toFixed(0);
+                card += `${i + 1}. <b>${sym}</b> — ${t.tokenName || sym} | MCap: ${mcapStr}\n`;
+            });
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════
+    // Portfolio PnL Tools
+    // ═══════════════════════════════════════════════════════
+
+    async get_portfolio_overview(args, context) {
+        try {
+            const timeFrame = args.timeFrame || '3';
+            const data = await onchainos.getPortfolioOverview(args.chainIndex, args.walletAddress, timeFrame);
+            const lang = context?.lang || 'en';
+            if (!data) return lang === 'vi' ? '📭 Không tìm thấy dữ liệu portfolio.' : '📭 Portfolio data not found.';
+            const d = Array.isArray(data) ? data[0] : data;
+            const pnl = Number(d.totalPnl || d.pnl || 0);
+            const winRate = Number(d.winRate || 0);
+            const totalTrades = Number(d.totalTradeCount || d.txCount || 0);
+            const totalBuy = Number(d.totalBuyAmount || d.buyCount || 0);
+            const totalSell = Number(d.totalSellAmount || d.sellCount || 0);
+            const timeLabels = { '1': '1D', '2': '3D', '3': '7D', '4': '1M', '5': '3M' };
+            const addr = args.walletAddress;
+            const pnlStr = pnl >= 0 ? '+$' + pnl.toFixed(2) : '-$' + Math.abs(pnl).toFixed(2);
+            const pnlIcon = pnl >= 0 ? '🟢' : '🔴';
+            let card = `📊 <b>Portfolio Overview</b> (${timeLabels[timeFrame] || timeFrame})\n━━━━━━━━━━━━━━━━━━\n`;
+            card += `👛 <code>${addr.slice(0, 8)}...${addr.slice(-4)}</code>\n\n`;
+            card += `${pnlIcon} PnL: <b>${pnlStr}</b>\n`;
+            card += `🎯 Win Rate: <b>${(winRate * 100).toFixed(1)}%</b>\n`;
+            card += `📈 Total Trades: <b>${totalTrades}</b>\n`;
+            card += `🟢 Buys: ${totalBuy} | 🔴 Sells: ${totalSell}\n`;
+            if (d.topTokens && Array.isArray(d.topTokens)) {
+                card += '\n🏆 Top Tokens:\n';
+                d.topTokens.slice(0, 5).forEach((t, i) => {
+                    const tPnl = Number(t.pnl || 0);
+                    card += `  ${i + 1}. ${t.tokenSymbol || '?'}: ${tPnl >= 0 ? '+' : ''}$${tPnl.toFixed(2)}\n`;
+                });
+            }
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_portfolio_pnl(args, context) {
+        try {
+            const options = {};
+            if (args.limit) options.limit = args.limit;
+            let data;
+            if (args.tokenContractAddress) {
+                data = await onchainos.getTokenLatestPnl(args.chainIndex, args.walletAddress, args.tokenContractAddress);
+            } else {
+                data = await onchainos.getRecentPnl(args.chainIndex, args.walletAddress, options);
+            }
+            const lang = context?.lang || 'en';
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+                return lang === 'vi' ? '📭 Không tìm thấy dữ liệu PnL.' : '📭 No PnL data found.';
+            }
+            const items = Array.isArray(data) ? data : [data];
+            let card = '📊 <b>PnL Report</b>\n━━━━━━━━━━━━━━━━━━\n\n';
+            items.slice(0, 20).forEach((t, i) => {
+                const sym = t.tokenSymbol || '?';
+                const pnl = Number(t.pnl || t.realizedPnl || 0);
+                const unrealized = Number(t.unrealizedPnl || 0);
+                const icon = pnl >= 0 ? '🟢' : '🔴';
+                const pnlStr = pnl >= 0 ? '+$' + pnl.toFixed(2) : '-$' + Math.abs(pnl).toFixed(2);
+                card += `${i + 1}. ${icon} <b>${sym}</b>: ${pnlStr}`;
+                if (unrealized !== 0) card += ` (Unrealized: $${unrealized.toFixed(2)})`;
+                card += '\n';
+            });
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_portfolio_dex_history(args, context) {
+        try {
+            const now = Date.now();
+            const begin = String(now - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+            const end = String(now);
+            const options = {};
+            if (args.type) options.type = args.type;
+            if (args.limit) options.limit = args.limit;
+            const data = await onchainos.getDexHistory(args.chainIndex, args.walletAddress, begin, end, options);
+            const lang = context?.lang || 'en';
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+                return lang === 'vi' ? '📭 Không tìm thấy lịch sử DEX.' : '📭 No DEX history found.';
+            }
+            const items = Array.isArray(data) ? data : [data];
+            const typeLabels = { '1': '🟢 BUY', '2': '🔴 SELL', '3': '📥 IN', '4': '📤 OUT' };
+            let card = '📜 <b>DEX Transaction History</b>\n━━━━━━━━━━━━━━━━━━\n\n';
+            items.slice(0, 15).forEach((tx, i) => {
+                const type = typeLabels[tx.type] || tx.type || '?';
+                const sym = tx.tokenSymbol || '?';
+                const amount = Number(tx.amount || tx.tokenAmount || 0);
+                const value = Number(tx.valueUsd || tx.usdValue || 0);
+                const time = tx.time ? new Date(Number(tx.time)).toLocaleString('en-US', { hour12: false }) : '';
+                card += `${i + 1}. ${type} <b>${sym}</b>: ${amount.toLocaleString('en-US', { maximumFractionDigits: 4 })} ($${value.toFixed(2)})\n`;
+                if (time) card += `   🕐 ${time}\n`;
+            });
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════
+    // Transaction History Tools
+    // ═══════════════════════════════════════════════════════
+
+    async get_tx_history(args, context) {
+        try {
+            const options = { chains: args.chains };
+            if (args.limit) options.limit = args.limit;
+            const data = await onchainos.getTransactionHistory(args.address, options);
+            const lang = context?.lang || 'en';
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+                return lang === 'vi' ? '📭 Không tìm thấy lịch sử giao dịch.' : '📭 No transaction history found.';
+            }
+            const items = Array.isArray(data) ? data : [data];
+            let card = '📜 <b>Transaction History</b>\n━━━━━━━━━━━━━━━━━━\n\n';
+            items.slice(0, 15).forEach((tx, i) => {
+                const hash = tx.txHash || tx.txhash || '?';
+                const method = tx.methodLabel || tx.method || tx.txType || 'Transfer';
+                const from = tx.from || '?';
+                const to = tx.to || '?';
+                const value = tx.amount || tx.value || '0';
+                const time = tx.transactionTime ? new Date(Number(tx.transactionTime)).toLocaleString('en-US', { hour12: false }) : '';
+                card += `${i + 1}. <b>${method}</b>\n`;
+                card += `   📤 ${from.slice(0, 8)}... → 📥 ${to.slice(0, 8)}...\n`;
+                if (Number(value) > 0) card += `   💰 ${Number(value).toLocaleString('en-US', { maximumFractionDigits: 6 })}\n`;
+                card += `   🔗 <code>${hash.slice(0, 12)}...</code>`;
+                if (time) card += ` | 🕐 ${time}`;
+                card += '\n\n';
+            });
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_tx_detail(args, context) {
+        try {
+            const data = await onchainos.getTransactionDetail(args.chainIndex, args.txHash);
+            const lang = context?.lang || 'en';
+            if (!data) return lang === 'vi' ? '📭 Không tìm thấy giao dịch.' : '📭 Transaction not found.';
+            const d = Array.isArray(data) ? data[0] : data;
+            const hash = d.txHash || d.txhash || args.txHash;
+            const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana' };
+            let card = '🔍 <b>Transaction Detail</b>\n━━━━━━━━━━━━━━━━━━\n\n';
+            card += `⛓ Chain: ${chainNames[args.chainIndex] || 'Chain #' + args.chainIndex}\n`;
+            card += `🔗 Hash: <code>${hash}</code>\n`;
+            if (d.from) card += `📤 From: <code>${d.from}</code>\n`;
+            if (d.to) card += `📥 To: <code>${d.to}</code>\n`;
+            if (d.amount || d.value) card += `💰 Value: ${d.amount || d.value}\n`;
+            if (d.gasUsed) card += `⛽ Gas Used: ${d.gasUsed}\n`;
+            if (d.gasPrice) card += `⛽ Gas Price: ${d.gasPrice} Gwei\n`;
+            if (d.txFee) card += `💸 Fee: ${d.txFee}\n`;
+            if (d.state !== undefined) card += `✅ Status: ${d.state === '1' || d.state === 'success' ? '✅ Success' : '❌ Failed'}\n`;
+            if (d.methodLabel) card += `📋 Method: ${d.methodLabel}\n`;
+            if (d.tokenTransferDetails && d.tokenTransferDetails.length > 0) {
+                card += '\n📦 Token Transfers:\n';
+                d.tokenTransferDetails.slice(0, 5).forEach(t => {
+                    card += `  • ${Number(t.amount || 0).toLocaleString('en-US', { maximumFractionDigits: 4 })} ${t.symbol || '?'}\n`;
+                });
+            }
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════
+    // Token Advanced Audit Tools
+    // ═══════════════════════════════════════════════════════
+
+    async get_token_audit(args, context) {
+        try {
+            let chainIndex = args.chainIndex;
+            let tokenAddress = args.tokenContractAddress;
+            if (tokenAddress && !tokenAddress.startsWith('0x') && tokenAddress.length < 20) {
+                const resolved = await autoResolveToken(tokenAddress, chainIndex);
+                if (resolved.error) return resolved.error;
+                chainIndex = resolved.chainIndex;
+                tokenAddress = resolved.tokenAddress;
+            }
+            const data = await onchainos.getTokenAdvancedInfo(chainIndex, tokenAddress);
+            const lang = context?.lang || 'en';
+            if (!data) return lang === 'vi' ? '📭 Không tìm thấy dữ liệu audit.' : '📭 Audit data not found.';
+            const d = Array.isArray(data) ? data[0] : data;
+            const riskLevel = d.riskLevel || d.risk || 'UNKNOWN';
+            const riskIcon = riskLevel === 'HIGH' ? '🔴' : riskLevel === 'MEDIUM' ? '🟡' : riskLevel === 'LOW' ? '🟢' : '⚪';
+            let card = `🔒 <b>Token Audit Report</b>\n━━━━━━━━━━━━━━━━━━\n\n`;
+            card += `${riskIcon} Risk Level: <b>${riskLevel}</b>\n\n`;
+            if (d.isHoneypot !== undefined) card += `🍯 Honeypot: <b>${d.isHoneypot ? '⚠️ YES' : '✅ NO'}</b>\n`;
+            if (d.lpBurnPercent !== undefined) card += `🔥 LP Burned: <b>${(Number(d.lpBurnPercent) * 100).toFixed(1)}%</b>\n`;
+            if (d.devHoldingPercent !== undefined) card += `👨‍💻 Dev Holding: <b>${(Number(d.devHoldingPercent) * 100).toFixed(1)}%</b>\n`;
+            if (d.bundlePercent !== undefined) card += `📦 Bundle: <b>${(Number(d.bundlePercent) * 100).toFixed(1)}%</b>\n`;
+            if (d.sniperPercent !== undefined) card += `🎯 Sniper: <b>${(Number(d.sniperPercent) * 100).toFixed(1)}%</b>\n`;
+            if (d.devSold !== undefined) card += `💸 Dev Sold: <b>${d.devSold ? '⚠️ YES' : '✅ NO'}</b>\n`;
+            if (d.tags && Array.isArray(d.tags) && d.tags.length > 0) {
+                card += `\n🏷️ Tags: ${d.tags.join(', ')}\n`;
+            }
+            if (d.rugPullHistory && d.rugPullHistory > 0) {
+                card += `\n🚨 <b>DEV RUG PULL HISTORY: ${d.rugPullHistory} times!</b>\n`;
+            }
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_token_liquidity_pools(args, context) {
+        try {
+            let chainIndex = args.chainIndex;
+            let tokenAddress = args.tokenContractAddress;
+            if (tokenAddress && !tokenAddress.startsWith('0x') && tokenAddress.length < 20) {
+                const resolved = await autoResolveToken(tokenAddress, chainIndex);
+                if (resolved.error) return resolved.error;
+                chainIndex = resolved.chainIndex;
+                tokenAddress = resolved.tokenAddress;
+            }
+            const data = await onchainos.getTokenLiquidityPool(chainIndex, tokenAddress);
+            const lang = context?.lang || 'en';
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+                return lang === 'vi' ? '📭 Không tìm thấy liquidity pool.' : '📭 No liquidity pools found.';
+            }
+            const pools = Array.isArray(data) ? data : [data];
+            let card = '💧 <b>Top Liquidity Pools</b>\n━━━━━━━━━━━━━━━━━━\n\n';
+            pools.slice(0, 5).forEach((pool, i) => {
+                const dex = pool.dexName || pool.protocolName || 'DEX';
+                const tvl = Number(pool.liquidityUsd || pool.tvl || 0);
+                const tvlStr = tvl > 1e6 ? '$' + (tvl / 1e6).toFixed(2) + 'M' : '$' + tvl.toFixed(0);
+                const fee = pool.feeRate ? (Number(pool.feeRate) * 100).toFixed(2) + '%' : 'N/A';
+                const pair = pool.pairName || pool.tokenPair || '';
+                card += `${i + 1}. <b>${dex}</b>${pair ? ' (' + pair + ')' : ''}\n`;
+                card += `   💰 TVL: ${tvlStr} | 💸 Fee: ${fee}\n\n`;
+            });
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════
+    // Smart Trade Activity
+    // ═══════════════════════════════════════════════════════
+
+    async get_smart_trades(args, context) {
+        try {
+            let chainIndex = args.chainIndex;
+            let tokenAddress = args.tokenContractAddress;
+            if (tokenAddress && !tokenAddress.startsWith('0x') && tokenAddress.length < 20) {
+                const resolved = await autoResolveToken(tokenAddress, chainIndex);
+                if (resolved.error) return resolved.error;
+                chainIndex = resolved.chainIndex;
+                tokenAddress = resolved.tokenAddress;
+            }
+            const options = { limit: args.limit || '50' };
+            if (args.tagFilter) options.tagFilter = args.tagFilter;
+            const data = await onchainos.getMarketTrades(chainIndex, tokenAddress, options);
+            const lang = context?.lang || 'en';
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+                return lang === 'vi' ? '📭 Không tìm thấy giao dịch smart money.' : '📭 No smart trades found.';
+            }
+            const tagLabels = { '1': '👑 KOL', '2': '🛠️ Dev', '3': '🧠 Smart Money', '4': '🐋 Whale', '5': '🆕 New Wallet', '6': '⚠️ Suspicious', '7': '🎯 Sniper', '8': '🎣 Phishing', '9': '📦 Bundle' };
+            const filterLabel = args.tagFilter ? tagLabels[args.tagFilter] || args.tagFilter : 'All';
+            let card = `🔍 <b>Smart Trade Activity</b> (${filterLabel})\n━━━━━━━━━━━━━━━━━━\n\n`;
+            const items = Array.isArray(data) ? data : [data];
+            items.slice(0, 15).forEach((t, i) => {
+                const type = t.type === 'buy' ? '🟢 BUY' : '🔴 SELL';
+                const vol = Number(t.volume || t.tradeAmount || 0);
+                const addr = t.traderAddress || t.walletAddress || '?';
+                const tag = t.tag ? (tagLabels[t.tag] || t.tag) : '';
+                const time = t.time ? new Date(Number(t.time)).toLocaleString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '';
+                card += `${i + 1}. ${type} $${vol.toFixed(2)} ${tag}\n`;
+                card += `   👤 <code>${addr.slice(0, 8)}...</code>${time ? ' | 🕐 ' + time : ''}\n\n`;
+            });
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
 };

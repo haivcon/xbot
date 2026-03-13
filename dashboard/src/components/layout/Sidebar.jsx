@@ -31,6 +31,8 @@ import {
     Gamepad2,
     Brain,
     CalendarCheck,
+    Zap,
+    Compass,
 } from 'lucide-react';
 import useThemeStore from '@/stores/themeStore';
 
@@ -118,6 +120,8 @@ export default function Sidebar({ open, onClose }) {
         { to: '/trading', icon: BarChart3, label: t('dashboard.sidebar.trading') },
         { to: '/okx-trading', icon: BarChart3, label: t('dashboard.sidebar.okxTrading') || 'OKX Trading' },
         { to: '/token-lookup', icon: Search, label: t('dashboard.sidebar.tokenLookup') || 'Token Lookup' },
+        { to: '/meme-scanner', icon: Zap, label: 'Meme Scanner' },
+        { to: '/discovery', icon: Compass, label: 'Discovery' },
         { to: '/leaderboard', icon: Trophy, label: t('dashboard.sidebar.leaderboard') },
         { to: '/games', icon: Gamepad2, label: t('dashboard.sidebar.games') || 'Mini Games' },
         { to: '/ai-memory', icon: Brain, label: t('dashboard.sidebar.aiMemory') || 'AI Memory' },

@@ -644,6 +644,86 @@ module.exports.ONCHAIN_TOOLS = [
                     required: ['chainIndex', 'tokenContractAddress']
                 }
             }
+        ]    },
+    {
+        functionDeclarations: [
+            // ── Meme Pump Scanner ──
+            {
+                name: 'get_meme_list',
+                description: 'Get list of trending Meme/Pump tokens from PumpFun, Moonshot, SunPump. Vietnamese: "meme coin mới", "token pump", "scan meme". Use to discover new meme tokens.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        chainIndex: { type: 'string', description: '"501" for Solana (PumpFun), "728126428" for Tron (SunPump). Default "501"' },
+                        stage: { type: 'string', description: '"NEW", "MIGRATING", or "MIGRATED". Default "MIGRATED"' },
+                        sortBy: { type: 'string', description: '"progress", "createdTime", "marketCap", "volume24h". Default "createdTime"' },
+                        minMarketCap: { type: 'string', description: 'Min market cap USD' },
+                        maxMarketCap: { type: 'string', description: 'Max market cap USD' },
+                        minVolume24h: { type: 'string', description: 'Min 24h volume USD' },
+                        minHolders: { type: 'string', description: 'Min holders count' },
+                        limit: { type: 'string', description: 'Results (default 20, max 50)' }
+                    }
+                }
+            },
+            {
+                name: 'get_meme_detail',
+                description: 'Get detailed meme token info: creator, mcap, holders, socials, progress, risk. Vietnamese: "chi tiết meme", "thông tin pump token".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            },
+            {
+                name: 'get_meme_dev_info',
+                description: 'Check meme dev reputation: total created, rug-pulled, migrated. Vietnamese: "kiểm tra dev", "dev rug bao nhiêu".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            },
+            {
+                name: 'get_similar_memes',
+                description: 'Find similar meme tokens. Vietnamese: "tìm token tương tự".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            },
+            // ── Portfolio PnL ──
+            {
+                name: 'get_portfolio_overview',
+                description: 'On-chain portfolio overview for any wallet: PnL, win rate, stats. Vietnamese: "phân tích ví", "win rate", "portfolio PnL". Works for ANY address.',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, walletAddress: { type: 'string' }, timeFrame: { type: 'string', description: '"1"=1D, "2"=3D, "3"=7D, "4"=1M, "5"=3M' } }, required: ['chainIndex', 'walletAddress'] }
+            },
+            {
+                name: 'get_portfolio_pnl',
+                description: 'Recent PnL list per token for any wallet. Vietnamese: "lãi lỗ từng token".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, walletAddress: { type: 'string' }, tokenContractAddress: { type: 'string' }, limit: { type: 'string' } }, required: ['chainIndex', 'walletAddress'] }
+            },
+            {
+                name: 'get_portfolio_dex_history',
+                description: 'DEX transaction history with PnL per trade. Vietnamese: "lịch sử DEX", "đã mua bán gì".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, walletAddress: { type: 'string' }, type: { type: 'string', description: '"1"=Buy, "2"=Sell, "3"=Transfer In, "4"=Transfer Out' }, limit: { type: 'string' } }, required: ['chainIndex', 'walletAddress'] }
+            },
+            // ── Transaction History ──
+            {
+                name: 'get_tx_history',
+                description: 'On-chain tx history for any address. Vietnamese: "lịch sử giao dịch on-chain", "tx history".',
+                parameters: { type: 'object', properties: { address: { type: 'string' }, chains: { type: 'string', description: 'Comma-separated chain IDs' }, limit: { type: 'string', description: 'Default 20' } }, required: ['address', 'chains'] }
+            },
+            {
+                name: 'get_tx_detail',
+                description: 'Transaction details by hash. Vietnamese: "chi tiết giao dịch", "xem tx hash".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, txHash: { type: 'string' } }, required: ['chainIndex', 'txHash'] }
+            },
+            // ── Token Advanced Audit ──
+            {
+                name: 'get_token_audit',
+                description: 'Advanced audit: honeypot, LP burn %, dev/bundle/sniper holding %, risk level, rug history. Vietnamese: "audit token", "honeypot check". More detailed than get_token_security.',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            },
+            {
+                name: 'get_token_liquidity_pools',
+                description: 'Top 5 liquidity pools for a token: TVL, fee rate, pool creator. Vietnamese: "thanh khoản token", "pool token".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            },
+            // ── Smart Trade Activity ──
+            {
+                name: 'get_smart_trades',
+                description: 'Trades filtered by wallet type: KOL, Smart Money, Whale, Sniper. Vietnamese: "ai đang mua", "smart money có mua không". Unlike get_recent_trades, filters by reputation.',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' }, tagFilter: { type: 'string', description: '"1"=KOL, "2"=Dev, "3"=Smart Money, "4"=Whale, "5"=New, "6"=Suspicious, "7"=Sniper, "8"=Phishing, "9"=Bundle' }, limit: { type: 'string', description: 'Max 500. Default 50' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            }
         ]
     }
 ];
