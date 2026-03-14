@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
     Dice1, Dice2, Dice3, Dice4, Dice5, Dice6,
     Hand, Sparkles, HelpCircle, TrendingUp, TrendingDown,
-    Shuffle, Cookie, Gamepad2, RotateCcw, Trophy,
+    Shuffle, Cookie, Gamepad2, RotateCcw, Trophy, ArrowLeft,
 } from 'lucide-react';
 
 const GAME_LIST = [
@@ -163,6 +163,11 @@ export default function MiniGamesPage() {
             {/* Active Game Area */}
             {activeGame && (
                 <div className="glass-card p-6 space-y-4">
+                    {/* Back to game list */}
+                    <button onClick={() => { setActiveGame(null); setResult(null); }}
+                        className="flex items-center gap-1.5 text-xs text-surface-200/40 hover:text-brand-400 transition-colors mb-2">
+                        <ArrowLeft size={14} /> {t('dashboard.mySpace.back')}
+                    </button>
                     {/* Dice */}
                     {activeGame === 'dice' && (
                         <div className="text-center space-y-4">

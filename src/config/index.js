@@ -301,7 +301,7 @@ const OPENAI_API_KEYS = (() => {
 
     return Array.from(new Set(keys));
 })();
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
 const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || 'dall-e-3';
 const OPENAI_IMAGE_EDIT_MODEL = process.env.OPENAI_IMAGE_EDIT_MODEL || 'dall-e-2';
 const OPENAI_IMAGE_VARIATION_MODEL = process.env.OPENAI_IMAGE_VARIATION_MODEL || 'dall-e-2';

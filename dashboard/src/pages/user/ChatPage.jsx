@@ -346,8 +346,36 @@ const FALLBACK_MODELS = [
 ];
 
 const PERSONA_OPTIONS = [
-    { value: 'default', label: '佳佳 OKX', icon: '🤖', desc: 'Default AI personality' },
-    { value: 'xwizard', label: 'Xwizard', icon: '🧙‍♂️', desc: 'Crypto wizard personality' },
+    { value: 'default', icon: '🔰', label: 'Default', desc: 'Friendly & helpful AI assistant' },
+    { value: 'friendly', icon: '😊', label: 'Friendly', desc: 'Cheerful, energetic, lots of emoji' },
+    { value: 'formal', icon: '🎩', label: 'Professional', desc: 'Polite, precise, professional' },
+    { value: 'anime', icon: '🌸', label: 'Anime', desc: 'Kawaii anime-style character' },
+    { value: 'mentor', icon: '📚', label: 'Mentor', desc: 'Patient teacher, step-by-step' },
+    { value: 'funny', icon: '🤣', label: 'Comedian', desc: 'Witty jokes & humor' },
+    { value: 'crypto', icon: '🪙', label: 'Crypto Expert', desc: 'DeFi, blockchain specialist' },
+    { value: 'gamer', icon: '🎮', label: 'Gamer', desc: 'Excited gamer, game slang' },
+    { value: 'rebel', icon: '⚡', label: 'Rebel', desc: 'Bold, direct, sassy' },
+    { value: 'mafia', icon: '🕶️', label: 'Mafia', desc: 'Calm mafia boss, decisive' },
+    { value: 'cute', icon: '🍬', label: 'Cute', desc: 'Sweet, gentle, charming' },
+    { value: 'little_girl', icon: '🧒', label: 'Little girl', desc: 'Innocent, adorable, playful' },
+    { value: 'little_brother', icon: '👦', label: 'Little brother', desc: 'Cheeky, witty, youthful' },
+    { value: 'old_uncle', icon: '🧔‍♂️', label: 'Old uncle', desc: 'Humorous, life experience' },
+    { value: 'old_grandma', icon: '👵', label: 'Old grandma', desc: 'Caring, storytelling' },
+    { value: 'deity', icon: '✨', label: 'Deity', desc: 'Omniscient, divine calm' },
+    { value: 'king', icon: '👑', label: 'King', desc: 'Formal, noble, dignified' },
+    { value: 'banana_cat', icon: '🍌', label: 'Banana Cat', desc: 'Cat in banana costume' },
+    { value: 'pretty_sister', icon: '💖', label: 'Pretty sister', desc: 'Graceful, elegant' },
+    { value: 'seductive_girl', icon: '🔥', label: 'Seductive girl', desc: 'Confident, alluring' },
+    { value: 'gentleman', icon: '🤵', label: 'Gentleman', desc: 'Polite, considerate' },
+    { value: 'star_xu', icon: '⭐️', label: 'Star Xu', desc: 'OKX founder, visionary' },
+    { value: 'niuma', icon: '🐮', label: 'NIUMA', desc: 'Steady, persistent, humble' },
+    { value: 'xcat', icon: '🐈️', label: 'XCAT', desc: 'Free-spirited, curious cat' },
+    { value: 'xdog', icon: '🐕️', label: 'XDOG', desc: 'Proud, loyal, brave dog' },
+    { value: 'xwawa', icon: '🐸', label: 'XWAWA', desc: 'Carefree, cheerful frog' },
+    { value: 'banmao', icon: '🐱', label: 'Banmao', desc: 'Mischievous cat in banana suit' },
+    { value: 'mia', icon: '🍚', label: 'Mia', desc: 'Tiny grain of rice, big confidence' },
+    { value: 'jiajia', icon: '💎', label: '佳佳 OKX', desc: 'Cute but sharp-minded mascot' },
+    { value: 'xwizard', icon: '🧙', label: 'Xwizard', desc: 'Magical wizard, mysterious' },
 ];
 
 const PROVIDER_OPTIONS = [
@@ -363,11 +391,49 @@ const THINKING_OPTIONS = [
     { value: 'high', label: 'High', icon: '🚀', desc: 'Deep reasoning, slower' },
 ];
 
+// Per-provider reasoning support config
+const REASONING_BY_PROVIDER = {
+    google: { supported: true, levels: ['none', 'low', 'medium', 'high'] },
+    openai: {
+        supported: true,
+        byModel: {
+            'gpt-5.4': ['none', 'low', 'medium', 'high'],
+            'gpt-5-mini': ['medium'],
+            'gpt-4o': [],
+            'gpt-4o-mini': [],
+        },
+        defaultLevels: [],
+    },
+    groq: { supported: false, levels: [] },
+};
+
 const SETTINGS_TABS = [
-    { id: 'model', icon: '🎯', label: 'Model' },
-    { id: 'persona', icon: '🎭', label: 'Persona' },
-    { id: 'keys', icon: '🔑', label: 'API Keys' },
+    { id: 'model', icon: '🎯', labelKey: 'model' },
+    { id: 'persona', icon: '🎭', labelKey: 'persona' },
+    { id: 'keys', icon: '🔑', labelKey: 'apiKeys' },
 ];
+
+// Model options per provider (fallback when backend doesn't return provider-specific models)
+const MODEL_OPTIONS_BY_PROVIDER = {
+    google: [
+        { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', desc: 'Best reasoning & complex tasks', icon: '🟠' },
+        { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Powerful multimodal & agentic', icon: '🚀' },
+        { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Lite', desc: 'Fastest, lowest cost', icon: '⚡' },
+    ],
+    openai: [
+        { id: 'gpt-5.4', label: 'GPT-5.4', desc: 'Flagship, best intelligence', icon: '🧠' },
+        { id: 'gpt-5-mini', label: 'GPT-5 Mini', desc: 'Fast & affordable', icon: '⚡' },
+        { id: 'gpt-4o', label: 'GPT-4o', desc: 'Reliable multimodal', icon: '🌟' },
+        { id: 'gpt-4o-mini', label: 'GPT-4o Mini', desc: 'Budget-friendly', icon: '💡' },
+    ],
+    groq: [
+        { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', desc: 'OpenAI flagship, reasoning', icon: '🧠' },
+        { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', desc: 'Fastest, 1000 t/s', icon: '🚀' },
+        { id: 'llama-3.3-70b-versatile', label: 'LLaMA 3.3 70B', desc: 'Best quality, versatile', icon: '🦙' },
+        { id: 'llama-3.1-8b-instant', label: 'LLaMA 3.1 8B', desc: 'Ultra-fast, 560 t/s', icon: '⚡' },
+        { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'LLaMA 4 Scout', desc: 'Vision-capable', icon: '🔭' },
+    ],
+};
 
 /* ─── Main ChatPage ─── */
 export default function ChatPage() {
@@ -376,7 +442,9 @@ export default function ChatPage() {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
-    const [conversationId, setConversationId] = useState(null);
+    const [conversationId, setConversationId] = useState(() => {
+        try { return sessionStorage.getItem('chat_active_conv') || null; } catch { return null; }
+    });
     const [conversations, setConversations] = useState([]);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showScroll, setShowScroll] = useState(false);
@@ -469,6 +537,7 @@ export default function ChatPage() {
             if (p.persona) setSelectedPersona(p.persona);
             if (p.provider) setSelectedProvider(p.provider);
             if (p.thinkingLevel) setSelectedThinking(p.thinkingLevel);
+            if (p.model) setSelectedModel(p.model);
         }).catch(() => {});
     }, []);
 
@@ -477,38 +546,62 @@ export default function ChatPage() {
         try { await api.updatePreferences(newPrefs); } catch {}
     }, [selectedPersona, selectedProvider, selectedThinking]);
 
-    // ── API key management helpers ──
-    const loadApiKeys = useCallback(async () => {
+    // ── API key management — stored locally on device only ──
+    const LOCAL_KEYS_STORAGE = 'xbot_ai_api_keys';
+    const loadApiKeys = useCallback(() => {
         try {
-            const data = await api.request('/ai/keys');
-            setUserApiKeys(data?.keys || []);
+            const stored = JSON.parse(localStorage.getItem(LOCAL_KEYS_STORAGE) || '[]');
+            setUserApiKeys(stored);
         } catch { setUserApiKeys([]); }
     }, []);
+    useEffect(() => { loadApiKeys(); }, [loadApiKeys]);
 
     const addApiKey = useCallback(async () => {
         if (!apiKeyInput.trim()) return;
         setApiKeyLoading(true);
         setApiKeyError('');
+        const key = apiKeyInput.trim();
+        const prov = apiKeyProvider;
+        // Client-side format validation
+        if (prov === 'google' && !key.startsWith('AIza') && key.length < 30) {
+            setApiKeyError('Google key should start with AIzaSy...'); setApiKeyLoading(false); return;
+        }
+        if (prov === 'openai' && !key.startsWith('sk-') && key.length < 20) {
+            setApiKeyError('OpenAI key should start with sk-...'); setApiKeyLoading(false); return;
+        }
         try {
-            await api.request('/ai/keys', { method: 'POST', body: JSON.stringify({ apiKey: apiKeyInput.trim(), provider: apiKeyProvider }) });
+            const existing = JSON.parse(localStorage.getItem(LOCAL_KEYS_STORAGE) || '[]');
+            // Prevent duplicates
+            if (existing.some(k => k.apiKey === key)) {
+                setApiKeyError('Key already added'); setApiKeyLoading(false); return;
+            }
+            const newKey = {
+                id: `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                provider: prov,
+                apiKey: key,
+                maskedKey: `${key.slice(0, 6)}...${key.slice(-4)}`,
+                addedAt: Date.now(),
+            };
+            const updated = [...existing, newKey];
+            localStorage.setItem(LOCAL_KEYS_STORAGE, JSON.stringify(updated));
             setApiKeyInput('');
-            await loadApiKeys();
-            await loadModels();
+            loadApiKeys();
             hapticNotification('success');
         } catch (err) {
-            setApiKeyError(err.message || 'Failed to add key');
+            setApiKeyError(err.message || 'Failed to save key');
             hapticNotification('error');
         } finally { setApiKeyLoading(false); }
-    }, [apiKeyInput, apiKeyProvider, loadApiKeys, loadModels]);
+    }, [apiKeyInput, apiKeyProvider, loadApiKeys]);
 
-    const deleteApiKey = useCallback(async (keyId) => {
+    const deleteApiKey = useCallback((keyId) => {
         try {
-            await api.request('/ai/keys', { method: 'DELETE', body: JSON.stringify({ keyId }) });
-            await loadApiKeys();
-            await loadModels();
+            const existing = JSON.parse(localStorage.getItem(LOCAL_KEYS_STORAGE) || '[]');
+            const updated = existing.filter(k => k.id !== keyId);
+            localStorage.setItem(LOCAL_KEYS_STORAGE, JSON.stringify(updated));
+            loadApiKeys();
             hapticNotification('success');
         } catch { hapticNotification('error'); }
-    }, [loadApiKeys, loadModels]);
+    }, [loadApiKeys]);
     useEffect(() => { inputRef.current?.focus(); }, []);
 
     // Keyboard shortcuts
@@ -542,6 +635,14 @@ export default function ChatPage() {
 
     useEffect(() => { loadConversations(); }, [loadConversations]);
 
+    // ── Persist conversationId to sessionStorage ──
+    useEffect(() => {
+        try {
+            if (conversationId) sessionStorage.setItem('chat_active_conv', conversationId);
+            else sessionStorage.removeItem('chat_active_conv');
+        } catch {}
+    }, [conversationId]);
+
     const loadConversation = async (convId) => {
         setLoadingConv(true);
         try {
@@ -556,10 +657,18 @@ export default function ChatPage() {
         }
     };
 
+    // ── Auto-load last conversation on mount (restore after tab switch) ──
+    useEffect(() => {
+        if (conversationId && messages.length === 0 && !loading) {
+            loadConversation(conversationId);
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     const startNewChat = () => {
         abortRef.current?.abort();
         setMessages([]);
         setConversationId(null);
+        try { sessionStorage.removeItem('chat_active_conv'); } catch {}
         setSidebarOpen(false);
         setPinnedMessages([]);
         setFollowUpSuggestions([]);
@@ -603,7 +712,7 @@ export default function ChatPage() {
                 setMessages(prev => [...prev, { role: 'compare', content: null, ts: Date.now() }]);
                 const models = availableModels?.length >= 2
                     ? availableModels
-                    : ['gemini-3-flash-preview', 'gemini-3.1-pro-preview'];
+                    : (MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || MODEL_OPTIONS_BY_PROVIDER.google).map(m => m.id);
                 const modelA = selectedModel || models[0];
                 const modelB = models.find(m => m !== modelA) || models[1] || models[0];
                 const result = await api.compareChat(msg, modelA, modelB);
@@ -647,6 +756,13 @@ export default function ChatPage() {
                 signal: controller.signal,
                 image: currentImage,
                 model: selectedModel,
+                userApiKey: (() => {
+                    try {
+                        const keys = JSON.parse(localStorage.getItem('xbot_ai_api_keys') || '[]');
+                        const providerKey = keys.find(k => k.provider === selectedProvider);
+                        return providerKey?.apiKey || undefined;
+                    } catch { return undefined; }
+                })(),
                 onTextDelta: (text) => {
                     fullText += text;
                     setMessages(prev => {
@@ -1677,7 +1793,7 @@ export default function ChatPage() {
                                 <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center">
                                     <Settings size={14} className="text-white" />
                                 </div>
-                                <h3 className="text-sm font-bold text-surface-100">AI Settings</h3>
+                                <h3 className="text-sm font-bold text-surface-100">{t('dashboard.chatPage.aiSettings', 'AI Settings')}</h3>
                             </div>
                             <button onClick={() => setShowSettingsPanel(false)} className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/40 transition-colors">
                                 <X size={16} />
@@ -1687,13 +1803,13 @@ export default function ChatPage() {
                         {/* Tabs */}
                         <div className="flex border-b border-white/5 px-4 gap-1 flex-shrink-0">
                             {SETTINGS_TABS.map(tab => (
-                                <button key={tab.id} onClick={() => setSettingsTab(tab.id)}
+                                <button key={tab.id} onClick={() => { setSettingsTab(tab.id); if (tab.id === 'keys') setApiKeyProvider(selectedProvider); }}
                                     className={`px-3 py-2.5 text-xs font-medium transition-all relative ${
                                         settingsTab === tab.id
                                             ? 'text-brand-400'
                                             : 'text-surface-200/50 hover:text-surface-200/80'
                                     }`}>
-                                    <span>{tab.icon} {tab.label}</span>
+                                    <span>{tab.icon} {t(`dashboard.chatPage.settingsTab_${tab.labelKey}`, tab.labelKey)}</span>
                                     {settingsTab === tab.id && <div className="absolute bottom-0 left-1 right-1 h-0.5 bg-brand-400 rounded-full" />}
                                 </button>
                             ))}
@@ -1706,10 +1822,17 @@ export default function ChatPage() {
                                 <>
                                     {/* Provider */}
                                     <div>
-                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">Provider</p>
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">{t('dashboard.chatPage.provider', 'Provider')}</p>
                                         <div className="space-y-1">
                                             {PROVIDER_OPTIONS.map(p => (
-                                                <button key={p.value} onClick={() => { setSelectedProvider(p.value); saveAiPrefs({ provider: p.value }); }}
+                                                <button key={p.value} onClick={() => {
+                                                    setSelectedProvider(p.value);
+                                                    // Auto-select first model of this provider
+                                                    const providerModels = MODEL_OPTIONS_BY_PROVIDER[p.value] || [];
+                                                    const firstModel = providerModels.length > 0 ? providerModels[0].id : selectedModel;
+                                                    if (providerModels.length > 0) setSelectedModel(firstModel);
+                                                    saveAiPrefs({ provider: p.value, model: firstModel });
+                                                }}
                                                     className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
                                                         selectedProvider === p.value
                                                             ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
@@ -1725,12 +1848,12 @@ export default function ChatPage() {
                                         </div>
                                     </div>
 
-                                    {/* Model */}
+                                    {/* Model — filtered by provider */}
                                     <div>
-                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">Model</p>
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">{t('dashboard.chatPage.modelLabel', 'Model')}</p>
                                         <div className="space-y-1">
-                                            {modelOptions.map(m => (
-                                                <button key={m.id} onClick={() => { setSelectedModel(m.id); setShowSettingsPanel(false); }}
+                                            {(MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || modelOptions).map(m => (
+                                                <button key={m.id} onClick={() => { setSelectedModel(m.id); saveAiPrefs({ model: m.id }); }}
                                                     className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
                                                         selectedModel === m.id
                                                             ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
@@ -1746,23 +1869,38 @@ export default function ChatPage() {
                                         </div>
                                     </div>
 
-                                    {/* Thinking Level */}
-                                    <div>
-                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">Thinking Level</p>
-                                        <div className="grid grid-cols-2 gap-1">
-                                            {THINKING_OPTIONS.map(th => (
-                                                <button key={th.value} onClick={() => { setSelectedThinking(th.value); saveAiPrefs({ thinkingLevel: th.value }); }}
-                                                    className={`px-3 py-2 rounded-xl text-xs transition-all text-left ${
-                                                        selectedThinking === th.value
-                                                            ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
-                                                            : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
-                                                    }`}>
-                                                    <span className="font-medium">{th.icon} {th.label}</span>
-                                                    <span className="block text-[9px] text-surface-200/35 mt-0.5">{th.desc}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                    {/* Thinking Level — filtered by provider & model */}
+                                    {(() => {
+                                        const providerCfg = REASONING_BY_PROVIDER[selectedProvider] || { supported: false };
+                                        if (!providerCfg.supported) return null;
+                                        let allowedLevels;
+                                        if (providerCfg.byModel) {
+                                            allowedLevels = providerCfg.byModel[selectedModel] ?? providerCfg.defaultLevels ?? [];
+                                        } else {
+                                            allowedLevels = providerCfg.levels || [];
+                                        }
+                                        if (!allowedLevels.length) return null;
+                                        const filtered = THINKING_OPTIONS.filter(th => allowedLevels.includes(th.value));
+                                        if (!filtered.length) return null;
+                                        return (
+                                            <div>
+                                                <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">{t('dashboard.chatPage.thinkingLevel', 'Thinking Level')}</p>
+                                                <div className="grid grid-cols-2 gap-1">
+                                                    {filtered.map(th => (
+                                                        <button key={th.value} onClick={() => { setSelectedThinking(th.value); saveAiPrefs({ thinkingLevel: th.value }); }}
+                                                            className={`px-3 py-2 rounded-xl text-xs transition-all text-left ${
+                                                                selectedThinking === th.value
+                                                                    ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                                                                    : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
+                                                            }`}>
+                                                            <span className="font-medium">{th.icon} {t(`dashboard.chatPage.thinking_${th.value}`, th.label)}</span>
+                                                            <span className="block text-[9px] text-surface-200/35 mt-0.5">{t(`dashboard.chatPage.thinkingDesc_${th.value}`, th.desc)}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </>
                             )}
 
@@ -1770,27 +1908,24 @@ export default function ChatPage() {
                             {settingsTab === 'persona' && (
                                 <>
                                     <div>
-                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">AI Personality</p>
-                                        <div className="space-y-1.5">
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">{t('dashboard.chatPage.aiPersonality', 'AI Personality')}</p>
+                                        <div className="grid grid-cols-2 gap-1.5 max-h-[50vh] overflow-y-auto custom-scrollbar pr-1">
                                             {PERSONA_OPTIONS.map(p => (
                                                 <button key={p.value} onClick={() => { setSelectedPersona(p.value); saveAiPrefs({ persona: p.value }); }}
-                                                    className={`w-full text-left px-4 py-3.5 rounded-xl transition-all flex items-center gap-3 ${
+                                                    className={`text-left px-3 py-2.5 rounded-xl transition-all ${
                                                         selectedPersona === p.value
                                                             ? 'bg-brand-500/10 border border-brand-500/20'
                                                             : 'hover:bg-white/5 border border-transparent'
                                                     }`}>
-                                                    <span className="text-2xl">{p.icon}</span>
-                                                    <div className="flex-1">
-                                                        <span className={`text-sm font-bold ${selectedPersona === p.value ? 'text-brand-400' : 'text-surface-100'}`}>{p.label}</span>
-                                                        <span className="block text-[10px] text-surface-200/40">{p.desc}</span>
-                                                    </div>
-                                                    {selectedPersona === p.value && <Check size={14} className="text-brand-400" />}
+                                                    <span className="text-lg">{p.icon}</span>
+                                                    <span className={`block text-[11px] font-bold mt-0.5 ${selectedPersona === p.value ? 'text-brand-400' : 'text-surface-100'}`}>{t(`dashboard.chatPage.persona_${p.value}`, p.label)}</span>
+                                                    <span className="block text-[9px] text-surface-200/40 leading-tight">{t(`dashboard.chatPage.personaDesc_${p.value}`, p.desc)}</span>
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
                                     <div className="bg-surface-800/40 border border-white/5 rounded-xl px-3 py-2.5">
-                                        <p className="text-[10px] text-surface-200/40 leading-relaxed">💡 Persona affects the AI's language style, personality, and response format. Changes apply to new messages only.</p>
+                                        <p className="text-[10px] text-surface-200/40 leading-relaxed">💡 {t('dashboard.chatPage.personaHint', 'Persona affects the AI\'s language style, personality, and response format. Changes apply to new messages only.')}</p>
                                     </div>
                                 </>
                             )}
@@ -1800,7 +1935,7 @@ export default function ChatPage() {
                                 <>
                                     {/* Provider selector for keys */}
                                     <div>
-                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">Provider</p>
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">{t('dashboard.chatPage.provider', 'Provider')}</p>
                                         <div className="flex gap-1">
                                             {PROVIDER_OPTIONS.map(p => (
                                                 <button key={p.value} onClick={() => setApiKeyProvider(p.value)}
@@ -1816,10 +1951,10 @@ export default function ChatPage() {
                                     </div>
 
                                     {/* Existing keys */}
-                                    {userApiKeys.length > 0 && (
+                                    {userApiKeys.filter(k => !apiKeyProvider || (k.provider || 'google') === apiKeyProvider).length > 0 && (
                                         <div className="space-y-2">
-                                            <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold">Your Keys</p>
-                                            {userApiKeys.map(k => (
+                                            <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold">{t('dashboard.chatPage.yourKeys', 'Your Keys')}</p>
+                                            {userApiKeys.filter(k => !apiKeyProvider || (k.provider || 'google') === apiKeyProvider).map(k => (
                                                 <div key={k.id} className="flex items-center justify-between bg-surface-800/60 rounded-xl px-3 py-2.5">
                                                     <div className="flex items-center gap-2 min-w-0">
                                                         <Key size={12} className="text-emerald-400 flex-shrink-0" />
@@ -1840,7 +1975,7 @@ export default function ChatPage() {
 
                                     {/* Add key form */}
                                     <div className="space-y-2">
-                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold">Add Key</p>
+                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold">{t('dashboard.chatPage.addKey', 'Add Key')}</p>
                                         <div className="flex gap-2">
                                             <input
                                                 type="password"
@@ -1857,7 +1992,7 @@ export default function ChatPage() {
                                                         : 'bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/25'
                                                 }`}>
                                                 {apiKeyLoading ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-                                                Add
+                                                {t('dashboard.chatPage.add', 'Add')}
                                             </button>
                                         </div>
                                         {apiKeyError && (
@@ -1869,12 +2004,13 @@ export default function ChatPage() {
 
                                     {/* Info */}
                                     <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl px-3 py-2.5 space-y-1.5">
-                                        <p className="text-[11px] text-amber-400/80 font-medium">How to get API keys:</p>
+                                        <p className="text-[11px] text-amber-400/80 font-medium">{t('dashboard.chatPage.howToGetKeys', 'How to get API keys:')}</p>
                                         <p className="text-[10px] text-surface-200/50 leading-relaxed">
                                             <strong className="text-surface-200/70">Google:</strong> <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-brand-400 hover:text-brand-300">aistudio.google.com</a><br/>
                                             <strong className="text-surface-200/70">OpenAI:</strong> <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" className="text-brand-400 hover:text-brand-300">platform.openai.com</a><br/>
                                             <strong className="text-surface-200/70">Groq:</strong> <a href="https://console.groq.com/keys" target="_blank" rel="noopener" className="text-brand-400 hover:text-brand-300">console.groq.com</a>
                                         </p>
+                                        <p className="text-[10px] text-emerald-400/60 flex items-center gap-1">🔒 {t('dashboard.chatPage.keysLocalOnly', 'Keys are stored locally on your device only — never sent to our server.')}</p>
                                     </div>
 
                                     {/* Status */}
@@ -1884,11 +2020,11 @@ export default function ChatPage() {
                                         'bg-surface-800/40 border border-white/5'
                                     }`}>
                                         {modelMeta.hasPersonalKey ? (
-                                            <><Key size={12} className="text-emerald-400" /><span className="text-[10px] text-emerald-400/80 font-medium">✓ Personal API key active — all models unlocked</span></>
+                                            <><Key size={12} className="text-emerald-400" /><span className="text-[10px] text-emerald-400/80 font-medium">✓ {t('dashboard.chatPage.personalKeyActive', 'Personal API key active — all models unlocked')}</span></>
                                         ) : modelMeta.isOwner ? (
-                                            <><Settings size={12} className="text-brand-400" /><span className="text-[10px] text-brand-400/80">Owner: all models unlocked via server key</span></>
+                                            <><Settings size={12} className="text-brand-400" /><span className="text-[10px] text-brand-400/80">{t('dashboard.chatPage.ownerKey', 'Owner: all models unlocked via server key')}</span></>
                                         ) : (
-                                            <><Key size={12} className="text-surface-200/30" /><span className="text-[10px] text-surface-200/40">No personal key — using server default</span></>
+                                            <><Key size={12} className="text-surface-200/30" /><span className="text-[10px] text-surface-200/40">{t('dashboard.chatPage.noPersonalKey', 'No personal key — using server default')}</span></>
                                         )}
                                     </div>
                                 </>

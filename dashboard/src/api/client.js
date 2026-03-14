@@ -164,6 +164,10 @@ class ApiClient {
         return this.get('/owner/overview');
     }
 
+    getUserOverview() {
+        return this.get('/user/overview');
+    }
+
     getRuntimeConfig() {
         return this.get('/owner/config/runtime');
     }
@@ -250,7 +254,7 @@ class ApiClient {
     }
 
     // SSE streaming chat
-    async streamChatMessage(message, conversationId, { onTextDelta, onToolStart, onToolResult, onDone, onError, image, model, signal } = {}) {
+    async streamChatMessage(message, conversationId, { onTextDelta, onToolStart, onToolResult, onDone, onError, image, model, userApiKey, signal } = {}) {
         const headers = {
             'Content-Type': 'application/json',
             ...useAuthStore.getState().getHeaders(),
@@ -258,6 +262,7 @@ class ApiClient {
         const body = { message, conversationId };
         if (image) body.image = image;
         if (model) body.model = model;
+        if (userApiKey) body.userApiKey = userApiKey;
 
         const res = await fetch(`${API_BASE}/ai/chat/stream`, {
             method: 'POST', headers, body: JSON.stringify(body), signal,

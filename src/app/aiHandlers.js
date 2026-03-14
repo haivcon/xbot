@@ -133,6 +133,7 @@ const {
   OPENAI_TTS_VOICE,
   OPENAI_TTS_FORMAT,
   OPENAI_AUDIO_MODEL,
+  OPENAI_MODEL_FAMILIES,
   AI_IMAGE_MAX_BYTES,
   AI_IMAGE_DOWNLOAD_TIMEOUT_MS,
   AI_KEY_PROBE_TIMEOUT_MS
@@ -2816,6 +2817,8 @@ function createAiHandlers(deps) {
     const body = (aiResponse || '').trim() || t(lang, 'ai_error');
     const noticePrefix = [];
     noticePrefix.push(escapeMarkdownV2(t(lang, 'ai_provider_active', { provider: providerMeta.label })));
+    const openAiModelFamily = OPENAI_MODEL_FAMILIES[OPENAI_MODEL] || null;
+    noticePrefix.push(escapeMarkdownV2('📌 Model: ' + (openAiModelFamily ? openAiModelFamily.label : OPENAI_MODEL)));
     if (limitNotice && keySource === 'server') {
       noticePrefix.push(escapeMarkdownV2(limitNotice));
     }
@@ -3549,6 +3552,8 @@ function createAiHandlers(deps) {
     const body = (aiResponse || '').trim() || t(lang, 'ai_error');
     const noticePrefix = [];
     noticePrefix.push(escapeMarkdownV2(t(lang, 'ai_provider_active', { provider: providerMeta.label })));
+    const openAiModelFamily = OPENAI_MODEL_FAMILIES[OPENAI_MODEL] || null;
+    noticePrefix.push(escapeMarkdownV2('📌 Model: ' + (openAiModelFamily ? openAiModelFamily.label : OPENAI_MODEL)));
     if (limitNotice && keySource === 'server') {
       noticePrefix.push(escapeMarkdownV2(limitNotice));
     }

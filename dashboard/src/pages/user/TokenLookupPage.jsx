@@ -6,7 +6,7 @@ import {
     Search, Loader2, ExternalLink, Shield, AlertTriangle, CheckCircle,
     Users, Droplets, TrendingUp, TrendingDown, Copy, Check, BarChart3,
     Coins, Activity, XCircle, Star, Bell, ShoppingCart, Clock,
-    ChevronDown, ChevronUp, Tag, Zap, ArrowLeftRight,
+    ChevronDown, ChevronUp, Tag, Zap, ArrowLeftRight, ArrowLeft,
 } from 'lucide-react';
 
 /* ═══════════════════════════════════════════
@@ -421,12 +421,10 @@ export default function TokenLookupPage() {
             {/* Token Detail */}
             {selectedToken && (
                 <div className="space-y-4">
-                    {searchResults.length > 0 && (
-                        <button onClick={() => { setSelectedToken(null); setTokenInfo(null); setHolders(null); setCandles(null); setTrades(null); }}
-                            className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
-                            ← Back to results
-                        </button>
-                    )}
+                    <button onClick={() => { setSelectedToken(null); setTokenInfo(null); setHolders(null); setCandles(null); setTrades(null); setSearchResults([]); }}
+                        className="flex items-center gap-1.5 text-xs text-surface-200/40 hover:text-brand-400 transition-colors">
+                        <ArrowLeft size={14} /> {t('dashboard.mySpace.back')}
+                    </button>
 
                     {loadingInfo ? (
                         <div className="glass-card p-8 flex items-center justify-center gap-3">

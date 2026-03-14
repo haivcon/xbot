@@ -19,7 +19,6 @@ const AnalyticsPage = lazy(() => import('@/pages/owner/AnalyticsPage'));
 const AlertsPage = lazy(() => import('@/pages/owner/AlertsPage'));
 const PostsPage = lazy(() => import('@/pages/owner/PostsPage'));
 const ConfigPage = lazy(() => import('@/pages/owner/ConfigPage'));
-const ProfilePage = lazy(() => import('@/pages/user/ProfilePage'));
 const SettingsPage = lazy(() => import('@/pages/user/SettingsPage'));
 const WalletsPage = lazy(() => import('@/pages/user/WalletsPage'));
 const TradingPage = lazy(() => import('@/pages/user/TradingPage'));
@@ -103,8 +102,9 @@ export default function App() {
                     {isOwnerView() ? (
                         <Route index element={<SuspenseWrapper><DashboardPage /></SuspenseWrapper>} />
                     ) : (
-                        <Route index element={<SuspenseWrapper><ProfilePage /></SuspenseWrapper>} />
+                        <Route index element={<SuspenseWrapper><CommunityPage /></SuspenseWrapper>} />
                     )}
+                    <Route path="overview" element={<SuspenseWrapper><DashboardPage /></SuspenseWrapper>} />
                     <Route path="users" element={isOwnerView() ? <SuspenseWrapper><UsersPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     <Route path="groups" element={isOwnerView() ? <SuspenseWrapper><GroupsPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     <Route path="analytics" element={<SuspenseWrapper><AnalyticsPage /></SuspenseWrapper>} />
@@ -113,14 +113,15 @@ export default function App() {
                     <Route path="config" element={isOwnerView() ? <SuspenseWrapper><ConfigPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     {/* User Routes */}
                     <Route path="chat" element={<SuspenseWrapper><ChatPage /></SuspenseWrapper>} />
-                    <Route path="profile" element={<SuspenseWrapper><ProfilePage /></SuspenseWrapper>} />
+                    <Route path="my-space" element={<SuspenseWrapper><CommunityPage /></SuspenseWrapper>} />
                     <Route path="settings" element={<SuspenseWrapper><SettingsPage /></SuspenseWrapper>} />
                     <Route path="wallets" element={<SuspenseWrapper><WalletsPage /></SuspenseWrapper>} />
                     <Route path="trading" element={<SuspenseWrapper><TradingPage /></SuspenseWrapper>} />
                     <Route path="leaderboard" element={<SuspenseWrapper><LeaderboardPage /></SuspenseWrapper>} />
                     <Route path="okx-trading" element={<SuspenseWrapper><OKXTradingPage /></SuspenseWrapper>} />
                     <Route path="history" element={<SuspenseWrapper><TransferHistoryPage /></SuspenseWrapper>} />
-                    <Route path="community" element={<SuspenseWrapper><CommunityPage /></SuspenseWrapper>} />
+                    <Route path="community" element={<Navigate to="/my-space" />} />
+                    <Route path="profile" element={<Navigate to="/my-space" />} />
                     <Route path="token-lookup" element={<SuspenseWrapper><TokenLookupPage /></SuspenseWrapper>} />
                     <Route path="portfolio" element={<SuspenseWrapper><PortfolioPage /></SuspenseWrapper>} />
                     <Route path="games" element={<SuspenseWrapper><MiniGamesPage /></SuspenseWrapper>} />

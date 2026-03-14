@@ -440,6 +440,12 @@
     50% { box-shadow: 0 0 0 4px rgba(52, 211, 153, 0); }
   }
 
+  /* #11: Shimmer animation for subtle refresh indicator */
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+
   /* Code syntax highlighting */
   .chat-code-wrapper {
     position: relative;

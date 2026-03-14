@@ -489,6 +489,35 @@ function createDashboardRoutes() {
     const { createSocialRoutes } = require('./socialRoutes');
     router.use('/social', createSocialRoutes());
 
+    // --- User Overview (safe, non-sensitive system data) ---
+    router.get('/user/overview', async (req, res) => {
+        try {
+            const mem = process.memoryUsage();
+
+            // Telegram API latency test
+            let telegramLatencyMs = -1;
+            try {
+                const { bot } = require('../core/bot');
+                const start = Date.now();
+                await bot.getMe();
+                telegramLatencyMs = Date.now() - start;
+            } catch { /* ignore */ }
+
+            res.json({
+                memory: {
+                    rss: Math.round(mem.rss / 1024 / 1024),
+                    heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+                    heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+                },
+                uptimeSeconds: Math.round(process.uptime()),
+                telegramLatencyMs,
+                nodeVersion: process.version,
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // --- Owner Routes ---
     router.get('/owner/users', ownerGuard, async (req, res) => {
         try {

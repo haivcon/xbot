@@ -7,9 +7,10 @@
 
 const { Router } = require('express');
 const { GoogleGenAI } = require('@google/genai');
+const OpenAI = require('openai');
 const logger = require('../core/logger');
 const log = logger.child('WebChat');
-const { GEMINI_API_KEYS, GEMINI_MODEL, GEMINI_MODEL_FAMILIES } = require('../config/env');
+const { GEMINI_API_KEYS, GEMINI_MODEL, GEMINI_MODEL_FAMILIES, OPENAI_API_KEYS, OPENAI_MODEL, OPENAI_MODEL_FAMILIES, GROQ_API_KEYS, GROQ_MODEL_FAMILIES, GROQ_API_URL } = require('../config/env');
 const { ONCHAIN_TOOLS, executeToolCall, buildSystemInstruction } = require('../features/ai/ai-onchain');
 const { WEB_TOOL_DECLARATIONS, executeWebToolCall } = require('./webToolExecutor');
 const { buildAIAPrompt } = require('../config/prompts');
@@ -143,6 +144,68 @@ async function resolveGeminiKey(userId) {
         }
     }
     return null;
+}
+
+/** Detect AI provider from model ID */
+function detectProviderFromModel(modelId) {
+    if (!modelId) return 'google';
+    if (modelId.startsWith('gemini')) return 'google';
+    if (OPENAI_MODEL_FAMILIES && OPENAI_MODEL_FAMILIES[modelId]) return 'openai';
+    if (GROQ_MODEL_FAMILIES && GROQ_MODEL_FAMILIES[modelId]) return 'groq';
+    // Fallback heuristic
+    if (modelId.startsWith('gpt-')) return 'openai';
+    if (modelId.includes('llama') || modelId.includes('groq')) return 'groq';
+    return 'google';
+}
+
+/** Resolve OpenAI API key for user */
+async function resolveOpenAIKey(userId) {
+    if (OPENAI_API_KEYS && OPENAI_API_KEYS.length > 0) {
+        return OPENAI_API_KEYS[Math.floor(Math.random() * OPENAI_API_KEYS.length)];
+    }
+    if (userId) {
+        try {
+            const database = require('../core/database');
+            const userKeys = await database.listUserAiKeys(userId);
+            const keys = userKeys.filter(k => (k.provider || '').toLowerCase() === 'openai').map(k => k.apiKey).filter(Boolean);
+            if (keys.length > 0) return keys[Math.floor(Math.random() * keys.length)];
+        } catch {}
+    }
+    return null;
+}
+
+/** Resolve Groq API key for user */
+async function resolveGroqKey(userId) {
+    if (GROQ_API_KEYS && GROQ_API_KEYS.length > 0) {
+        return GROQ_API_KEYS[Math.floor(Math.random() * GROQ_API_KEYS.length)];
+    }
+    if (userId) {
+        try {
+            const database = require('../core/database');
+            const userKeys = await database.listUserAiKeys(userId);
+            const keys = userKeys.filter(k => (k.provider || '').toLowerCase() === 'groq').map(k => k.apiKey).filter(Boolean);
+            if (keys.length > 0) return keys[Math.floor(Math.random() * keys.length)];
+        } catch {}
+    }
+    return null;
+}
+
+/** Convert Gemini tool declarations to OpenAI format */
+function convertToolsToOpenAI(geminiTools) {
+    const functions = [];
+    for (const toolGroup of (geminiTools || [])) {
+        for (const decl of (toolGroup.functionDeclarations || [])) {
+            functions.push({
+                type: 'function',
+                function: {
+                    name: decl.name,
+                    description: decl.description || '',
+                    parameters: decl.parameters || { type: 'object', properties: {} }
+                }
+            });
+        }
+    }
+    return functions;
 }
 
 // ── Helper: strip HTML tags for web (use markdown) ───────
@@ -544,7 +607,7 @@ function createChatRoutes() {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
 
-        const { message, conversationId, image, model: requestedModel } = req.body;
+        const { message, conversationId, image, model: requestedModel, userApiKey } = req.body;
         // Validate input BEFORE rate limiting
         if (!message?.trim()) return res.status(400).json({ error: 'Message required' });
         if (message.length > 10000) return res.status(400).json({ error: 'Message too long' });
@@ -556,7 +619,10 @@ function createChatRoutes() {
         if (!chatRateLimit(userId)) return res.status(429).json({ error: 'Rate limited' });
 
         // Validate model selection (allow-list)
-        const ALLOWED_MODELS = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
+        const ALLOWED_GEMINI_MODELS = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
+        const ALLOWED_OPENAI_MODELS = Object.keys(OPENAI_MODEL_FAMILIES);
+        const ALLOWED_GROQ_MODELS = Object.keys(GROQ_MODEL_FAMILIES);
+        const ALLOWED_MODELS = [...ALLOWED_GEMINI_MODELS, ...ALLOWED_OPENAI_MODELS, ...ALLOWED_GROQ_MODELS];
         const useModel = ALLOWED_MODELS.includes(requestedModel) ? requestedModel : (GEMINI_MODEL || 'gemini-3-flash-preview');
 
         // SSE headers
@@ -574,45 +640,40 @@ function createChatRoutes() {
         res.on('close', () => { aborted = true; });
 
         try {
-            const apiKey = await resolveGeminiKey(userId);
-            if (!apiKey) { sendEvent('error', { error: 'No API key' }); res.end(); return; }
-            const client = getGeminiClient(apiKey);
+            const provider = detectProviderFromModel(useModel);
             const sessionKey = conversationId || `web_${userId}_${Date.now()}`;
-
             let session = await getSession(sessionKey, userId);
-            let sessionHistory;
 
+            // Build system instruction (shared across all providers)
+            const sysInstr = await buildSystemInstruction(userId);
+            const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
+            let prefsCtx = '';
+            try { const prefs = await db.getUserPreferences(userId); prefsCtx = db.formatPreferencesForPrompt(prefs); } catch (e) {}
+            const fullSystemPrompt = sysInstr + '\n\n' + aiaPrompt +
+                '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
+                'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
+                'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
+                'Always display them in FULL. Keep responses conversational and helpful.' + prefsCtx;
+
+            // ══════════ GEMINI ══════════
+            if (provider === 'google') {
+            const apiKey = userApiKey || await resolveGeminiKey(userId);
+            if (!apiKey) { sendEvent('error', { error: 'No Google API key configured' }); res.end(); return; }
+            const client = getGeminiClient(apiKey);
+
+            let sessionHistory;
             if (session) {
                 sessionHistory = (session.messages || []).map(m => ({
                     role: m.role === 'assistant' ? 'model' : m.role,
                     parts: [{ text: m.content || '' }]
                 }));
-                // Always rebuild the full system instruction (it's not persisted to DB)
-                const systemInstruction = await buildSystemInstruction(userId);
-                const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
-                // Load user preferences for AI memory (#12)
-                let prefsContext = '';
-                try { const prefs = await db.getUserPreferences(userId); prefsContext = db.formatPreferencesForPrompt(prefs); } catch (e) { /* table may not exist yet */ }
-                session._systemInstruction = systemInstruction + '\n\n' + aiaPrompt +
-                    '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
-                    'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
-                    'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
-                    'Always display them in FULL. Keep responses conversational and helpful.' + prefsContext;
+                session._systemInstruction = fullSystemPrompt;
             } else {
-                const systemInstruction = await buildSystemInstruction(userId);
-                const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
-                // Load user preferences for AI memory (#12)
-                let prefsContext = '';
-                try { const prefs = await db.getUserPreferences(userId); prefsContext = db.formatPreferencesForPrompt(prefs); } catch (e) { /* table may not exist yet */ }
                 session = {
                     id: sessionKey, userId,
                     title: message.trim().substring(0, 60),
                     messages: [], createdAt: Date.now(), updatedAt: Date.now(),
-                    _systemInstruction: systemInstruction + '\n\n' + aiaPrompt +
-                        '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
-                        'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
-                        'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
-                        'Always display them in FULL. Keep responses conversational and helpful.' + prefsContext,
+                    _systemInstruction: fullSystemPrompt,
                 };
                 sessionHistory = [];
             }
@@ -761,6 +822,109 @@ function createChatRoutes() {
                     } catch {}
                 })();
             }
+
+            // ══════════ OPENAI ══════════
+            } else if (provider === 'openai') {
+                const oaiKey = userApiKey || await resolveOpenAIKey(userId);
+                if (!oaiKey) { sendEvent('error', { error: 'No OpenAI API key. Add one in AI Settings → API Keys.' }); res.end(); return; }
+                const oaiClient = new OpenAI({ apiKey: oaiKey });
+                if (!session) session = { id: sessionKey, userId, title: message.trim().substring(0, 60), messages: [], createdAt: Date.now(), updatedAt: Date.now() };
+
+                const oaiMsgs = [{ role: 'system', content: fullSystemPrompt }];
+                for (const m of (session.messages || [])) oaiMsgs.push({ role: m.role === 'model' ? 'assistant' : m.role, content: m.content || '' });
+                if (image && typeof image === 'string' && image.startsWith('data:image/')) {
+                    oaiMsgs.push({ role: 'user', content: [{ type: 'text', text: message.trim() }, { type: 'image_url', image_url: { url: image } }] });
+                } else {
+                    oaiMsgs.push({ role: 'user', content: message.trim() });
+                }
+
+                const oaiTools = convertToolsToOpenAI(getToolDeclarations());
+                let oaiFinal = '';
+                const oaiToolCalls = [];
+                let oaiRound = 0;
+                log.info(`[Stream] OpenAI: model=${useModel}, msgs=${oaiMsgs.length}, tools=${oaiTools.length}`);
+
+                while (oaiRound < MAX_TOOL_ROUNDS) {
+                    if (aborted) break;
+                    oaiRound++;
+                    let stream;
+                    try {
+                        stream = await oaiClient.chat.completions.create({ model: useModel, messages: oaiMsgs, tools: oaiTools.length > 0 ? oaiTools : undefined, stream: true, temperature: 0.7, max_tokens: 8192 });
+                    } catch (apiErr) {
+                        log.error(`[Stream][OpenAI][R${oaiRound}] ${apiErr?.message}`);
+                        sendEvent('error', { error: apiErr?.message || 'OpenAI API failed' }); res.end(); return;
+                    }
+                    let rText = '';
+                    const pending = [];
+                    try {
+                        for await (const chunk of stream) {
+                            const d = chunk.choices?.[0]?.delta;
+                            if (!d) continue;
+                            if (d.content) { rText += d.content; sendEvent('text-delta', { text: d.content }); }
+                            if (d.tool_calls) for (const tc of d.tool_calls) {
+                                if (!pending[tc.index]) pending[tc.index] = { id: '', name: '', args: '' };
+                                if (tc.id) pending[tc.index].id = tc.id;
+                                if (tc.function?.name) pending[tc.index].name = tc.function.name;
+                                if (tc.function?.arguments) pending[tc.index].args += tc.function.arguments;
+                            }
+                        }
+                    } catch (sErr) { log.error(`[Stream][OpenAI] ${sErr?.message}`); sendEvent('error', { error: sErr?.message || 'OpenAI stream failed' }); res.end(); return; }
+
+                    const valid = pending.filter(t => t && t.name);
+                    if (valid.length === 0) { oaiFinal = rText.trim(); if (rText) oaiMsgs.push({ role: 'assistant', content: oaiFinal }); break; }
+
+                    oaiMsgs.push({ role: 'assistant', content: rText || null, tool_calls: valid.map(t => ({ id: t.id, type: 'function', function: { name: t.name, arguments: t.args } })) });
+                    const ctx = { userId, lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, chatId: userId, isTelegramContext: false };
+                    for (const tc of valid) {
+                        let args = {}; try { args = JSON.parse(tc.args || '{}'); } catch {}
+                        sendEvent('tool-start', { name: tc.name, args });
+                        let res2; try { res2 = await executeWebToolCall(tc.name, args, ctx); } catch {}
+                        if (!res2) try { res2 = await executeToolCall({ functionCall: { name: tc.name, args } }, ctx); } catch {}
+                        if (!res2) res2 = { error: `Tool ${tc.name} not available.` };
+                        if (res2?.displayMessage) res2.displayMessage = htmlToMarkdown(res2.displayMessage);
+                        const rs = typeof res2 === 'string' ? res2 : JSON.stringify(res2)?.substring(0, 500);
+                        oaiToolCalls.push({ name: tc.name, args, result: rs });
+                        sendEvent('tool-result', { name: tc.name, result: rs });
+                        oaiMsgs.push({ role: 'tool', tool_call_id: tc.id, content: typeof res2 === 'string' ? res2 : JSON.stringify(res2) });
+                    }
+                }
+
+                session.messages = oaiMsgs.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : (m.content?.[0]?.text || '') })).slice(-SESSION_MAX_MESSAGES);
+                session.updatedAt = Date.now(); await saveSession(session);
+                sendEvent('done', { conversationId: sessionKey, title: session.title, toolCalls: oaiToolCalls.length > 0 ? oaiToolCalls : undefined }); res.end();
+                if (session.messages.length <= 2 && session.title === message.trim().substring(0, 60)) {
+                    (async () => { try { const r = await oaiClient.chat.completions.create({ model: useModel, messages: [{ role: 'user', content: `Summarize in max 5 words as title. No quotes.\nUser: ${message}\nAI: ${(oaiFinal||'').substring(0,300)}` }], max_tokens: 30, temperature: 0.3 }); const t = r?.choices?.[0]?.message?.content?.trim(); if (t && t.length > 2 && t.length < 80) { session.title = t; await saveSession(session); } } catch {} })();
+                }
+
+            // ══════════ GROQ ══════════
+            } else if (provider === 'groq') {
+                const gKey = userApiKey || await resolveGroqKey(userId);
+                if (!gKey) { sendEvent('error', { error: 'No Groq API key. Add one in AI Settings → API Keys.' }); res.end(); return; }
+                const gClient = new OpenAI({ apiKey: gKey, baseURL: 'https://api.groq.com/openai/v1' });
+                if (!session) session = { id: sessionKey, userId, title: message.trim().substring(0, 60), messages: [], createdAt: Date.now(), updatedAt: Date.now() };
+
+                const gMsgs = [{ role: 'system', content: fullSystemPrompt }];
+                for (const m of (session.messages || [])) gMsgs.push({ role: m.role === 'model' ? 'assistant' : m.role, content: m.content || '' });
+                gMsgs.push({ role: 'user', content: message.trim() });
+
+                let gFinal = '';
+                log.info(`[Stream] Groq: model=${useModel}, msgs=${gMsgs.length}`);
+                try {
+                    const stream = await gClient.chat.completions.create({ model: useModel, messages: gMsgs, stream: true, temperature: 0.7, max_tokens: 4096 });
+                    for await (const chunk of stream) { const d = chunk.choices?.[0]?.delta; if (d?.content) { gFinal += d.content; sendEvent('text-delta', { text: d.content }); } }
+                } catch (apiErr) { log.error(`[Stream][Groq] ${apiErr?.message}`); sendEvent('error', { error: apiErr?.message || 'Groq API failed' }); res.end(); return; }
+
+                if (gFinal.trim()) gMsgs.push({ role: 'assistant', content: gFinal.trim() });
+                session.messages = gMsgs.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: m.content || '' })).slice(-SESSION_MAX_MESSAGES);
+                session.updatedAt = Date.now(); await saveSession(session);
+                sendEvent('done', { conversationId: sessionKey, title: session.title }); res.end();
+                if (session.messages.length <= 2 && session.title === message.trim().substring(0, 60)) {
+                    (async () => { try { const r = await gClient.chat.completions.create({ model: useModel, messages: [{ role: 'user', content: `Summarize in max 5 words as title. No quotes.\nUser: ${message}\nAI: ${(gFinal||'').substring(0,300)}` }], max_tokens: 30, temperature: 0.3 }); const t = r?.choices?.[0]?.message?.content?.trim(); if (t && t.length > 2 && t.length < 80) { session.title = t; await saveSession(session); } } catch {} })();
+                }
+
+            } else {
+                sendEvent('error', { error: `Unknown provider: ${provider}` }); res.end(); return;
+            }
         } catch (err) {
             log.error(`Stream error: ${err.message}`);
             sendEvent('error', { error: err.message || 'Stream failed' });
@@ -784,19 +948,61 @@ function createChatRoutes() {
             const hasServerKey = GEMINI_API_KEYS && GEMINI_API_KEYS.length > 0;
 
             // Build model list based on user permissions
-            const allModels = [
-                { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', desc: 'Best reasoning & complex tasks', icon: '🧠', tier: 'pro' },
-                { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Powerful multimodal & agentic', icon: '🚀', tier: 'free' },
-                { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Lite', desc: 'Fastest, lowest cost', icon: '💨', tier: 'free' },
+            const geminiModels = [
+                { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', desc: 'Best reasoning & complex tasks', icon: '🧠', tier: 'pro', provider: 'google' },
+                { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Powerful multimodal & agentic', icon: '🚀', tier: 'free', provider: 'google' },
+                { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Lite', desc: 'Fastest, lowest cost', icon: '💨', tier: 'free', provider: 'google' },
             ];
+
+            // Build OpenAI models from OPENAI_MODEL_FAMILIES
+            const openaiModels = Object.values(OPENAI_MODEL_FAMILIES).map(m => ({
+                id: m.id,
+                label: m.label,
+                desc: m.description,
+                icon: m.icon,
+                tier: m.id === 'gpt-5.4' ? 'pro' : 'free',
+                provider: 'openai',
+                contextWindow: m.contextWindow,
+                supportsReasoning: m.supportsReasoning || false,
+            }));
+
+            const hasOpenAiKey = userKeys.some(k =>
+                (k.provider || '').toLowerCase() === 'openai' && k.apiKey
+            );
+            const hasServerOpenAiKey = OPENAI_API_KEYS && OPENAI_API_KEYS.length > 0;
 
             let models;
             if (isOwner || hasPersonalKey) {
-                // Owner or user with personal key: can use all models
-                models = allModels;
+                models = geminiModels;
             } else {
-                // Regular user with server key only: default model only
-                models = allModels.filter(m => m.id === GEMINI_MODEL);
+                models = geminiModels.filter(m => m.id === GEMINI_MODEL);
+            }
+
+            // Add OpenAI models if user has OpenAI key or server has one
+            if (isOwner || hasOpenAiKey || hasServerOpenAiKey) {
+                models = [...models, ...openaiModels];
+            }
+
+            // Build Groq models from GROQ_MODEL_FAMILIES
+            const groqModels = Object.values(GROQ_MODEL_FAMILIES).map(m => ({
+                id: m.id,
+                label: m.label,
+                desc: m.description,
+                icon: m.icon,
+                tier: 'free',
+                provider: 'groq',
+                speed: m.speed,
+                contextWindow: m.contextWindow,
+            }));
+
+            const hasGroqKey = userKeys.some(k =>
+                (k.provider || '').toLowerCase() === 'groq' && k.apiKey
+            );
+            const hasServerGroqKey = GROQ_API_KEYS && GROQ_API_KEYS.length > 0;
+
+            // Add Groq models if user has Groq key or server has one
+            if (isOwner || hasGroqKey || hasServerGroqKey) {
+                models = [...models, ...groqModels];
             }
 
             res.json({
@@ -805,54 +1011,108 @@ function createChatRoutes() {
                 hasPersonalKey,
                 hasServerKey,
                 isOwner,
+                hasOpenAiKey,
+                hasServerOpenAiKey,
+                hasGroqKey,
+                hasServerGroqKey,
             });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
 
-    // ── GET /ai/keys — List user's Google AI keys ────────────
+    // ── GET /ai/keys — List user's AI keys (Google + OpenAI) ──
     router.get('/keys', async (req, res) => {
         try {
             const userId = req.dashboardUser?.userId;
             if (!userId) return res.status(401).json({ error: 'Not authenticated' });
             const db = require('../../db');
             const keys = await db.listUserAiKeys(userId);
-            const googleKeys = keys
-                .filter(k => ['google', 'gemini'].includes((k.provider || '').toLowerCase()))
+            const providerFilter = req.query.provider;
+            const filteredKeys = keys
+                .filter(k => {
+                    const p = (k.provider || '').toLowerCase();
+                    if (providerFilter === 'openai') return p === 'openai';
+                    if (providerFilter === 'google') return ['google', 'gemini'].includes(p);
+                    if (providerFilter === 'groq') return p === 'groq';
+                    // No filter — return all
+                    return ['google', 'gemini', 'openai', 'groq'].includes(p);
+                })
                 .map(k => ({
                     id: k.id || k.rowid,
-                    name: k.name || k.label || 'Google AI',
+                    name: k.name || k.label || (k.provider === 'openai' ? 'OpenAI' : k.provider === 'groq' ? 'Groq' : 'Google AI'),
                     provider: k.provider || 'google',
                     maskedKey: k.apiKey ? `${k.apiKey.slice(0, 6)}...${k.apiKey.slice(-4)}` : '***',
                     createdAt: k.createdAt,
                 }));
-            res.json({ keys: googleKeys });
+            res.json({ keys: filteredKeys });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
 
-    // ── POST /ai/keys — Add a Google AI key ──────────────────
+    // ── POST /ai/keys — Add a Google AI or OpenAI key ────────
     router.post('/keys', async (req, res) => {
         try {
             const userId = req.dashboardUser?.userId;
             if (!userId) return res.status(401).json({ error: 'Not authenticated' });
-            const { apiKey, name } = req.body;
+            const { apiKey, name, provider: reqProvider } = req.body;
             if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 10) {
                 return res.status(400).json({ error: 'Invalid API key' });
             }
 
-            // Quick validation: try listing models with the key
-            try {
-                const testClient = new GoogleGenAI({ apiKey: apiKey.trim() });
-                await testClient.models.get({ model: 'gemini-3-flash-preview' });
-            } catch (testErr) {
-                return res.status(400).json({ error: `Invalid key: ${testErr?.message?.substring(0, 100) || 'validation failed'}` });
+            const provider = (reqProvider || '').toLowerCase();
+            const normalizedProvider = provider === 'openai' ? 'openai' : provider === 'groq' ? 'groq' : 'google';
+
+            // Quick validation based on provider
+            if (normalizedProvider === 'openai') {
+                try {
+                    const axios = require('axios');
+                    const resp = await axios.get('https://api.openai.com/v1/models', {
+                        headers: { Authorization: `Bearer ${apiKey.trim()}` },
+                        timeout: 8000,
+                    });
+                    if (!resp.data?.data?.length) throw new Error('No models returned');
+                } catch (testErr) {
+                    const msg = testErr?.response?.status === 401 ? 'Invalid API key'
+                        : testErr?.response?.status === 429 ? 'Rate limited, but key is valid'
+                        : `Validation failed: ${testErr?.message?.substring(0, 100) || 'unknown error'}`;
+                    if (testErr?.response?.status === 429) {
+                        // 429 means the key is valid but rate limited — allow adding
+                    } else {
+                        return res.status(400).json({ error: msg });
+                    }
+                }
+            } else if (normalizedProvider === 'groq') {
+                try {
+                    const axios = require('axios');
+                    const resp = await axios.get('https://api.groq.com/openai/v1/models', {
+                        headers: { Authorization: `Bearer ${apiKey.trim()}` },
+                        timeout: 8000,
+                    });
+                    if (!resp.data?.data?.length) throw new Error('No models returned');
+                } catch (testErr) {
+                    const msg = testErr?.response?.status === 401 ? 'Invalid API key'
+                        : testErr?.response?.status === 429 ? 'Rate limited, but key is valid'
+                        : `Validation failed: ${testErr?.message?.substring(0, 100) || 'unknown error'}`;
+                    if (testErr?.response?.status === 429) {
+                        // 429 = valid key, rate limited — allow
+                    } else {
+                        return res.status(400).json({ error: msg });
+                    }
+                }
+            } else {
+                try {
+                    const testClient = new GoogleGenAI({ apiKey: apiKey.trim() });
+                    await testClient.models.get({ model: 'gemini-3-flash-preview' });
+                } catch (testErr) {
+                    return res.status(400).json({ error: `Invalid key: ${testErr?.message?.substring(0, 100) || 'validation failed'}` });
+                }
             }
 
             const db = require('../../db');
-            const result = await db.addUserAiKey(userId, name || 'Google AI', apiKey.trim(), 'google');
+            const defaultName = normalizedProvider === 'openai' ? 'OpenAI' : normalizedProvider === 'groq' ? 'Groq' : 'Google AI';
+            const result = await db.addUserAiKey(userId, name || defaultName, apiKey.trim(), normalizedProvider);
             res.json({ success: true, added: result?.added !== false });
         } catch (err) {
             res.status(500).json({ error: err.message });
@@ -864,12 +1124,13 @@ function createChatRoutes() {
         try {
             const userId = req.dashboardUser?.userId;
             if (!userId) return res.status(401).json({ error: 'Not authenticated' });
-            const { keyId } = req.body;
+            const { keyId, provider: reqProvider } = req.body;
             const db = require('../../db');
             if (keyId) {
                 await db.deleteUserAiKey(userId, keyId);
             } else {
-                await db.deleteUserAiKeys(userId, 'google');
+                const provider = ['openai', 'groq'].includes((reqProvider || '').toLowerCase()) ? (reqProvider || '').toLowerCase() : 'google';
+                await db.deleteUserAiKeys(userId, provider);
             }
             res.json({ success: true });
         } catch (err) {
@@ -904,7 +1165,7 @@ function createChatRoutes() {
         const { message, modelA, modelB } = req.body;
         if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
 
-        const ALLOWED = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
+        const ALLOWED = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview', ...Object.keys(OPENAI_MODEL_FAMILIES), ...Object.keys(GROQ_MODEL_FAMILIES)];
         const mA = ALLOWED.includes(modelA) ? modelA : 'gemini-3-flash-preview';
         const mB = ALLOWED.includes(modelB) ? modelB : 'gemini-3.1-pro-preview';
 

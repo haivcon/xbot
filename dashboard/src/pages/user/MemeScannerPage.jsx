@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import {
     Loader2, RefreshCw, Search, Zap, TrendingUp, TrendingDown,
-    Users, BarChart3, Shield, AlertTriangle, ChevronDown, ExternalLink,
+    Users, BarChart3, Shield, AlertTriangle, ChevronDown, ExternalLink, ArrowLeft,
 } from 'lucide-react';
 
 const STAGES = ['MIGRATED', 'MIGRATING', 'NEW'];
@@ -181,7 +181,8 @@ export default function MemeScannerPage() {
                                         <div className="flex items-center justify-between mb-3">
                                             <h3 className="text-lg font-bold text-surface-100">🎯 {sym}</h3>
                                             <button onClick={() => { setSelectedToken(null); setDetailData(null); setDevData(null); }}
-                                                className="text-xs text-surface-200/30 hover:text-surface-200/60">✕ Close</button>
+                                                className="flex items-center gap-1.5 text-xs text-surface-200/40 hover:text-brand-400 transition-colors">
+                                                <ArrowLeft size={14} /> {t('dashboard.mySpace.back')}</button>
                                         </div>
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                             <div className="bg-surface-800/40 rounded-lg p-3 text-center">

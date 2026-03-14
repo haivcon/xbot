@@ -34,6 +34,7 @@ import {
     Zap,
     Compass,
     ChevronRight,
+    Sparkles,
 } from 'lucide-react';
 import useThemeStore from '@/stores/themeStore';
 
@@ -225,7 +226,7 @@ export default function Sidebar({ open, onClose }) {
             label: t('dashboard.sidebar.groupFinance') || 'Assets & Trading',
             icon: Wallet,
             items: [
-                { to: '/profile', icon: User, label: t('dashboard.sidebar.profile') },
+                { to: '/my-space', icon: Sparkles, label: t('dashboard.sidebar.mySpace') || 'My Space' },
                 { to: '/wallets', icon: Wallet, label: t('dashboard.sidebar.wallets') },
                 { to: '/trading', icon: BarChart3, label: t('dashboard.sidebar.dexTrading') || 'DEX Trading' },
                 { to: '/okx-trading', icon: BarChart3, label: t('dashboard.sidebar.okxTrading') || 'OKX Trading' },
@@ -236,6 +237,7 @@ export default function Sidebar({ open, onClose }) {
             label: t('dashboard.sidebar.groupExplore') || 'Explore',
             icon: Compass,
             items: [
+                { to: '/overview', icon: LayoutDashboard, label: t('dashboard.sidebar.home') },
                 { to: '/token-lookup', icon: Search, label: t('dashboard.sidebar.tokenLookup') || 'Token Lookup' },
                 { to: '/meme-scanner', icon: Zap, label: 'Meme Scanner' },
                 { to: '/discovery', icon: Compass, label: 'Discovery' },
@@ -249,7 +251,6 @@ export default function Sidebar({ open, onClose }) {
             icon: Gamepad2,
             items: [
                 { to: '/games', icon: Gamepad2, label: t('dashboard.sidebar.games') || 'Mini Games' },
-                { to: '/community', icon: Globe, label: t('dashboard.sidebar.community') || 'X Layer Community' },
                 { to: '/settings', icon: Settings, label: t('dashboard.sidebar.settings') },
             ],
         },

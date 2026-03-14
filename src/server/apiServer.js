@@ -475,6 +475,21 @@ function startApiServer() {
                     });
                 }, 30000);
 
+                // #13: Broadcast live_stats every 30s for real-time dashboard updates
+                setInterval(async () => {
+                    if (!wss.clients.size) return;
+                    try {
+                        const mem = process.memoryUsage();
+                        const data = {
+                            heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+                            heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+                            rss: Math.round(mem.rss / 1024 / 1024),
+                            uptime: Math.round(process.uptime()),
+                        };
+                        broadcastWsEvent('live_stats', data);
+                    } catch { /* ignore */ }
+                }, 30000);
+
                 log.child('WebSocket').info('WebSocket server ready at /ws');
             } catch (e) {
                 log.child('WebSocket').warn(`WebSocket disabled (install ws package): ${e.message}`);

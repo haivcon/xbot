@@ -443,8 +443,8 @@ const OPENAI_API_KEYS = (() => {
 
     return Array.from(new Set(keys));
 })();
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini-2024-07-18';
-const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini-2024-07-18';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
+const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-5-mini';
 const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
 const OPENAI_IMAGE_VARIATION_MODEL = process.env.OPENAI_IMAGE_VARIATION_MODEL || 'dall-e-2';
 const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image-preview';
@@ -457,6 +457,175 @@ const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'tts-1';
 const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'alloy';
 const OPENAI_TTS_FORMAT = process.env.OPENAI_TTS_FORMAT || 'mp3';
 const OPENAI_AUDIO_MODEL = process.env.OPENAI_AUDIO_MODEL || '';
+
+// OpenAI Model Families — for model selection feature
+// Mirrors GEMINI_MODEL_FAMILIES pattern for provider parity
+const OPENAI_MODEL_FAMILIES = {
+    /**
+     * GPT-5.4 — Flagship reasoning & coding model
+     * ✅ Supports: Chat Completions, function calling, vision, reasoning (none/low/med/high/xhigh)
+     * Context: 1M tokens | Max output: 128K tokens
+     * Knowledge cutoff: Aug 2025
+     */
+    'gpt-5.4': {
+        id: 'gpt-5.4',
+        label: 'GPT-5.4',
+        icon: '🧠',
+        chat: 'gpt-5.4',
+        vision: 'gpt-5.4',
+        supportsReasoning: true,
+        reasoningLevels: ['none', 'low', 'medium', 'high', 'xhigh'],
+        defaultReasoningLevel: 'medium',
+        contextWindow: '1M / 128k',
+        description: 'Flagship model, best intelligence for complex tasks',
+        supportsVision: true,
+        supportsFunctionCalling: true,
+    },
+    /**
+     * GPT-5 Mini — Cost-efficient, low-latency
+     * ✅ Supports: Chat Completions, function calling, vision, reasoning (medium fixed)
+     * Context: 400K tokens | Max output: 128K tokens
+     * Knowledge cutoff: Sep 2024
+     */
+    'gpt-5-mini': {
+        id: 'gpt-5-mini',
+        label: 'GPT-5 Mini',
+        icon: '⚡',
+        chat: 'gpt-5-mini',
+        vision: 'gpt-5-mini',
+        supportsReasoning: true,
+        reasoningLevels: ['medium'],
+        defaultReasoningLevel: 'medium',
+        contextWindow: '400K / 128k',
+        description: 'Fast & affordable for high-volume tasks',
+        supportsVision: true,
+        supportsFunctionCalling: true,
+    },
+    /**
+     * GPT-4o — Previous generation multimodal
+     * ✅ Supports: Chat Completions, function calling, vision
+     * Context: 128K tokens
+     */
+    'gpt-4o': {
+        id: 'gpt-4o',
+        label: 'GPT-4o',
+        icon: '🌟',
+        chat: 'gpt-4o',
+        vision: 'gpt-4o',
+        supportsReasoning: false,
+        reasoningLevels: [],
+        defaultReasoningLevel: null,
+        contextWindow: '128K',
+        description: 'Reliable multimodal, previous generation',
+        supportsVision: true,
+        supportsFunctionCalling: true,
+    },
+    /**
+     * GPT-4o Mini — Previous generation, cost-efficient
+     * ✅ Supports: Chat Completions, function calling, vision
+     * Context: 128K tokens
+     */
+    'gpt-4o-mini': {
+        id: 'gpt-4o-mini',
+        label: 'GPT-4o Mini',
+        icon: '💡',
+        chat: 'gpt-4o-mini',
+        vision: 'gpt-4o-mini',
+        supportsReasoning: false,
+        reasoningLevels: [],
+        defaultReasoningLevel: null,
+        contextWindow: '128K',
+        description: 'Budget-friendly, fast responses',
+        supportsVision: true,
+        supportsFunctionCalling: true,
+    },
+};
+const OPENAI_REASONING_LEVELS = ['none', 'low', 'medium', 'high'];
+const OPENAI_DEFAULT_MODEL_FAMILY = 'gpt-5-mini';
+
+// Groq Model Families — for model selection feature
+// Mirrors GEMINI/OPENAI model families pattern for provider parity
+const GROQ_MODEL_FAMILIES = {
+    /**
+     * LLaMA 3.3 70B — Production, best quality from Meta
+     * Speed: ~280 t/s | Context: 131K | Max output: 32K
+     */
+    'llama-3.3-70b-versatile': {
+        id: 'llama-3.3-70b-versatile',
+        label: 'LLaMA 3.3 70B',
+        icon: '🦙',
+        chat: 'llama-3.3-70b-versatile',
+        speed: '280 t/s',
+        contextWindow: '131K / 32K',
+        description: 'Best quality, 70B parameters',
+        supportsVision: false,
+        supportsFunctionCalling: true,
+    },
+    /**
+     * LLaMA 3.1 8B — Production, ultra-fast
+     * Speed: ~560 t/s | Context: 131K | Max output: 131K
+     */
+    'llama-3.1-8b-instant': {
+        id: 'llama-3.1-8b-instant',
+        label: 'LLaMA 3.1 8B',
+        icon: '⚡',
+        chat: 'llama-3.1-8b-instant',
+        speed: '560 t/s',
+        contextWindow: '131K / 131K',
+        description: 'Ultra-fast, lightweight tasks',
+        supportsVision: false,
+        supportsFunctionCalling: true,
+    },
+    /**
+     * GPT-OSS 120B — OpenAI open-weight, flagship on Groq
+     * Speed: ~500 t/s | Context: 131K | Max output: 65K
+     * Supports: browser search, code execution
+     */
+    'openai/gpt-oss-120b': {
+        id: 'openai/gpt-oss-120b',
+        label: 'GPT-OSS 120B',
+        icon: '🧠',
+        chat: 'openai/gpt-oss-120b',
+        speed: '500 t/s',
+        contextWindow: '131K / 65K',
+        description: 'OpenAI flagship open-weight, reasoning',
+        supportsVision: false,
+        supportsFunctionCalling: true,
+    },
+    /**
+     * GPT-OSS 20B — OpenAI open-weight, fastest on Groq
+     * Speed: ~1000 t/s | Context: 131K | Max output: 65K
+     * Supports: browser search, code execution
+     */
+    'openai/gpt-oss-20b': {
+        id: 'openai/gpt-oss-20b',
+        label: 'GPT-OSS 20B',
+        icon: '🚀',
+        chat: 'openai/gpt-oss-20b',
+        speed: '1000 t/s',
+        contextWindow: '131K / 65K',
+        description: 'Fastest on Groq, 1000 tokens/sec',
+        supportsVision: false,
+        supportsFunctionCalling: true,
+    },
+    /**
+     * LLaMA 4 Scout — Preview, vision-capable
+     * Speed: ~750 t/s | Context: 131K | Max output: 8K
+     * Supports: vision (image inputs)
+     */
+    'meta-llama/llama-4-scout-17b-16e-instruct': {
+        id: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        label: 'LLaMA 4 Scout',
+        icon: '🔭',
+        chat: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        speed: '750 t/s',
+        contextWindow: '131K / 8K',
+        description: 'Vision-capable, multimodal',
+        supportsVision: true,
+        supportsFunctionCalling: true,
+    },
+};
+const GROQ_DEFAULT_MODEL_FAMILY = 'llama-3.3-70b-versatile';
 const AI_IMAGE_MAX_BYTES = (() => {
     const value = Number(process.env.AI_IMAGE_MAX_BYTES || 15 * 1024 * 1024);
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : 15 * 1024 * 1024;
@@ -620,6 +789,11 @@ module.exports = {
     OPENAI_TTS_VOICE,
     OPENAI_TTS_FORMAT,
     OPENAI_AUDIO_MODEL,
+    OPENAI_MODEL_FAMILIES,
+    OPENAI_REASONING_LEVELS,
+    OPENAI_DEFAULT_MODEL_FAMILY,
+    GROQ_MODEL_FAMILIES,
+    GROQ_DEFAULT_MODEL_FAMILY,
     AI_IMAGE_MAX_BYTES,
     AI_IMAGE_DOWNLOAD_TIMEOUT_MS,
     AI_KEY_PROBE_TIMEOUT_MS,

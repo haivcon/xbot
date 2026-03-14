@@ -5,9 +5,11 @@ import {
     ExternalLink, Globe, Gamepad2, Landmark, Users, UserPlus,
     TrendingUp, TrendingDown, Copy, Check, ChevronRight, ChevronDown, ChevronUp,
     Sparkles, ArrowUpRight, Heart, ShoppingCart, Star, Zap,
-    MessageCircle, Send, Plus, Trash2, Bell, User, Loader2, X as XIcon
+    MessageCircle, Send, Plus, Trash2, Bell, User, Loader2, X as XIcon,
+    Trophy, CalendarCheck, ImageIcon, Hash, ArrowLeft, Home
 } from 'lucide-react';
 import api from '@/api/client';
+import useAuthStore from '@/stores/authStore';
 
 /* ═══════════════════════════════════════════════════
    X Layer Community Ecosystem — Premium Design v2
@@ -756,14 +758,14 @@ function DMView() {
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center">
                     <Send size={20} className="text-brand-400" />
                 </div>
-                Messages
+                {t('dashboard.mySpace.navMessages')}
             </h2>
 
             <div className="flex gap-4 min-h-[500px]">
                 {/* Conversations sidebar */}
                 <div className="w-72 flex-shrink-0 rounded-2xl border border-white/[0.06] bg-surface-800/60 overflow-hidden flex flex-col">
                     <div className="p-3 border-b border-white/[0.04]">
-                        <p className="text-[10px] text-surface-200/30 font-bold uppercase tracking-wider">Conversations</p>
+                        <p className="text-[10px] text-surface-200/30 font-bold uppercase tracking-wider">{t('dashboard.mySpace.navConversations')}</p>
                     </div>
                     <div className="flex-1 overflow-y-auto">
                         {loading ? (
@@ -772,8 +774,8 @@ function DMView() {
                             </div>
                         ) : conversations.length === 0 ? (
                             <div className="text-center py-10">
-                                <p className="text-[11px] text-surface-200/20">No messages yet</p>
-                                <p className="text-[9px] text-surface-200/15 mt-1">Start a conversation from a user profile</p>
+                                <p className="text-[11px] text-surface-200/20">{t('dashboard.mySpace.noMessagesYet')}</p>
+                                <p className="text-[9px] text-surface-200/15 mt-1">{t('dashboard.mySpace.startConversation')}</p>
                             </div>
                         ) : conversations.map(c => (
                             <button
@@ -790,7 +792,7 @@ function DMView() {
                                         {c.unreadCount > 0 && <span className="w-4 h-4 rounded-full bg-brand-500 text-[7px] text-white font-bold flex items-center justify-center flex-shrink-0">{c.unreadCount}</span>}
                                     </div>
                                     <p className="text-[10px] text-surface-200/30 truncate mt-0.5">
-                                        {c.lastMessageIsOwn ? 'You: ' : ''}{c.lastMessage}
+                                        {c.lastMessageIsOwn ? `${t('dashboard.mySpace.you')}: ` : ''}{c.lastMessage}
                                     </p>
                                 </div>
                                 <span className="text-[8px] text-surface-200/15 flex-shrink-0">{timeSince(c.lastMessageAt)}</span>
@@ -805,13 +807,16 @@ function DMView() {
                         <div className="flex-1 flex items-center justify-center">
                             <div className="text-center">
                                 <div className="text-4xl mb-3">💬</div>
-                                <p className="text-sm text-surface-200/25">Select a conversation</p>
+                                <p className="text-sm text-surface-200/25">{t('dashboard.mySpace.selectConversation')}</p>
                             </div>
                         </div>
                     ) : (
                         <>
-                            {/* Chat header */}
+                            {/* Chat header with back button */}
                             <div className="flex items-center gap-3 p-4 border-b border-white/[0.06]">
+                                <button onClick={() => setActiveChat(null)} className="p-1.5 rounded-lg hover:bg-white/[0.06] text-surface-200/40 hover:text-surface-100 transition-colors" title={t('dashboard.mySpace.back')}>
+                                    <ArrowLeft size={16} />
+                                </button>
                                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500/40 to-purple-500/40 flex items-center justify-center text-xs text-surface-100 font-bold">
                                     {(activeChat.displayName || 'U')[0].toUpperCase()}
                                 </div>
@@ -823,7 +828,7 @@ function DMView() {
                                 {msgLoading ? (
                                     <div className="flex items-center justify-center py-8"><Loader2 size={16} className="animate-spin text-surface-200/20" /></div>
                                 ) : messages.length === 0 ? (
-                                    <p className="text-center text-[11px] text-surface-200/20 py-8">No messages yet. Say hello! 👋</p>
+                                    <p className="text-center text-[11px] text-surface-200/20 py-8">{t('dashboard.mySpace.sayHello')} 👋</p>
                                 ) : messages.map((m, i) => {
                                     const isOwn = String(m.fromUserId) !== String(activeChat.userId);
                                     return (
@@ -848,7 +853,7 @@ function DMView() {
                                         value={text}
                                         onChange={e => setText(e.target.value)}
                                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
-                                        placeholder="Type a message..."
+                                        placeholder={t('dashboard.mySpace.typeMessage')}
                                         className="flex-1 bg-surface-900/50 border border-white/[0.06] rounded-2xl px-4 py-2.5 text-sm text-surface-100 outline-none placeholder:text-surface-200/15 focus:border-brand-500/20 transition-colors"
                                     />
                                     <button onClick={sendMsg} disabled={!text.trim() || sending} className="p-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white hover:shadow-brand-500/30 disabled:opacity-20 transition-all">
@@ -887,7 +892,7 @@ function SocialLeaderboardView() {
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-500/20 flex items-center justify-center">
                     <Star size={20} className="text-amber-400" />
                 </div>
-                Top Creators
+                {t('dashboard.mySpace.topCreators')}
             </h2>
 
             {loading ? (
@@ -895,7 +900,7 @@ function SocialLeaderboardView() {
             ) : leaders.length === 0 ? (
                 <div className="text-center py-16 rounded-2xl border border-white/[0.06] bg-surface-800/40">
                     <Star size={40} className="mx-auto mb-3 text-surface-200/15" />
-                    <p className="text-sm text-surface-200/30">No leaderboard data yet</p>
+                    <p className="text-sm text-surface-200/30">{t('dashboard.mySpace.noLeaderboard')}</p>
                 </div>
             ) : (
                 <>
@@ -937,7 +942,7 @@ function SocialLeaderboardView() {
                                 </div>
                                 <div className="text-right">
                                     <p className="text-lg font-bold text-amber-400 tabular-nums">{l.reputation || 0}</p>
-                                    <p className="text-[9px] text-surface-200/25 uppercase tracking-wider">rep</p>
+                                    <p className="text-[9px] text-surface-200/25 uppercase tracking-wider">{t('dashboard.mySpace.reputation')}</p>
                                 </div>
                             </div>
                         ))}
@@ -948,13 +953,64 @@ function SocialLeaderboardView() {
     );
 }
 
-/* ── My Profile Editor View ── */
+/* ── Level System ── */
+const LEVELS = [
+    { name: 'levelBronze', min: 0, max: 100, gradient: 'from-amber-700 to-amber-500', text: 'text-amber-400', emoji: '🥉' },
+    { name: 'levelSilver', min: 100, max: 500, gradient: 'from-slate-400 to-slate-300', text: 'text-slate-300', emoji: '🥈' },
+    { name: 'levelGold', min: 500, max: 2000, gradient: 'from-yellow-500 to-amber-300', text: 'text-yellow-400', emoji: '🥇' },
+    { name: 'levelPlatinum', min: 2000, max: 5000, gradient: 'from-cyan-400 to-blue-300', text: 'text-cyan-300', emoji: '💎' },
+    { name: 'levelDiamond', min: 5000, max: 999999, gradient: 'from-purple-400 to-pink-300', text: 'text-purple-300', emoji: '👑' },
+];
+
+function getLevel(xp) {
+    for (let i = LEVELS.length - 1; i >= 0; i--) {
+        if (xp >= LEVELS[i].min) return { ...LEVELS[i], index: i };
+    }
+    return { ...LEVELS[0], index: 0 };
+}
+
+function getGreeting(t) {
+    const h = new Date().getHours();
+    if (h < 12) return t('dashboard.mySpace.greetingMorning');
+    if (h < 18) return t('dashboard.mySpace.greetingAfternoon');
+    return t('dashboard.mySpace.greetingEvening');
+}
+
+/* ── Achievement Definitions ── */
+function getAchievements(t, stats) {
+    const xp = stats?.totalXP || 0;
+    const games = stats?.gamesPlayed || 0;
+    const wins = stats?.gamesWon || 0;
+    const chats = stats?.aiChats || 0;
+    const checkins = stats?.checkinCount || 0;
+    const images = stats?.imagesGenerated || 0;
+
+    return [
+        { id: 'firstCheckin', emoji: '📅', label: t('dashboard.mySpace.achFirstCheckin'), unlocked: checkins >= 1 },
+        { id: 'firstGame', emoji: '🎮', label: t('dashboard.mySpace.achFirstGame'), unlocked: games >= 1 },
+        { id: 'firstWin', emoji: '🏆', label: t('dashboard.mySpace.achFirstWin'), unlocked: wins >= 1 },
+        { id: 'aiExplorer', emoji: '🤖', label: t('dashboard.mySpace.achAiExplorer'), unlocked: chats >= 10 },
+        { id: 'artist', emoji: '🎨', label: t('dashboard.mySpace.achArtist'), unlocked: images >= 5 },
+        { id: 'xp100', emoji: '⭐', label: t('dashboard.mySpace.achXp100'), unlocked: xp >= 100 },
+        { id: 'gamer10', emoji: '🕹️', label: t('dashboard.mySpace.achGamer10'), unlocked: games >= 10 },
+        { id: 'xp500', emoji: '🌟', label: t('dashboard.mySpace.achXp500'), unlocked: xp >= 500 },
+        { id: 'streak7', emoji: '🔥', label: t('dashboard.mySpace.achStreak7'), unlocked: (stats?.checkinStreak || 0) >= 7 },
+        { id: 'xp2000', emoji: '💎', label: t('dashboard.mySpace.achXp2000'), unlocked: xp >= 2000 },
+    ];
+}
+
+/* ── My Profile Editor View (Enhanced) ── */
 function MyProfileView() {
+    const { t } = useTranslation();
+    const { user } = useAuthStore();
+    const navigate = useNavigate();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [form, setForm] = useState({ displayName: '', bio: '', walletAddress: '' });
+    const [botStats, setBotStats] = useState(null);
+    const [editingField, setEditingField] = useState(null); // 'name' | 'bio' | 'wallet'
 
     useEffect(() => {
         api.getMyProfile().then(r => {
@@ -962,6 +1018,7 @@ function MyProfileView() {
             setProfile(p);
             setForm({ displayName: p?.displayName || '', bio: p?.bio || '', walletAddress: p?.walletAddress || '' });
         }).catch(() => {}).finally(() => setLoading(false));
+        api.getStats().then(setBotStats).catch(() => {});
     }, []);
 
     const handleSave = async () => {
@@ -970,89 +1027,269 @@ function MyProfileView() {
             const r = await api.updateProfile(form);
             setProfile(r.profile);
             setSaved(true);
+            setEditingField(null);
             setTimeout(() => setSaved(false), 2000);
         } catch { /* ignore */ }
         setSaving(false);
     };
 
+    const xp = botStats?.totalXP || 0;
+    const level = getLevel(xp);
+    const nextLevel = LEVELS[Math.min(level.index + 1, LEVELS.length - 1)];
+    const progress = level.index < LEVELS.length - 1
+        ? Math.min(100, Math.round(((xp - level.min) / (nextLevel.min - level.min)) * 100))
+        : 100;
+    const streak = botStats?.checkinStreak || 0;
+
+    const achievements = useMemo(() => getAchievements(t, botStats), [t, botStats]);
+    const unlockedCount = achievements.filter(a => a.unlocked).length;
+
+    /* Unified stat items — bot + hub merged */
+    const statItems = [
+        { icon: Sparkles, label: 'XP', value: xp, max: nextLevel.min, color: 'text-amber-400 bg-amber-500/10', barColor: 'bg-amber-400' },
+        { icon: CalendarCheck, label: t('dashboard.analytics.checkins'), value: botStats?.checkinCount || 0, max: 100, color: 'text-emerald-400 bg-emerald-500/10', barColor: 'bg-emerald-400' },
+        { icon: Gamepad2, label: t('dashboard.analytics.gamesPlayed'), value: botStats?.gamesPlayed || 0, max: 50, color: 'text-purple-400 bg-purple-500/10', barColor: 'bg-purple-400' },
+        { icon: Trophy, label: t('dashboard.mySpace.wins'), value: botStats?.gamesWon || 0, max: 25, color: 'text-cyan-400 bg-cyan-500/10', barColor: 'bg-cyan-400' },
+        { icon: MessageCircle, label: t('dashboard.analytics.aiChats'), value: botStats?.aiChats || 0, max: 100, color: 'text-brand-400 bg-brand-500/10', barColor: 'bg-brand-400' },
+        { icon: ImageIcon, label: t('dashboard.mySpace.images'), value: botStats?.imagesGenerated || 0, max: 30, color: 'text-pink-400 bg-pink-500/10', barColor: 'bg-pink-400' },
+        { icon: Users, label: t('dashboard.mySpace.followers'), value: profile?.followersCount || 0, max: 50, color: 'text-sky-400 bg-sky-500/10', barColor: 'bg-sky-400' },
+        { icon: Heart, label: t('dashboard.mySpace.reputation'), value: profile?.reputation || 0, max: 100, color: 'text-red-400 bg-red-500/10', barColor: 'bg-red-400' },
+    ];
+
     return (
         <div className="space-y-6 animate-fadeIn">
+            {/* ── #2 Time-based Greeting ── */}
             <h2 className="text-2xl font-bold text-surface-100 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center">
                     <User size={20} className="text-brand-400" />
                 </div>
-                My Hub Profile
+                {getGreeting(t)}, {user?.first_name || 'User'}! ✨
             </h2>
 
             {loading ? (
                 <div className="flex items-center justify-center h-40"><Loader2 size={24} className="animate-spin text-surface-200/20" /></div>
             ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Edit Form */}
-                    <div className="rounded-2xl border border-white/[0.06] bg-surface-800/60 p-6 space-y-5">
-                        <h3 className="text-sm font-bold text-surface-200/50 uppercase tracking-wider">Edit Profile</h3>
+                <>
+                    {/* ── Profile Card + Level + Streak ── */}
+                    <div className="glass-card p-6">
+                        <div className="flex flex-col sm:flex-row items-start gap-5">
+                            {/* Avatar */}
+                            <div className="relative flex-shrink-0">
+                                {user?.photo_url ? (
+                                    <img src={user.photo_url} alt="" className="w-20 h-20 rounded-2xl object-cover ring-2 ring-brand-500/30" />
+                                ) : (
+                                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-600 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
+                                        {(user?.first_name || '?')[0]}
+                                    </div>
+                                )}
+                                {/* #4 Level Badge */}
+                                <div className={`absolute -bottom-2 -right-2 px-2 py-0.5 rounded-full bg-gradient-to-r ${level.gradient} text-[9px] font-bold text-white shadow-lg`}>
+                                    {level.emoji} {t(`dashboard.mySpace.${level.name}`)}
+                                </div>
+                            </div>
 
-                        <div>
-                            <label className="text-[11px] text-surface-200/40 mb-1 block">Display Name</label>
-                            <input
-                                value={form.displayName}
-                                onChange={e => setForm({ ...form, displayName: e.target.value })}
-                                className="w-full bg-surface-900/60 border border-white/[0.06] rounded-2xl px-4 py-2.5 text-sm text-surface-100 outline-none placeholder:text-surface-200/15 focus:border-brand-500/30 transition-colors"
-                                placeholder="Your name"
-                            />
+                            <div className="flex-1 min-w-0">
+                                <h2 className="text-xl font-bold text-surface-100">{user?.first_name} {user?.last_name || ''}</h2>
+                                {user?.username && <p className="text-sm text-surface-200/50">@{user.username}</p>}
+                                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                    <span className="badge-info">ID: {user?.id}</span>
+                                    {/* #4 XP Level Progress */}
+                                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${level.text} bg-white/[0.05]`}>
+                                        {xp} XP
+                                    </span>
+                                    {/* #5 Check-in Streak */}
+                                    {streak > 0 && (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md text-orange-400 bg-orange-500/10">
+                                            🔥 {streak} {t('dashboard.mySpace.streakDays')}
+                                        </span>
+                                    )}
+                                </div>
+                                {/* #4 Level Progress Bar */}
+                                <div className="mt-3">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-[9px] text-surface-200/30 font-medium">{t(`dashboard.mySpace.${level.name}`)} → {t(`dashboard.mySpace.${nextLevel.name}`)}</span>
+                                        <span className="text-[9px] text-surface-200/30 tabular-nums">{xp}/{nextLevel.min} XP</span>
+                                    </div>
+                                    <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full bg-gradient-to-r ${level.gradient} transition-all duration-700 ease-out`} style={{ width: `${progress}%` }} />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label className="text-[11px] text-surface-200/40 mb-1 block">Bio</label>
-                            <textarea
-                                value={form.bio}
-                                onChange={e => setForm({ ...form, bio: e.target.value })}
-                                className="w-full h-24 bg-surface-900/60 border border-white/[0.06] rounded-2xl p-4 text-sm text-surface-100 outline-none resize-none placeholder:text-surface-200/15 focus:border-brand-500/30 transition-colors"
-                                placeholder="Tell others about yourself..."
-                            />
-                        </div>
-                        <div>
-                            <label className="text-[11px] text-surface-200/40 mb-1 block">Wallet Address (XLayer)</label>
-                            <input
-                                value={form.walletAddress}
-                                onChange={e => setForm({ ...form, walletAddress: e.target.value })}
-                                className="w-full bg-surface-900/60 border border-white/[0.06] rounded-2xl px-4 py-2.5 text-xs text-surface-100 outline-none font-mono placeholder:text-surface-200/15 focus:border-brand-500/30 transition-colors"
-                                placeholder="0x..."
-                            />
-                        </div>
-                        <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            className="flex items-center gap-2 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-lg hover:shadow-brand-500/30 disabled:opacity-30 transition-all"
-                        >
-                            {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <User size={14} />}
-                            {saved ? 'Saved!' : 'Save Profile'}
+                    </div>
+
+                    {/* ── #8 Quick Actions ── */}
+                    <div className="grid grid-cols-3 gap-3">
+                        <button onClick={() => navigate('/games')} className="glass-card p-4 flex flex-col items-center gap-2 hover:bg-white/[0.06] hover:scale-[1.02] active:scale-95 transition-all group">
+                            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                                <Gamepad2 size={20} className="text-purple-400" />
+                            </div>
+                            <span className="text-[11px] font-bold text-surface-200/50 group-hover:text-surface-100 transition-colors">{t('dashboard.mySpace.playGames')}</span>
+                        </button>
+                        <button onClick={() => navigate('/chat')} className="glass-card p-4 flex flex-col items-center gap-2 hover:bg-white/[0.06] hover:scale-[1.02] active:scale-95 transition-all group">
+                            <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center group-hover:bg-brand-500/20 transition-colors">
+                                <MessageCircle size={20} className="text-brand-400" />
+                            </div>
+                            <span className="text-[11px] font-bold text-surface-200/50 group-hover:text-surface-100 transition-colors">{t('dashboard.mySpace.chatAi')}</span>
+                        </button>
+                        <button onClick={() => navigate('/wallets')} className="glass-card p-4 flex flex-col items-center gap-2 hover:bg-white/[0.06] hover:scale-[1.02] active:scale-95 transition-all group">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20 transition-colors">
+                                <CalendarCheck size={20} className="text-emerald-400" />
+                            </div>
+                            <span className="text-[11px] font-bold text-surface-200/50 group-hover:text-surface-100 transition-colors">{t('dashboard.mySpace.myWallets')}</span>
                         </button>
                     </div>
 
-                    {/* Preview Card */}
-                    <div className="rounded-2xl border border-white/[0.06] bg-surface-800/60 overflow-hidden">
-                        <div className="h-20 bg-gradient-to-br from-brand-500/25 via-purple-500/15 to-cyan-500/10" />
-                        <div className="px-6 pb-6 -mt-8">
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-500/50 to-purple-500/50 flex items-center justify-center text-lg text-white font-bold border-4 border-surface-800 shadow-xl">
-                                {(form.displayName || 'U')[0].toUpperCase()}
-                            </div>
-                            <h3 className="text-lg font-bold text-surface-100 mt-3">{form.displayName || 'Your Name'}</h3>
-                            {form.bio && <p className="text-xs text-surface-200/50 mt-1 leading-relaxed">{form.bio}</p>}
-                            {form.walletAddress && (
-                                <div className="mt-3 px-3 py-2 rounded-xl bg-black/20 border border-white/[0.04]">
-                                    <code className="text-[10px] text-surface-200/40 font-mono break-all">{form.walletAddress}</code>
+                    {/* ── #7 + #9 Unified Stats Grid with Progress Bars ── */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {statItems.map((s) => {
+                            const Icon = s.icon;
+                            const pct = Math.min(100, Math.round((s.value / s.max) * 100));
+                            return (
+                                <div key={s.label} className="glass-card p-4 space-y-2">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${s.color}`}>
+                                            <Icon size={16} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[10px] text-surface-200/40 truncate">{s.label}</p>
+                                            <p className="text-lg font-bold text-surface-100 leading-tight">{s.value.toLocaleString()}</p>
+                                        </div>
+                                    </div>
+                                    {/* #7 Progress Bar */}
+                                    <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full ${s.barColor} transition-all duration-700 ease-out`} style={{ width: `${pct}%`, opacity: 0.6 }} />
+                                    </div>
                                 </div>
-                            )}
-                            {/* Stats */}
-                            <div className="flex items-center gap-6 mt-4 pt-3 border-t border-white/[0.06]">
-                                <div className="text-center"><span className="text-base font-bold text-surface-100">{profile?.followersCount || 0}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">Followers</p></div>
-                                <div className="text-center"><span className="text-base font-bold text-surface-100">{profile?.followingCount || 0}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">Following</p></div>
-                                <div className="text-center"><span className="text-base font-bold text-amber-400">{profile?.reputation || 0}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">Rep</p></div>
-                                <div className="text-center"><span className="text-base font-bold text-emerald-400">{parseFloat(profile?.totalTipsReceived || 0).toFixed(2)}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">Tips Rcvd</p></div>
+                            );
+                        })}
+                    </div>
+
+                    {/* ── #6 Achievement Badges ── */}
+                    <div className="glass-card p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-surface-200/60 flex items-center gap-2">
+                                <Trophy size={15} className="text-amber-400" />
+                                {t('dashboard.mySpace.achievements')}
+                            </h3>
+                            <span className="text-[10px] font-bold text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded-md">
+                                {unlockedCount}/{achievements.length}
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {achievements.map(a => (
+                                <div
+                                    key={a.id}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-medium border transition-all ${
+                                        a.unlocked
+                                            ? 'bg-white/[0.06] border-white/[0.1] text-surface-100'
+                                            : 'bg-white/[0.02] border-white/[0.04] text-surface-200/20'
+                                    }`}
+                                    title={a.label}
+                                >
+                                    <span className={`text-sm ${a.unlocked ? '' : 'grayscale opacity-30'}`}>{a.emoji}</span>
+                                    <span className="hidden sm:inline">{a.label}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* ── #10 Inline-Edit Hub Profile ── */}
+                    <div className="glass-card overflow-hidden">
+                        <div className="h-16 bg-gradient-to-br from-brand-500/25 via-purple-500/15 to-cyan-500/10" />
+                        <div className="px-6 pb-6 -mt-6 space-y-4">
+                            <div className="flex items-end gap-4">
+                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-500/50 to-purple-500/50 flex items-center justify-center text-lg text-white font-bold border-4 border-surface-800 shadow-xl flex-shrink-0">
+                                    {(form.displayName || 'U')[0].toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[9px] text-surface-200/25 uppercase tracking-wider mb-0.5">{t('dashboard.mySpace.hubProfile')}</p>
+                                    {/* Inline-edit: Display Name */}
+                                    {editingField === 'name' ? (
+                                        <input
+                                            value={form.displayName}
+                                            onChange={e => setForm({ ...form, displayName: e.target.value })}
+                                            onBlur={() => setEditingField(null)}
+                                            className="w-full bg-transparent border-b border-brand-500/30 text-lg font-bold text-surface-100 outline-none pb-0.5"
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <h3
+                                            className="text-lg font-bold text-surface-100 cursor-pointer hover:text-brand-400 transition-colors truncate"
+                                            onClick={() => setEditingField('name')}
+                                            title={t('dashboard.mySpace.clickToEdit')}
+                                        >
+                                            {form.displayName || t('dashboard.mySpace.yourName')} ✏️
+                                        </h3>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Inline-edit: Bio */}
+                            <div>
+                                <p className="text-[9px] text-surface-200/20 uppercase tracking-wider mb-1">{t('dashboard.mySpace.bio')}</p>
+                                {editingField === 'bio' ? (
+                                    <textarea
+                                        value={form.bio}
+                                        onChange={e => setForm({ ...form, bio: e.target.value })}
+                                        onBlur={() => setEditingField(null)}
+                                        className="w-full h-20 bg-transparent border border-brand-500/20 rounded-xl p-3 text-xs text-surface-100 outline-none resize-none"
+                                        autoFocus
+                                    />
+                                ) : (
+                                    <p
+                                        className="text-xs text-surface-200/50 leading-relaxed cursor-pointer hover:text-surface-200/80 transition-colors min-h-[1.5rem]"
+                                        onClick={() => setEditingField('bio')}
+                                    >
+                                        {form.bio || t('dashboard.mySpace.bioPlaceholder')} ✏️
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Inline-edit: Wallet */}
+                            <div>
+                                <p className="text-[9px] text-surface-200/20 uppercase tracking-wider mb-1">{t('dashboard.mySpace.walletLabel')}</p>
+                                {editingField === 'wallet' ? (
+                                    <input
+                                        value={form.walletAddress}
+                                        onChange={e => setForm({ ...form, walletAddress: e.target.value })}
+                                        onBlur={() => setEditingField(null)}
+                                        className="w-full bg-transparent border border-brand-500/20 rounded-xl px-3 py-2 text-[11px] text-surface-100 outline-none font-mono"
+                                        placeholder="0x..."
+                                        autoFocus
+                                    />
+                                ) : (
+                                    <div
+                                        className="px-3 py-2 rounded-xl bg-black/20 border border-white/[0.04] cursor-pointer hover:border-white/[0.1] transition-colors"
+                                        onClick={() => setEditingField('wallet')}
+                                    >
+                                        <code className="text-[10px] text-surface-200/40 font-mono break-all">
+                                            {form.walletAddress || t('dashboard.mySpace.walletPlaceholder')} ✏️
+                                        </code>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Social Stats + Save */}
+                            <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
+                                <div className="flex items-center gap-5">
+                                    <div className="text-center"><span className="text-sm font-bold text-surface-100">{profile?.followersCount || 0}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">{t('dashboard.mySpace.followers')}</p></div>
+                                    <div className="text-center"><span className="text-sm font-bold text-surface-100">{profile?.followingCount || 0}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">{t('dashboard.mySpace.following')}</p></div>
+                                    <div className="text-center"><span className="text-sm font-bold text-amber-400">{profile?.reputation || 0}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">{t('dashboard.mySpace.reputation')}</p></div>
+                                    <div className="text-center"><span className="text-sm font-bold text-emerald-400">{parseFloat(profile?.totalTipsReceived || 0).toFixed(2)}</span><p className="text-[8px] text-surface-200/25 uppercase tracking-wider">{t('dashboard.mySpace.tipsReceived')}</p></div>
+                                </div>
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saving}
+                                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-xs font-bold shadow-lg hover:shadow-brand-500/30 disabled:opacity-30 transition-all"
+                                >
+                                    {saving ? <Loader2 size={12} className="animate-spin" /> : saved ? <Check size={12} /> : <User size={12} />}
+                                    {saved ? t('dashboard.mySpace.saved') : t('dashboard.mySpace.saveProfile')}
+                                </button>
                             </div>
                         </div>
                     </div>
-                </div>
+                </>
             )}
         </div>
     );
@@ -1588,56 +1825,113 @@ function CommunitiesView({ t, navigate, tokenAddresses, prices, priceLoading, to
 export default function CommunityPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const tokenAddresses = useMemo(() => COMMUNITIES.map(c => c.token), []);
-    const { prices, loading: priceLoading } = useTokenPrices(tokenAddresses);
-    const tokenInfo = useTokenInfo(tokenAddresses);
-    const holderCounts = useTokenHolders(tokenAddresses);
-    const { votes, voted, toggleVote } = useVotes();
     const [activeFilter, setActiveFilter] = useState('all');
-    const [viewMode, setViewMode] = useState('communities');
+    const [viewMode, setViewMode] = useState('profile');
+    const [tabHistory, setTabHistory] = useState(['profile']); // Navigation history
     const [dmUnread, setDmUnread] = useState(0);
 
     useEffect(() => {
         api.getUnreadDMs().then(r => setDmUnread(r.unreadCount || 0)).catch(() => {});
     }, [viewMode]);
 
-    const filteredCommunities = useMemo(() => {
-        if (activeFilter === 'all') return COMMUNITIES;
-        if (activeFilter === 'gamefi') return COMMUNITIES.filter(c => c.links.gamefi);
-        if (activeFilter === 'defi') return COMMUNITIES.filter(c => c.links.defi);
-        return COMMUNITIES;
-    }, [activeFilter]);
+    const tabs = useMemo(() => [
+        { id: 'profile', icon: User, label: t('dashboard.socialHub.tabs.myProfile') },
+        { id: 'communities', icon: Globe, label: t('dashboard.socialHub.tabs.communities') },
+        { id: 'social', icon: MessageCircle, label: t('dashboard.socialHub.tabs.socialFeed') },
+        { id: 'messages', icon: Send, label: t('dashboard.socialHub.tabs.messages'), badge: dmUnread },
+        { id: 'leaderboard', icon: Star, label: t('dashboard.socialHub.tabs.leaderboard') },
+    ], [t, dmUnread]);
+
+    const switchTab = useCallback((id) => {
+        setTabHistory(prev => [...prev, id]);
+        setViewMode(id);
+    }, []);
+
+    const goBack = useCallback(() => {
+        setTabHistory(prev => {
+            if (prev.length <= 1) return prev;
+            const next = prev.slice(0, -1);
+            setViewMode(next[next.length - 1]);
+            return next;
+        });
+    }, []);
+
+    const currentTab = tabs.find(tab => tab.id === viewMode);
+    const canGoBack = tabHistory.length > 1;
 
     return (
-        <div className="space-y-6">
-            {/* Top-level tab switcher */}
-            <div className="flex items-center gap-2 flex-wrap">
-                {[
-                    { id: 'communities', icon: Globe, label: 'Communities' },
-                    { id: 'social', icon: MessageCircle, label: 'Social Feed' },
-                    { id: 'messages', icon: Send, label: 'Messages', badge: dmUnread },
-                    { id: 'leaderboard', icon: Star, label: 'Leaderboard' },
-                    { id: 'profile', icon: User, label: 'My Profile' },
-                ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setViewMode(tab.id)}
-                        className={`relative flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold border transition-all ${viewMode === tab.id ? 'bg-gradient-to-r from-brand-500/20 to-purple-500/20 border-brand-500/30 text-surface-100 shadow-lg shadow-brand-500/10' : 'bg-white/[0.03] border-white/[0.06] text-surface-200/40 hover:bg-white/[0.06]'}`}
-                    >
-                        <tab.icon size={14} /> {tab.label}
-                        {tab.badge > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[7px] text-white font-bold flex items-center justify-center">{tab.badge > 9 ? '9+' : tab.badge}</span>}
-                    </button>
-                ))}
+        <div className="space-y-5">
+            {/* ── Professional Page Header ── */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                    {canGoBack && (
+                        <button
+                            onClick={goBack}
+                            className="p-2 rounded-xl bg-white/[0.04] border border-white/[0.06] text-surface-200/40 hover:text-surface-100 hover:bg-white/[0.08] hover:border-white/[0.12] transition-all active:scale-90"
+                            title={t('dashboard.mySpace.back')}
+                        >
+                            <ArrowLeft size={16} />
+                        </button>
+                    )}
+                    <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center flex-shrink-0">
+                            <Sparkles size={16} className="text-brand-400" />
+                        </div>
+                        <div className="min-w-0">
+                            {/* Breadcrumb */}
+                            <div className="flex items-center gap-1.5 text-[10px] text-surface-200/30">
+                                <button onClick={() => switchTab('profile')} className="hover:text-brand-400 transition-colors">{t('dashboard.sidebar.mySpace')}</button>
+                                {viewMode !== 'profile' && (
+                                    <>
+                                        <ChevronRight size={10} className="flex-shrink-0" />
+                                        <span className="text-surface-200/50 truncate">{currentTab?.label}</span>
+                                    </>
+                                )}
+                            </div>
+                            <h1 className="text-lg font-bold text-surface-100 leading-tight truncate">{currentTab?.label || t('dashboard.sidebar.mySpace')}</h1>
+                        </div>
+                    </div>
+                </div>
             </div>
 
+            {/* ── Professional Tab Bar ── */}
+            <div className="relative">
+                {/* Tab container with horizontal scroll on mobile */}
+                <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide pb-px">
+                    {tabs.map(tab => {
+                        const isActive = viewMode === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => switchTab(tab.id)}
+                                className={`relative flex items-center gap-2 px-4 py-2.5 text-xs font-semibold whitespace-nowrap transition-all duration-200
+                                    ${isActive
+                                        ? 'text-brand-400'
+                                        : 'text-surface-200/40 hover:text-surface-200/70 hover:bg-white/[0.03]'
+                                    } rounded-xl`}
+                            >
+                                <tab.icon size={14} className={isActive ? 'text-brand-400' : ''} />
+                                {tab.label}
+                                {tab.badge > 0 && (
+                                    <span className="w-4 h-4 rounded-full bg-red-500 text-[7px] text-white font-bold flex items-center justify-center flex-shrink-0">
+                                        {tab.badge > 9 ? '9+' : tab.badge}
+                                    </span>
+                                )}
+                                {/* Active indicator line */}
+                                {isActive && (
+                                    <div className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-gradient-to-r from-brand-500 to-purple-500" />
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+                {/* Full-width divider */}
+                <div className="absolute bottom-0 left-0 right-0 h-px bg-white/[0.06]" />
+            </div>
+
+            {/* ── Tab Content ── */}
             {viewMode === 'communities' ? (
-                <CommunitiesView
-                    t={t} navigate={navigate} tokenAddresses={tokenAddresses}
-                    prices={prices} priceLoading={priceLoading} tokenInfo={tokenInfo}
-                    holderCounts={holderCounts} votes={votes} voted={voted} toggleVote={toggleVote}
-                    activeFilter={activeFilter} setActiveFilter={setActiveFilter}
-                    filteredCommunities={filteredCommunities}
-                />
+                <LazyCommunitiesView t={t} navigate={navigate} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
             ) : viewMode === 'social' ? (
                 <SocialFeedView />
             ) : viewMode === 'messages' ? (
@@ -1648,5 +1942,31 @@ export default function CommunityPage() {
                 <MyProfileView />
             )}
         </div>
+    );
+}
+
+/* #3 Lazy-load: only fetch token prices when Communities tab is active */
+function LazyCommunitiesView({ t, navigate, activeFilter, setActiveFilter }) {
+    const tokenAddresses = useMemo(() => COMMUNITIES.map(c => c.token), []);
+    const { prices, loading: priceLoading } = useTokenPrices(tokenAddresses);
+    const tokenInfo = useTokenInfo(tokenAddresses);
+    const holderCounts = useTokenHolders(tokenAddresses);
+    const { votes, voted, toggleVote } = useVotes();
+
+    const filteredCommunities = useMemo(() => {
+        if (activeFilter === 'all') return COMMUNITIES;
+        if (activeFilter === 'gamefi') return COMMUNITIES.filter(c => c.links.gamefi);
+        if (activeFilter === 'defi') return COMMUNITIES.filter(c => c.links.defi);
+        return COMMUNITIES;
+    }, [activeFilter]);
+
+    return (
+        <CommunitiesView
+            t={t} navigate={navigate} tokenAddresses={tokenAddresses}
+            prices={prices} priceLoading={priceLoading} tokenInfo={tokenInfo}
+            holderCounts={holderCounts} votes={votes} voted={voted} toggleVote={toggleVote}
+            activeFilter={activeFilter} setActiveFilter={setActiveFilter}
+            filteredCommunities={filteredCommunities}
+        />
     );
 }
