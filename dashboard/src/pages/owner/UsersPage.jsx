@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import api from '@/api/client';
-import { Users, Search, ShieldX, Shield, Crown, RefreshCw, Download, CheckSquare } from 'lucide-react';
+import { Users, Search, ShieldX, Shield, Crown, RefreshCw, Download, CheckSquare, Wallet } from 'lucide-react';
 
 export default function UsersPage() {
     const { t } = useTranslation();
@@ -204,14 +204,15 @@ export default function UsersPage() {
                                 <th className="text-left px-5 py-3 text-surface-200/50 font-medium">Name</th>
                                 <th className="text-left px-5 py-3 text-surface-200/50 font-medium">{t('dashboard.users.language')}</th>
                                 <th className="text-left px-5 py-3 text-surface-200/50 font-medium">{t('dashboard.users.lastSeen')}</th>
+                                <th className="text-right px-5 py-3 text-surface-200/50 font-medium">Wallet Limit</th>
                                 <th className="text-right px-5 py-3 text-surface-200/50 font-medium">{t('dashboard.common.actions')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan={5} className="text-center py-8 text-surface-200/40">{t('dashboard.common.loading')}</td></tr>
+                                <tr><td colSpan={7} className="text-center py-8 text-surface-200/40">{t('dashboard.common.loading')}</td></tr>
                             ) : filteredUsers.length === 0 ? (
-                                <tr><td colSpan={5} className="text-center py-8 text-surface-200/40">{t('dashboard.users.noUsers')}</td></tr>
+                                <tr><td colSpan={7} className="text-center py-8 text-surface-200/40">{t('dashboard.users.noUsers')}</td></tr>
                             ) : (
                                 filteredUsers.map((u) => {
                                     const uid = u.chatId || u.userId;
@@ -231,6 +232,25 @@ export default function UsersPage() {
                                         </td>
                                         <td className="px-5 py-3 text-surface-200/60">{u.lang || 'en'}</td>
                                         <td className="px-5 py-3 text-surface-200/60 text-xs">{formatDate(u.lastSeen)}</td>
+                                        <td className="px-5 py-3 text-right">
+                                            {tab !== 'banned' && (
+                                                <div className="flex items-center gap-1 justify-end">
+                                                    <Wallet size={10} className="text-surface-200/30" />
+                                                    <select
+                                                        value={u.walletLimit || 50}
+                                                        onChange={async (e) => {
+                                                            try {
+                                                                await api.setUserWalletLimit(u.chatId || u.userId, parseInt(e.target.value));
+                                                                fetchData();
+                                                            } catch {}
+                                                        }}
+                                                        className="bg-surface-800/60 border border-white/10 rounded px-1 py-0.5 text-[10px] text-surface-200/60 outline-none"
+                                                    >
+                                                        {[50, 100, 200, 300, 500, 1000].map(n => <option key={n} value={n}>{n}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="px-5 py-3 text-right">
                                             {tab === 'banned' ? (
                                                 <button onClick={() => handleUnban(u.userId)} className="text-xs text-emerald-400 hover:text-emerald-300 font-medium">

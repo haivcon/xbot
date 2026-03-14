@@ -311,9 +311,22 @@ class ApiClient {
     // === Wallet APIs ===
     getWallets() { return this.get('/market/wallets'); }
     createWallet(name) { return this.post('/market/wallets/create', { name }); }
+    importWallet(keys) { return this.post('/market/wallets/import', { keys }); }
     getWalletBalance(id) { return this.get(`/market/wallets/${id}/balance`); }
     deleteWallet(id) { return this.delete(`/market/wallets/${id}`); }
     setDefaultWallet(id) { return this.post(`/market/wallets/${id}/set-default`); }
+    renameWallet(id, name) { return this.put(`/market/wallets/${id}/rename`, { name }); }
+    exportWalletKey(id, pin) { return this.post(`/market/wallets/${id}/export-key`, { pin }); }
+    updateWalletTags(id, tags) { return this.put(`/market/wallets/${id}/tags`, { tags }); }
+    // PIN
+    getPinStatus() { return this.get('/market/wallets/pin/status'); }
+    setPin(newPin, currentPin) { return this.post('/market/wallets/pin/set', { newPin, currentPin }); }
+    verifyPin(pin) { return this.post('/market/wallets/pin/verify', { pin }); }
+    removePin(currentPin) { return this.post('/market/wallets/pin/remove', { currentPin }); }
+    // Portfolio
+    getPortfolioHistory(days = 30) { return this.get(`/market/wallets/portfolio-history?days=${days}`); }
+    // Admin
+    setUserWalletLimit(userId, limit) { return this.put(`/market/admin/users/${userId}/wallet-limit`, { limit }); }
 
     // === Swap APIs ===
     getSwapQuote(params) { return this.post('/market/swap/quote', params); }

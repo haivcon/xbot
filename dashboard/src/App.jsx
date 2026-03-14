@@ -107,8 +107,8 @@ export default function App() {
                     )}
                     <Route path="users" element={isOwnerView() ? <SuspenseWrapper><UsersPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     <Route path="groups" element={isOwnerView() ? <SuspenseWrapper><GroupsPage /></SuspenseWrapper> : <Navigate to="/" />} />
-                    <Route path="analytics" element={isOwnerView() ? <SuspenseWrapper><AnalyticsPage /></SuspenseWrapper> : <Navigate to="/" />} />
-                    <Route path="alerts" element={isOwnerView() ? <SuspenseWrapper><AlertsPage /></SuspenseWrapper> : <Navigate to="/" />} />
+                    <Route path="analytics" element={<SuspenseWrapper><AnalyticsPage /></SuspenseWrapper>} />
+                    <Route path="alerts" element={<SuspenseWrapper><AlertsPage /></SuspenseWrapper>} />
                     <Route path="posts" element={isOwnerView() ? <SuspenseWrapper><PostsPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     <Route path="config" element={isOwnerView() ? <SuspenseWrapper><ConfigPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     {/* User Routes */}

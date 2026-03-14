@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import useWsStore from '@/stores/wsStore';
 import useThemeStore from '@/stores/themeStore';
 import { SkeletonStatCards, SkeletonCard } from '@/components/Skeleton';
+
+const AnalyticsSection = lazy(() => import('./AnalyticsPage'));
 import {
     Activity,
     Database,
@@ -546,6 +548,13 @@ export default function DashboardPage() {
                     )}
                 </>
             )}
+
+            {/* ── Analytics Section (embedded) ── */}
+            <div className="border-t border-white/5 pt-6 mt-2">
+                <Suspense fallback={<SkeletonCard lines={4} />}>
+                    <AnalyticsSection />
+                </Suspense>
+            </div>
         </div>
     );
 }

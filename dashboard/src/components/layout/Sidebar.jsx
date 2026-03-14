@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
@@ -33,6 +33,7 @@ import {
     CalendarCheck,
     Zap,
     Compass,
+    ChevronRight,
 } from 'lucide-react';
 import useThemeStore from '@/stores/themeStore';
 
@@ -44,6 +45,23 @@ const LANGUAGES = [
     { code: 'ru', flag: '🇷🇺', label: 'Русский' },
     { code: 'id', flag: '🇮🇩', label: 'Indonesia' },
 ];
+
+const STORAGE_KEY = 'xbot_sidebar_collapsed';
+
+function getCollapsedState() {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        return stored ? JSON.parse(stored) : {};
+    } catch {
+        return {};
+    }
+}
+
+function setCollapsedState(state) {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch { /* noop */ }
+}
 
 function LanguageDropdown() {
     const { i18n } = useTranslation();
@@ -93,43 +111,153 @@ function LanguageDropdown() {
     );
 }
 
+function SidebarGroup({ groupKey, label, icon: GroupIcon, items, collapsed, onToggle, onClose, currentPath }) {
+    const hasActiveChild = items.some(item => {
+        if (item.to === '/') return currentPath === '/';
+        return currentPath.startsWith(item.to);
+    });
+
+    // Auto-expand when a child is active
+    useEffect(() => {
+        if (hasActiveChild && collapsed) {
+            onToggle();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPath]);
+
+    return (
+        <div className="mb-1">
+            <button
+                onClick={onToggle}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wider text-surface-200/40 hover:text-surface-200/60 hover:bg-white/[0.03] transition-all group"
+            >
+                <ChevronRight
+                    size={12}
+                    className={`transition-transform duration-200 ${collapsed ? '' : 'rotate-90'}`}
+                />
+                {GroupIcon && <GroupIcon size={13} className="opacity-50" />}
+                <span className="flex-1 text-left">{label}</span>
+                <span className={`text-[10px] font-normal tabular-nums px-1.5 py-0.5 rounded-md transition-colors ${
+                    hasActiveChild ? 'text-brand-400 bg-brand-400/10' : 'text-surface-200/25 bg-white/[0.03]'
+                }`}>{items.length}</span>
+            </button>
+
+            <div
+                className={`overflow-hidden transition-all duration-200 ease-in-out ${
+                    collapsed ? 'max-h-0 opacity-0' : 'max-h-[2000px] opacity-100'
+                }`}
+            >
+                <div className="space-y-0.5 mt-0.5 ml-1">
+                    {items.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                            <NavLink
+                                key={item.to}
+                                to={item.to}
+                                end={item.to === '/'}
+                                onClick={onClose}
+                                className={({ isActive }) => isActive ? 'sidebar-link-active' : 'sidebar-link'}
+                            >
+                                <Icon size={18} />
+                                <span>{item.label}</span>
+                            </NavLink>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function Sidebar({ open, onClose }) {
     const { t } = useTranslation();
     const { isOwner, isOwnerView, user, logout, toggleViewMode, viewMode } = useAuthStore();
     const { theme, toggleTheme } = useThemeStore();
     const location = useLocation();
 
-    const ownerLinks = [
-        { to: '/', icon: LayoutDashboard, label: t('dashboard.sidebar.home') },
-        { to: '/users', icon: Users, label: t('dashboard.sidebar.users') },
-        { to: '/groups', icon: MessageSquare, label: t('dashboard.sidebar.groups') },
-        { to: '/alerts', icon: Bell, label: t('dashboard.sidebar.alerts') },
-        { to: '/posts', icon: CalendarClock, label: t('dashboard.sidebar.posts') },
-        { to: '/analytics', icon: BarChart3, label: t('dashboard.sidebar.analytics') },
-        { to: '/config', icon: Settings, label: t('dashboard.sidebar.config') },
-        { to: '/audit-log', icon: Shield, label: t('dashboard.sidebar.auditLog') || 'Audit Log' },
-        { to: '/checkin-admin', icon: CalendarCheck, label: t('dashboard.sidebar.checkinAdmin') || 'Check-in Admin' },
-    ];
+    const [collapsedGroups, setCollapsedGroups] = useState(getCollapsedState);
 
-    const userLinks = [
-        { to: '/chat', icon: Bot, label: t('dashboard.sidebar.aiChat') || 'AI Chat', highlight: true },
-        { to: '/profile', icon: User, label: t('dashboard.sidebar.profile') },
-        { to: '/wallets', icon: Wallet, label: t('dashboard.sidebar.wallets') },
-        { to: '/portfolio', icon: PieChart, label: t('dashboard.sidebar.portfolio') || 'Portfolio' },
-        { to: '/history', icon: History, label: t('dashboard.sidebar.history') || 'Transfer History' },
-        { to: '/trading', icon: BarChart3, label: t('dashboard.sidebar.trading') },
-        { to: '/okx-trading', icon: BarChart3, label: t('dashboard.sidebar.okxTrading') || 'OKX Trading' },
-        { to: '/token-lookup', icon: Search, label: t('dashboard.sidebar.tokenLookup') || 'Token Lookup' },
-        { to: '/meme-scanner', icon: Zap, label: 'Meme Scanner' },
-        { to: '/discovery', icon: Compass, label: 'Discovery' },
-        { to: '/leaderboard', icon: Trophy, label: t('dashboard.sidebar.leaderboard') },
-        { to: '/games', icon: Gamepad2, label: t('dashboard.sidebar.games') || 'Mini Games' },
-        { to: '/ai-memory', icon: Brain, label: t('dashboard.sidebar.aiMemory') || 'AI Memory' },
-        { to: '/community', icon: Globe, label: t('dashboard.sidebar.community') || 'X Layer Community', highlight: false },
-        { to: '/settings', icon: Settings, label: t('dashboard.sidebar.settings') },
-    ];
+    const toggleGroup = (key) => {
+        setCollapsedGroups(prev => {
+            const next = { ...prev, [key]: !prev[key] };
+            setCollapsedState(next);
+            return next;
+        });
+    };
 
-    const navItems = isOwnerView() ? [...ownerLinks, { divider: true }, ...userLinks] : userLinks;
+    const ownerGroups = useMemo(() => [
+        {
+            key: 'admin',
+            label: t('dashboard.sidebar.groupAdmin') || 'Administration',
+            icon: LayoutDashboard,
+            items: [
+                { to: '/', icon: LayoutDashboard, label: t('dashboard.sidebar.home') },
+                { to: '/users', icon: Users, label: t('dashboard.sidebar.users') },
+                { to: '/groups', icon: MessageSquare, label: t('dashboard.sidebar.groups') },
+                { to: '/alerts', icon: Bell, label: t('dashboard.sidebar.alerts') },
+                { to: '/posts', icon: CalendarClock, label: t('dashboard.sidebar.posts') },
+            ],
+        },
+        {
+            key: 'config',
+            label: t('dashboard.sidebar.groupConfig') || 'Configuration',
+            icon: Settings,
+            items: [
+                { to: '/config', icon: Settings, label: t('dashboard.sidebar.config') },
+                { to: '/audit-log', icon: Shield, label: t('dashboard.sidebar.auditLog') || 'Audit Log' },
+                { to: '/checkin-admin', icon: CalendarCheck, label: t('dashboard.sidebar.checkinAdmin') || 'Check-in Admin' },
+            ],
+        },
+    ], [t]);
+
+    const userGroups = useMemo(() => [
+        {
+            key: 'ai',
+            label: t('dashboard.sidebar.groupAI') || 'AI & Chat',
+            icon: Bot,
+            items: [
+                { to: '/chat', icon: Bot, label: t('dashboard.sidebar.aiChat') || 'AI Chat' },
+                { to: '/ai-memory', icon: Brain, label: t('dashboard.sidebar.aiMemory') || 'AI Memory' },
+            ],
+        },
+        {
+            key: 'finance',
+            label: t('dashboard.sidebar.groupFinance') || 'Assets & Trading',
+            icon: Wallet,
+            items: [
+                { to: '/profile', icon: User, label: t('dashboard.sidebar.profile') },
+                { to: '/wallets', icon: Wallet, label: t('dashboard.sidebar.wallets') },
+                { to: '/trading', icon: BarChart3, label: t('dashboard.sidebar.dexTrading') || 'DEX Trading' },
+                { to: '/okx-trading', icon: BarChart3, label: t('dashboard.sidebar.okxTrading') || 'OKX Trading' },
+            ],
+        },
+        {
+            key: 'explore',
+            label: t('dashboard.sidebar.groupExplore') || 'Explore',
+            icon: Compass,
+            items: [
+                { to: '/token-lookup', icon: Search, label: t('dashboard.sidebar.tokenLookup') || 'Token Lookup' },
+                { to: '/meme-scanner', icon: Zap, label: 'Meme Scanner' },
+                { to: '/discovery', icon: Compass, label: 'Discovery' },
+                { to: '/leaderboard', icon: Trophy, label: t('dashboard.sidebar.leaderboard') },
+                { to: '/alerts', icon: Bell, label: t('dashboard.sidebar.alerts') },
+            ],
+        },
+        {
+            key: 'community',
+            label: t('dashboard.sidebar.groupCommunity') || 'Community & Fun',
+            icon: Gamepad2,
+            items: [
+                { to: '/games', icon: Gamepad2, label: t('dashboard.sidebar.games') || 'Mini Games' },
+                { to: '/community', icon: Globe, label: t('dashboard.sidebar.community') || 'X Layer Community' },
+                { to: '/settings', icon: Settings, label: t('dashboard.sidebar.settings') },
+            ],
+        },
+    ], [t]);
+
+    const groups = isOwnerView()
+        ? [...ownerGroups, ...userGroups]
+        : userGroups;
 
     return (
         <aside
@@ -199,26 +327,26 @@ export default function Sidebar({ open, onClose }) {
                 </div>
             </div>
 
-            {/* Navigation */}
-            <nav className="flex-1 overflow-auto px-3 py-4 space-y-1">
-                {navItems.map((item, i) => {
-                    if (item.divider) {
-                        return <div key={`div-${i}`} className="my-3 h-px bg-white/5" />;
-                    }
-                    const Icon = item.icon;
-                    return (
-                        <NavLink
-                            key={item.to}
-                            to={item.to}
-                            end={item.to === '/'}
-                            onClick={onClose}
-                            className={({ isActive }) => isActive ? 'sidebar-link-active' : 'sidebar-link'}
-                        >
-                            <Icon size={18} />
-                            <span>{item.label}</span>
-                        </NavLink>
-                    );
-                })}
+            {/* Navigation — grouped */}
+            <nav className="flex-1 overflow-auto px-3 py-3 space-y-0.5">
+                {groups.map((group, i) => (
+                    <div key={group.key}>
+                        {/* Divider between owner and user groups */}
+                        {isOwnerView() && i === ownerGroups.length && (
+                            <div className="my-2 h-px bg-white/5" />
+                        )}
+                        <SidebarGroup
+                            groupKey={group.key}
+                            label={group.label}
+                            icon={group.icon}
+                            items={group.items}
+                            collapsed={!!collapsedGroups[group.key]}
+                            onToggle={() => toggleGroup(group.key)}
+                            onClose={onClose}
+                            currentPath={location.pathname}
+                        />
+                    </div>
+                ))}
             </nav>
 
             {/* Bottom section: View Toggle + Language + Logout */}

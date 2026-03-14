@@ -596,6 +596,25 @@ async function init() {
         await dbRun(`ALTER TABLE user_trading_wallets ADD COLUMN tags TEXT DEFAULT ''`);
     } catch (e) { /* Column likely exists already */ }
 
+    // Migration: add lastExportedAt for backup reminder
+    try {
+        await dbRun(`ALTER TABLE user_trading_wallets ADD COLUMN lastExportedAt INTEGER DEFAULT 0`);
+    } catch (e) { /* Column likely exists already */ }
+
+    // Migration: add walletLimit to users for owner-controlled limit
+    try {
+        await dbRun(`ALTER TABLE users ADD COLUMN walletLimit INTEGER DEFAULT 50`);
+    } catch (e) { /* Column likely exists already */ }
+
+    // Portfolio snapshots for chart
+    await dbRun(`CREATE TABLE IF NOT EXISTS wallet_portfolio_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        totalUsd REAL DEFAULT 0,
+        snapshotAt INTEGER NOT NULL
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_portfolio_snap_user ON wallet_portfolio_snapshots(userId, snapshotAt DESC)`);
+
     // User OKX CEX API keys (encrypted per user)
     await dbRun(`CREATE TABLE IF NOT EXISTS user_okx_keys (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

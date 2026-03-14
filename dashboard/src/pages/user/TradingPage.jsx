@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
@@ -10,6 +10,8 @@ import {
     Flame, Trophy, Droplets, Radio, Copy, Check, Shield, Rocket,
     History, DollarSign, Users, PieChart, AlertTriangle, Eye, Send
 } from 'lucide-react';
+
+const TransferHistorySection = lazy(() => import('./TransferHistoryPage'));
 
 /* ═══════════════════════════════════════════
    Constants & Helpers
@@ -2747,6 +2749,13 @@ export default function TradingPage() {
                 <RecentTrades chainIndex={chainIndex} tokenAddress={selectedToken.addr} />
                 <TxHistory />
                 <GasWidget chainIndex={chainIndex} />
+            </div>
+
+            {/* ═══════ Transfer History (embedded) ═══════ */}
+            <div className="border-t border-white/5 pt-6 mt-2">
+                <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-brand-400" /></div>}>
+                    <TransferHistorySection />
+                </Suspense>
             </div>
 
             {/* Mobile Bottom Sheet Swap */}

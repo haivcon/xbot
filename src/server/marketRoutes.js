@@ -178,18 +178,34 @@ function createMarketRoutes() {
 
     /**
      * GET /wallets
-     * List user's trading wallets
+     * List user's trading wallets + metadata
      */
     router.get('/wallets', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
-            const { dbAll } = require('../../db/core');
-            const wallets = await dbAll(
-                'SELECT id, walletName, address, chainIndex, isDefault, tags, createdAt FROM user_trading_wallets WHERE userId = ? ORDER BY isDefault DESC, createdAt ASC',
-                [userId]
-            );
-            res.json({ wallets: wallets || [] });
+            const { dbAll, dbGet } = require('../../db/core');
+            let wallets;
+            try {
+                wallets = await dbAll(
+                    'SELECT id, walletName, address, chainIndex, isDefault, tags, lastExportedAt, createdAt FROM user_trading_wallets WHERE userId = ? ORDER BY isDefault DESC, createdAt ASC',
+                    [userId]
+                );
+            } catch {
+                // lastExportedAt column may not exist yet
+                wallets = await dbAll(
+                    'SELECT id, walletName, address, chainIndex, isDefault, tags, createdAt FROM user_trading_wallets WHERE userId = ? ORDER BY isDefault DESC, createdAt ASC',
+                    [userId]
+                );
+            }
+            let user = null;
+            try { user = await dbGet('SELECT pinCode, walletLimit FROM users WHERE chatId = ?', [userId]); } catch { /* columns may not exist */ }
+            res.json({
+                wallets: wallets || [],
+                walletCount: (wallets || []).length,
+                walletLimit: user?.walletLimit || 50,
+                hasPinCode: !!(user?.pinCode),
+            });
         } catch (err) {
             log.error('wallets error:', err.message);
             res.status(500).json({ error: err.message });
@@ -198,7 +214,7 @@ function createMarketRoutes() {
 
     /**
      * POST /wallets/create
-     * Create a new trading wallet
+     * Create a new trading wallet (syncs with bot watch wallets)
      */
     router.post('/wallets/create', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
@@ -208,6 +224,16 @@ function createMarketRoutes() {
             const crypto = require('crypto');
             const { _getEncryptKey } = require('../features/ai/onchain/helpers');
             const { dbGet, dbRun } = require('../../db/core');
+            const { addWalletToUser } = require('../../db/wallets');
+
+            // Check wallet limit
+            let userLimit = null;
+            try { userLimit = await dbGet('SELECT walletLimit FROM users WHERE chatId = ?', [userId]); } catch {}
+            const countCheck = await dbGet('SELECT COUNT(*) as cnt FROM user_trading_wallets WHERE userId = ?', [userId]);
+            const limit = userLimit?.walletLimit || 50;
+            if ((countCheck?.cnt || 0) >= limit) {
+                return res.status(403).json({ error: `Wallet limit reached (${limit}). Contact bot owner to increase.`, walletLimit: limit });
+            }
 
             const ENCRYPT_KEY = _getEncryptKey();
             const newWallet = ethers.Wallet.createRandom();
@@ -227,14 +253,12 @@ function createMarketRoutes() {
                 [userId, walletName, newWallet.address, encryptedKey, '196', isDefault, Math.floor(Date.now() / 1000)]
             );
 
+            // Sync: register as watch wallet on bot side
+            try { await addWalletToUser(userId, 'en', newWallet.address, { name: walletName }); } catch (e) { log.warn('Watch wallet sync failed:', e.message); }
+
             res.json({
                 success: true,
-                wallet: {
-                    address: newWallet.address,
-                    name: walletName,
-                    isDefault: !!isDefault
-                },
-                // Private key returned only once — frontend must display it securely
+                wallet: { address: newWallet.address, name: walletName, isDefault: !!isDefault },
                 privateKey: newWallet.privateKey
             });
         } catch (err) {
@@ -251,7 +275,7 @@ function createMarketRoutes() {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
-            const { dbGet } = require('../../db/core');
+            const { dbGet, dbRun } = require('../../db/core');
             const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
             if (!tw) return res.status(404).json({ error: 'Wallet not found' });
 
@@ -283,9 +307,20 @@ function createMarketRoutes() {
                 } catch { /* ignore */ }
             }
 
+            const tvUsd = parseFloat(totalValue?.[0]?.totalValue || '0');
+
+            // Save portfolio snapshot (throttle: max 1/hour)
+            try {
+                const nowSec = Math.floor(Date.now() / 1000);
+                const lastSnap = await dbGet('SELECT snapshotAt FROM wallet_portfolio_snapshots WHERE userId = ? ORDER BY snapshotAt DESC LIMIT 1', [userId]);
+                if (!lastSnap || nowSec - (lastSnap.snapshotAt || 0) > 3600) {
+                    await dbRun('INSERT INTO wallet_portfolio_snapshots (userId, totalUsd, snapshotAt) VALUES (?, ?, ?)', [userId, tvUsd, nowSec]);
+                }
+            } catch { /* ignore snapshot errors */ }
+
             res.json({
                 wallet: { id: tw.id, address: tw.address, name: tw.walletName, isDefault: !!tw.isDefault },
-                totalValue: totalValue?.[0]?.totalValue || '0',
+                totalValue: String(tvUsd),
                 tokens: tokenList.map(b => ({
                     symbol: b.tokenSymbol || b.symbol || '?',
                     address: b.tokenContractAddress || b.tokenAddress || '',
@@ -302,16 +337,19 @@ function createMarketRoutes() {
     });
 
     /**
-     * DELETE /wallets/:id
+     * DELETE /wallets/:id (syncs with bot watch wallets)
      */
     router.delete('/wallets/:id', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
             const { dbGet, dbRun } = require('../../db/core');
-            const tw = await dbGet('SELECT id FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
+            const { removeWalletFromUser } = require('../../db/wallets');
+            const tw = await dbGet('SELECT id, address FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
             if (!tw) return res.status(404).json({ error: 'Wallet not found' });
             await dbRun('DELETE FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
+            // Sync: remove from bot watch wallets
+            try { await removeWalletFromUser(userId, tw.address); } catch (e) { log.warn('Watch wallet unsync failed:', e.message); }
             res.json({ ok: true });
         } catch (err) {
             log.error('wallets/delete error:', err.message);
@@ -334,6 +372,337 @@ function createMarketRoutes() {
             res.json({ ok: true });
         } catch (err) {
             log.error('wallets/set-default error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    /**
+     * POST /wallets/import
+     * Bulk import wallets by private key (syncs with bot watch wallets)
+     * Body: { keys: [{ key, name? }] }  OR legacy { privateKey, name? }
+     */
+    router.post('/wallets/import', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const ethers = require('ethers');
+            const crypto = require('crypto');
+            const { _getEncryptKey } = require('../features/ai/onchain/helpers');
+            const { dbGet, dbRun } = require('../../db/core');
+            const { addWalletToUser } = require('../../db/wallets');
+            const ENCRYPT_KEY = _getEncryptKey();
+
+            // Check wallet limit
+            let user = null;
+            try { user = await dbGet('SELECT walletLimit FROM users WHERE chatId = ?', [userId]); } catch {}
+            let limitCount = null;
+            try { limitCount = await dbGet('SELECT COUNT(*) as cnt FROM user_trading_wallets WHERE userId = ?', [userId]); } catch {}
+            const walletLimit = user?.walletLimit || 50;
+
+            // Support both single and bulk import
+            let keysList = [];
+            if (Array.isArray(req.body.keys) && req.body.keys.length > 0) {
+                keysList = req.body.keys;
+            } else if (req.body.privateKey) {
+                keysList = [{ key: req.body.privateKey, name: req.body.name }];
+            }
+            if (keysList.length === 0) return res.status(400).json({ error: 'keys[] or privateKey required' });
+            if (keysList.length > 50) return res.status(400).json({ error: 'Maximum 50 keys per import' });
+
+            const results = { imported: [], duplicates: [], invalid: [] };
+
+            for (const entry of keysList) {
+                let pk = (typeof entry === 'string' ? entry : entry.key || '').trim();
+                const entryName = typeof entry === 'object' ? (entry.name || '').trim() : '';
+                if (!pk) { results.invalid.push({ key: '(empty)', error: 'Empty key' }); continue; }
+                if (!pk.startsWith('0x')) pk = '0x' + pk;
+
+                let wallet;
+                try {
+                    wallet = new ethers.Wallet(pk);
+                } catch {
+                    results.invalid.push({ key: pk.slice(0, 10) + '...', error: 'Invalid format' });
+                    continue;
+                }
+
+                const existing = await dbGet('SELECT id FROM user_trading_wallets WHERE userId = ? AND address = ?', [userId, wallet.address]);
+                if (existing) {
+                    results.duplicates.push({ address: wallet.address, name: entryName });
+                    continue;
+                }
+
+                // Check limit per iteration
+                const currentCount = await dbGet('SELECT COUNT(*) as cnt FROM user_trading_wallets WHERE userId = ?', [userId]);
+                if ((currentCount?.cnt || 0) >= walletLimit) {
+                    results.invalid.push({ key: pk.slice(0, 10) + '...', error: `Limit reached (${walletLimit})` });
+                    continue;
+                }
+
+                const iv = crypto.randomBytes(16);
+                const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPT_KEY), iv);
+                let encrypted = cipher.update(pk, 'utf8', 'hex');
+                encrypted += cipher.final('hex');
+                const encryptedKey = iv.toString('hex') + ':' + encrypted;
+
+                const hasWallets = await dbGet('SELECT id FROM user_trading_wallets WHERE userId = ? LIMIT 1', [userId]);
+                const isDefault = hasWallets ? 0 : 1;
+                const countRow = await dbGet('SELECT COUNT(*) as cnt FROM user_trading_wallets WHERE userId = ?', [userId]);
+                const walletName = entryName || `Imported #${(countRow?.cnt || 0) + 1}`;
+
+                await dbRun(
+                    'INSERT INTO user_trading_wallets (userId, walletName, address, encryptedKey, chainIndex, isDefault, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [userId, walletName, wallet.address, encryptedKey, '196', isDefault, Math.floor(Date.now() / 1000)]
+                );
+
+                // Sync: register as watch wallet on bot side
+                try { await addWalletToUser(userId, 'en', wallet.address, { name: walletName }); } catch (e) { log.warn('Watch wallet sync:', e.message); }
+
+                results.imported.push({ address: wallet.address, name: walletName, isDefault: !!isDefault });
+            }
+
+            log.info(`Bulk import: ${results.imported.length} imported, ${results.duplicates.length} duplicates, ${results.invalid.length} invalid by user ${userId}`);
+            res.json({ success: true, results });
+        } catch (err) {
+            log.error('wallets/import error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    /**
+     * PUT /wallets/:id/rename (syncs with bot watch wallets)
+     * Body: { name }
+     */
+    router.put('/wallets/:id/rename', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { dbGet, dbRun } = require('../../db/core');
+            const { addWalletToUser } = require('../../db/wallets');
+            const newName = (req.body.name || '').trim().replace(/[<>"'&]/g, '').slice(0, 30);
+            if (!newName) return res.status(400).json({ error: 'name required' });
+            const tw = await dbGet('SELECT id, address FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
+            if (!tw) return res.status(404).json({ error: 'Wallet not found' });
+            await dbRun('UPDATE user_trading_wallets SET walletName = ? WHERE id = ? AND userId = ?', [newName, req.params.id, userId]);
+            // Sync: update name in bot watch wallets
+            try { await addWalletToUser(userId, 'en', tw.address, { name: newName }); } catch (e) { log.warn('Watch wallet rename sync:', e.message); }
+            res.json({ ok: true, name: newName });
+        } catch (err) {
+            log.error('wallets/rename error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    /**
+     * POST /wallets/:id/export-key
+     * Returns the decrypted private key (rate-limited, PIN-protected, updates lastExportedAt)
+     */
+    const _exportKeyLimiter = new Map();
+    router.post('/wallets/:id/export-key', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+
+        // Rate limit: 10 exports per minute per user
+        const now = Date.now();
+        const limiter = _exportKeyLimiter.get(userId) || { count: 0, resetAt: now + 60000 };
+        if (now > limiter.resetAt) { limiter.count = 0; limiter.resetAt = now + 60000; }
+        limiter.count++;
+        _exportKeyLimiter.set(userId, limiter);
+        if (limiter.count > 10) {
+            return res.status(429).json({ error: 'Too many export requests. Please wait 1 minute.' });
+        }
+
+        try {
+            const crypto = require('crypto');
+            const { dbGet, dbRun } = require('../../db/core');
+            const { _getEncryptKey, _verifyPin } = require('../features/ai/onchain/helpers');
+
+            // PIN check
+            let user = null;
+            try { user = await dbGet('SELECT pinCode FROM users WHERE chatId = ?', [userId]); } catch {}
+            if (user?.pinCode) {
+                const pin = req.body.pin || req.headers['x-pin'];
+                if (!pin) return res.status(403).json({ error: 'PIN required', needPin: true });
+                if (!_verifyPin(pin, user.pinCode, userId)) return res.status(403).json({ error: 'Invalid PIN', needPin: true });
+            }
+
+            const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
+            if (!tw) return res.status(404).json({ error: 'Wallet not found' });
+
+            const ENCRYPT_KEY = _getEncryptKey();
+            const [ivHex, encrypted] = tw.encryptedKey.split(':');
+            const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPT_KEY), Buffer.from(ivHex, 'hex'));
+            let privateKey = decipher.update(encrypted, 'hex', 'utf8');
+            privateKey += decipher.final('utf8');
+
+            // Update lastExportedAt (non-blocking — column may not exist yet)
+            try {
+                await dbRun('UPDATE user_trading_wallets SET lastExportedAt = ? WHERE id = ?', [Math.floor(Date.now() / 1000), tw.id]);
+            } catch { /* migration may not have run yet */ }
+
+            log.info(`Key exported for wallet ${tw.address} by user ${userId}`);
+            res.json({ privateKey, address: tw.address });
+        } catch (err) {
+            log.error('wallets/export-key error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ════════════════════════════════════════
+    // PIN Endpoints
+    // ════════════════════════════════════════
+
+    /**
+     * GET /wallets/pin/status
+     */
+    router.get('/wallets/pin/status', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { dbGet } = require('../../db/core');
+            const user = await dbGet('SELECT pinCode FROM users WHERE chatId = ?', [userId]);
+            res.json({ hasPin: !!(user?.pinCode) });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    /**
+     * POST /wallets/pin/set
+     * Body: { newPin, currentPin? }
+     */
+    router.post('/wallets/pin/set', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { dbGet, dbRun } = require('../../db/core');
+            const { _hashPin, _verifyPin } = require('../features/ai/onchain/helpers');
+            const { newPin, currentPin } = req.body;
+
+            if (!newPin || !/^\d{4,6}$/.test(newPin)) {
+                return res.status(400).json({ error: 'PIN must be 4-6 digits' });
+            }
+
+            const user = await dbGet('SELECT pinCode FROM users WHERE chatId = ?', [userId]);
+            if (user?.pinCode) {
+                if (!currentPin) return res.status(403).json({ error: 'Current PIN required to change' });
+                if (!_verifyPin(currentPin, user.pinCode, userId)) return res.status(403).json({ error: 'Current PIN incorrect' });
+            }
+
+            const hashed = _hashPin(newPin, userId);
+            await dbRun('UPDATE users SET pinCode = ? WHERE chatId = ?', [hashed, userId]);
+            log.info(`PIN set by user ${userId}`);
+            res.json({ ok: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    /**
+     * POST /wallets/pin/verify
+     * Body: { pin }
+     */
+    router.post('/wallets/pin/verify', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { dbGet } = require('../../db/core');
+            const { _verifyPin } = require('../features/ai/onchain/helpers');
+            const user = await dbGet('SELECT pinCode FROM users WHERE chatId = ?', [userId]);
+            if (!user?.pinCode) return res.json({ valid: true, noPin: true });
+            const valid = _verifyPin(req.body.pin || '', user.pinCode, userId);
+            res.json({ valid });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    /**
+     * POST /wallets/pin/remove
+     * Body: { currentPin }
+     */
+    router.post('/wallets/pin/remove', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { dbGet, dbRun } = require('../../db/core');
+            const { _verifyPin } = require('../features/ai/onchain/helpers');
+            const user = await dbGet('SELECT pinCode FROM users WHERE chatId = ?', [userId]);
+            if (!user?.pinCode) return res.json({ ok: true });
+            if (!_verifyPin(req.body.currentPin || '', user.pinCode, userId)) {
+                return res.status(403).json({ error: 'PIN incorrect' });
+            }
+            await dbRun('UPDATE users SET pinCode = NULL WHERE chatId = ?', [userId]);
+            res.json({ ok: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ════════════════════════════════════════
+    // Tags Endpoint
+    // ════════════════════════════════════════
+
+    /**
+     * PUT /wallets/:id/tags
+     * Body: { tags: ['Trading', 'DCA'] }
+     */
+    router.put('/wallets/:id/tags', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { dbGet, dbRun } = require('../../db/core');
+            const tw = await dbGet('SELECT id FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
+            if (!tw) return res.status(404).json({ error: 'Wallet not found' });
+            const tags = Array.isArray(req.body.tags) ? req.body.tags.slice(0, 5).map(t => String(t).replace(/[<>"'&]/g, '').slice(0, 20)) : [];
+            await dbRun('UPDATE user_trading_wallets SET tags = ? WHERE id = ? AND userId = ?', [JSON.stringify(tags), req.params.id, userId]);
+            res.json({ ok: true, tags });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ════════════════════════════════════════
+    // Portfolio History
+    // ════════════════════════════════════════
+
+    /**
+     * GET /wallets/portfolio-history?days=30
+     */
+    router.get('/wallets/portfolio-history', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { dbAll } = require('../../db/core');
+            const days = Math.min(parseInt(req.query.days) || 30, 90);
+            const since = Math.floor(Date.now() / 1000) - days * 86400;
+            const snapshots = await dbAll(
+                'SELECT totalUsd, snapshotAt FROM wallet_portfolio_snapshots WHERE userId = ? AND snapshotAt > ? ORDER BY snapshotAt ASC',
+                [userId, since]
+            );
+            res.json({ snapshots: snapshots || [] });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ════════════════════════════════════════
+    // Admin: Wallet Limit
+    // ════════════════════════════════════════
+
+    /**
+     * PUT /admin/users/:id/wallet-limit
+     * Body: { limit: 100 }
+     */
+    router.put('/admin/users/:id/wallet-limit', async (req, res) => {
+        if (!req.dashboardUser?.isOwner) return res.status(403).json({ error: 'Owner only' });
+        try {
+            const { dbRun } = require('../../db/core');
+            const newLimit = parseInt(req.body.limit) || 50;
+            if (newLimit < 1 || newLimit > 10000) return res.status(400).json({ error: 'Limit must be 1-10000' });
+            await dbRun('UPDATE users SET walletLimit = ? WHERE chatId = ?', [newLimit, req.params.id]);
+            log.info(`Wallet limit set to ${newLimit} for user ${req.params.id} by owner`);
+            res.json({ ok: true, limit: newLimit });
+        } catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
