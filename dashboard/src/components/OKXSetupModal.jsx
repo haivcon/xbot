@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import {
     Key, Eye, EyeOff, Shield, AlertTriangle, Loader2, Check, X, ExternalLink
@@ -9,6 +10,7 @@ import {
  * Guided wizard for entering and verifying OKX API credentials.
  */
 export default function OKXSetupModal({ onClose, onSaved }) {
+    const { t } = useTranslation();
     const [step, setStep] = useState(1);
     const [apiKey, setApiKey] = useState('');
     const [secretKey, setSecretKey] = useState('');
@@ -104,7 +106,7 @@ export default function OKXSetupModal({ onClose, onSaved }) {
 
                         <a href="https://www.okx.com/account/my-api" target="_blank" rel="noopener"
                             className="flex items-center justify-center gap-1.5 text-[10px] text-brand-400 hover:underline">
-                            <ExternalLink size={10} /> Get API keys from OKX
+                            <ExternalLink size={10} /> {t('dashboard.okxSetup.getApiKeys', 'Get API keys from OKX')}
                         </a>
                     </div>
                 ) : (
@@ -151,7 +153,7 @@ export default function OKXSetupModal({ onClose, onSaved }) {
                             <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/10">
                                 <p className="text-[10px] text-red-400/80 flex items-start gap-1.5">
                                     <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-                                    <span><strong>Live mode:</strong> Trades will use real funds. We recommend using a sub-account API key with only Trade permission. Never enable Withdrawal.</span>
+                                    <span><strong>{t('dashboard.okxSetup.liveMode', 'Live mode')}:</strong> {t('dashboard.okxSetup.liveModeWarning', 'Trades will use real funds. We recommend using a sub-account API key with only Trade permission. Never enable Withdrawal.')}</span>
                                 </p>
                             </div>
                         )}

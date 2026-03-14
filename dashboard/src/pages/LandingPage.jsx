@@ -1,31 +1,32 @@
 import { useTranslation } from 'react-i18next';
 import { Bot, Globe, Shield, Sparkles, BarChart3, Wallet, LogIn, ChevronRight } from 'lucide-react';
 import config from '@/config';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default function LandingPage({ onLogin }) {
-    const { t, i18n } = useTranslation();
+    const { t } = useTranslation();
 
     const features = [
-        { icon: Shield, title: 'Role-Based Access', desc: 'Owner & User dashboards', color: 'from-blue-500 to-cyan-500' },
-        { icon: BarChart3, title: 'Analytics', desc: 'Real-time stats & charts', color: 'from-purple-500 to-pink-500' },
-        { icon: Wallet, title: 'Wallet Management', desc: 'Secure wallet overview', color: 'from-emerald-500 to-teal-500' },
-        { icon: Globe, title: '6 Languages', desc: 'EN, VI, ZH, KO, RU, ID', color: 'from-orange-500 to-amber-500' },
-        { icon: Sparkles, title: 'AI Integration', desc: 'Smart bot control', color: 'from-rose-500 to-red-500' },
-        { icon: Bot, title: 'Real-time', desc: 'Live bot monitoring', color: 'from-indigo-500 to-blue-500' },
+        { icon: Shield, title: t('dashboard.landing.featAccess'), desc: t('dashboard.landing.featAccessDesc'), color: 'from-blue-500 to-cyan-500' },
+        { icon: BarChart3, title: t('dashboard.landing.featAnalytics'), desc: t('dashboard.landing.featAnalyticsDesc'), color: 'from-purple-500 to-pink-500' },
+        { icon: Wallet, title: t('dashboard.landing.featWallets'), desc: t('dashboard.landing.featWalletsDesc'), color: 'from-emerald-500 to-teal-500' },
+        { icon: Globe, title: t('dashboard.landing.featLanguages'), desc: t('dashboard.landing.featLanguagesDesc'), color: 'from-orange-500 to-amber-500' },
+        { icon: Sparkles, title: t('dashboard.landing.featAI'), desc: t('dashboard.landing.featAIDesc'), color: 'from-rose-500 to-red-500' },
+        { icon: Bot, title: t('dashboard.landing.featRealtime'), desc: t('dashboard.landing.featRealtimeDesc'), color: 'from-indigo-500 to-blue-500' },
     ];
 
     const pages = [
-        { name: 'Dashboard', desc: 'Bot health & metrics', owner: true },
-        { name: 'Users', desc: 'User management', owner: true },
-        { name: 'Groups', desc: 'Group management', owner: true },
-        { name: 'Analytics', desc: 'Usage statistics', owner: true },
-        { name: 'Alerts', desc: 'Price alerts', owner: true },
-        { name: 'Config', desc: 'Bot configuration', owner: true },
-        { name: 'Profile', desc: 'Your profile & stats', owner: false },
-        { name: 'Settings', desc: 'Preferences', owner: false },
-        { name: 'Wallets', desc: 'Wallet overview', owner: false },
-        { name: 'Trading', desc: 'Trade history', owner: false },
-        { name: 'Leaderboard', desc: 'Top players', owner: false },
+        { name: t('dashboard.landing.pageDashboard'), desc: t('dashboard.landing.pageDashboardDesc'), owner: true },
+        { name: t('dashboard.landing.pageUsers'), desc: t('dashboard.landing.pageUsersDesc'), owner: true },
+        { name: t('dashboard.landing.pageGroups'), desc: t('dashboard.landing.pageGroupsDesc'), owner: true },
+        { name: t('dashboard.landing.pageAnalytics'), desc: t('dashboard.landing.pageAnalyticsDesc'), owner: true },
+        { name: t('dashboard.landing.pageAlerts'), desc: t('dashboard.landing.pageAlertsDesc'), owner: true },
+        { name: t('dashboard.landing.pageConfig'), desc: t('dashboard.landing.pageConfigDesc'), owner: true },
+        { name: t('dashboard.landing.pageProfile'), desc: t('dashboard.landing.pageProfileDesc'), owner: false },
+        { name: t('dashboard.landing.pageSettings'), desc: t('dashboard.landing.pageSettingsDesc'), owner: false },
+        { name: t('dashboard.landing.pageWallets'), desc: t('dashboard.landing.pageWalletsDesc'), owner: false },
+        { name: t('dashboard.landing.pageTrading'), desc: t('dashboard.landing.pageTradingDesc'), owner: false },
+        { name: t('dashboard.landing.pageLeaderboard'), desc: t('dashboard.landing.pageLeaderboardDesc'), owner: false },
     ];
 
     return (
@@ -45,24 +46,13 @@ export default function LandingPage({ onLogin }) {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <select
-                        value={i18n.language?.substring(0, 2) || 'en'}
-                        onChange={(e) => i18n.changeLanguage(e.target.value)}
-                        className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-surface-200 focus:outline-none cursor-pointer"
-                    >
-                        <option value="en">🇺🇸 EN</option>
-                        <option value="vi">🇻🇳 VI</option>
-                        <option value="zh">🇨🇳 ZH</option>
-                        <option value="ko">🇰🇷 KO</option>
-                        <option value="ru">🇷🇺 RU</option>
-                        <option value="id">🇮🇩 ID</option>
-                    </select>
+                    <LanguageSelector variant="landing" />
                     <button
                         onClick={onLogin}
                         className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-brand-500 to-cyan-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all duration-300 hover:scale-[1.02]"
                     >
                         <LogIn size={16} />
-                        {t('dashboard.auth.loginBtn') || 'Login'}
+                        {t('dashboard.auth.loginBtn')}
                     </button>
                 </div>
             </header>
@@ -72,20 +62,20 @@ export default function LandingPage({ onLogin }) {
                 <div className="text-center max-w-2xl mx-auto">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-xs text-brand-400 font-medium mb-6">
                         <Sparkles size={12} />
-                        Telegram Bot Dashboard
+                        {t('dashboard.landing.badge')}
                     </div>
                     <h1 className="text-4xl md:text-5xl font-extrabold text-white leading-tight mb-4">
-                        {t('dashboard.auth.title') || `${config.appName} ${config.appTagline}`}
+                        {t('dashboard.auth.title')}
                     </h1>
                     <p className="text-lg text-surface-200/60 mb-8">
-                        {t('dashboard.auth.subtitle') || 'Manage your bot with a powerful web interface'}
+                        {t('dashboard.auth.subtitle')}
                     </p>
                     <button
                         onClick={onLogin}
                         className="inline-flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-brand-500 to-cyan-500 text-white font-bold rounded-2xl shadow-2xl shadow-brand-500/30 hover:shadow-brand-500/50 transition-all duration-300 hover:scale-[1.03] text-base"
                     >
                         <LogIn size={18} />
-                        {t('dashboard.auth.loginBtn') || 'Get Started'}
+                        {t('dashboard.auth.loginBtn')}
                         <ChevronRight size={16} />
                     </button>
                 </div>
@@ -93,7 +83,7 @@ export default function LandingPage({ onLogin }) {
 
             {/* Features Grid */}
             <section className="relative z-10 max-w-6xl mx-auto px-6 md:px-12 py-12">
-                <h2 className="text-sm font-semibold text-surface-200/40 uppercase tracking-widest text-center mb-8">Features</h2>
+                <h2 className="text-sm font-semibold text-surface-200/40 uppercase tracking-widest text-center mb-8">{t('dashboard.landing.featuresTitle')}</h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {features.map((f, i) => {
                         const Icon = f.icon;
@@ -112,13 +102,13 @@ export default function LandingPage({ onLogin }) {
 
             {/* Pages Preview */}
             <section className="relative z-10 max-w-6xl mx-auto px-6 md:px-12 py-12">
-                <h2 className="text-sm font-semibold text-surface-200/40 uppercase tracking-widest text-center mb-8">Dashboard Pages</h2>
+                <h2 className="text-sm font-semibold text-surface-200/40 uppercase tracking-widest text-center mb-8">{t('dashboard.landing.pagesTitle')}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Owner pages */}
                     <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/5">
                         <div className="flex items-center gap-2 mb-4">
                             <Shield size={16} className="text-brand-400" />
-                            <h3 className="text-sm font-bold text-brand-400 uppercase tracking-wider">Owner</h3>
+                            <h3 className="text-sm font-bold text-brand-400 uppercase tracking-wider">{t('dashboard.landing.ownerSection')}</h3>
                         </div>
                         <div className="space-y-2">
                             {pages.filter(p => p.owner).map((p, i) => (
@@ -139,7 +129,7 @@ export default function LandingPage({ onLogin }) {
                     <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/5">
                         <div className="flex items-center gap-2 mb-4">
                             <Bot size={16} className="text-cyan-400" />
-                            <h3 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">User</h3>
+                            <h3 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">{t('dashboard.landing.userSection')}</h3>
                         </div>
                         <div className="space-y-2">
                             {pages.filter(p => !p.owner).map((p, i) => (

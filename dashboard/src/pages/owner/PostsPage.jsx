@@ -51,7 +51,7 @@ export default function PostsPage() {
         fetchPosts();
     };
 
-    const repeatLabels = { none: 'Once', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+    const repeatLabels = { none: t('dashboard.postsPage.once', 'Once'), daily: t('dashboard.postsPage.daily', 'Daily'), weekly: t('dashboard.postsPage.weekly', 'Weekly'), monthly: t('dashboard.postsPage.monthly', 'Monthly') };
 
     return (
         <div className="space-y-6">
@@ -78,24 +78,24 @@ export default function PostsPage() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                            <label className="text-xs text-surface-200/50 mb-1 block">Group/Chat ID</label>
+                            <label className="text-xs text-surface-200/50 mb-1 block">{t('dashboard.postsPage.chatId', 'Group/Chat ID')}</label>
                             <input value={form.chatId} onChange={e => setForm(p => ({ ...p, chatId: e.target.value }))} placeholder="-100123456789" className="input-field !py-2 !text-sm font-mono" />
                         </div>
                         <div>
-                            <label className="text-xs text-surface-200/50 mb-1 block">Schedule Time</label>
+                            <label className="text-xs text-surface-200/50 mb-1 block">{t('dashboard.postsPage.scheduleTime', 'Schedule Time')}</label>
                             <input type="time" value={form.scheduleTime} onChange={e => setForm(p => ({ ...p, scheduleTime: e.target.value }))} className="input-field !py-2 !text-sm" />
                         </div>
                         <div>
-                            <label className="text-xs text-surface-200/50 mb-1 block">Repeat</label>
+                            <label className="text-xs text-surface-200/50 mb-1 block">{t('dashboard.postsPage.repeat', 'Repeat')}</label>
                             <select value={form.repeatType} onChange={e => setForm(p => ({ ...p, repeatType: e.target.value }))} className="input-field !py-2 !text-sm">
-                                <option value="none">Once</option>
-                                <option value="daily">Daily</option>
-                                <option value="weekly">Weekly</option>
-                                <option value="monthly">Monthly</option>
+                                <option value="none">{t('dashboard.postsPage.once', 'Once')}</option>
+                                <option value="daily">{t('dashboard.postsPage.daily', 'Daily')}</option>
+                                <option value="weekly">{t('dashboard.postsPage.weekly', 'Weekly')}</option>
+                                <option value="monthly">{t('dashboard.postsPage.monthly', 'Monthly')}</option>
                             </select>
                         </div>
                         <div>
-                            <label className="text-xs text-surface-200/50 mb-1 block">Timezone</label>
+                            <label className="text-xs text-surface-200/50 mb-1 block">{t('dashboard.postsPage.timezone', 'Timezone')}</label>
                             <select value={form.timezone} onChange={e => setForm(p => ({ ...p, timezone: e.target.value }))} className="input-field !py-2 !text-sm">
                                 <option value="Asia/Ho_Chi_Minh">Vietnam (UTC+7)</option>
                                 <option value="Asia/Shanghai">China (UTC+8)</option>
@@ -107,11 +107,11 @@ export default function PostsPage() {
                         </div>
                     </div>
                     <div>
-                        <label className="text-xs text-surface-200/50 mb-1 block">Content</label>
+                        <label className="text-xs text-surface-200/50 mb-1 block">{t('dashboard.postsPage.content', 'Content')}</label>
                         <textarea
                             value={form.content}
                             onChange={e => setForm(p => ({ ...p, content: e.target.value }))}
-                            placeholder="Message content (supports HTML)"
+                            placeholder={t('dashboard.postsPage.contentPlaceholder', 'Message content (supports HTML)')}
                             rows={4}
                             className="input-field !py-2 !text-sm resize-y"
                         />
@@ -132,7 +132,7 @@ export default function PostsPage() {
                         <CalendarClock size={20} className="text-brand-400" />
                     </div>
                     <div>
-                        <p className="text-xs text-surface-200/50">Total Posts</p>
+                        <p className="text-xs text-surface-200/50">{t('dashboard.postsPage.totalPosts', 'Total Posts')}</p>
                         <p className="text-2xl font-bold text-surface-100">{posts.length}</p>
                     </div>
                 </div>

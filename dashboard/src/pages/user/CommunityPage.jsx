@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     ExternalLink, Globe, Gamepad2, Landmark, Users, UserPlus,
     TrendingUp, TrendingDown, Copy, Check, ChevronRight, ChevronDown, ChevronUp,
     Sparkles, ArrowUpRight, Heart, ShoppingCart, Star, Zap,
     MessageCircle, Send, Plus, Trash2, Bell, User, Loader2, X as XIcon,
-    Trophy, CalendarCheck, ImageIcon, Hash, ArrowLeft, Home
+    Trophy, CalendarCheck, ImageIcon, Hash, ArrowLeft, Home,
+    AlertTriangle, Search, Ban, MoreVertical, Pencil, Shield
 } from 'lucide-react';
 import api from '@/api/client';
 import useAuthStore from '@/stores/authStore';
@@ -556,6 +557,7 @@ function timeSince(ts) {
 
 /* ── User Profile Modal ── */
 function UserProfileModal({ userId, onClose, onStartDM }) {
+    const { t } = useTranslation();
     const [profile, setProfile] = useState(null);
     const [isFollowing, setIsFollowing] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -600,22 +602,22 @@ function UserProfileModal({ userId, onClose, onStartDM }) {
                             </div>
                             {/* Stats */}
                             <div className="flex items-center gap-6 mt-4">
-                                <div className="text-center"><span className="text-lg font-bold text-surface-100">{profile.followersCount || 0}</span><p className="text-[9px] text-surface-200/30 uppercase tracking-wider">Followers</p></div>
-                                <div className="text-center"><span className="text-lg font-bold text-surface-100">{profile.followingCount || 0}</span><p className="text-[9px] text-surface-200/30 uppercase tracking-wider">Following</p></div>
-                                <div className="text-center"><span className="text-lg font-bold text-amber-400">{profile.reputation || 0}</span><p className="text-[9px] text-surface-200/30 uppercase tracking-wider">Rep</p></div>
+                                <div className="text-center"><span className="text-lg font-bold text-surface-100">{profile.followersCount || 0}</span><p className="text-[9px] text-surface-200/30 uppercase tracking-wider">{t('dashboard.mySpace.followers', 'Followers')}</p></div>
+                                <div className="text-center"><span className="text-lg font-bold text-surface-100">{profile.followingCount || 0}</span><p className="text-[9px] text-surface-200/30 uppercase tracking-wider">{t('dashboard.mySpace.following', 'Following')}</p></div>
+                                <div className="text-center"><span className="text-lg font-bold text-amber-400">{profile.reputation || 0}</span><p className="text-[9px] text-surface-200/30 uppercase tracking-wider">{t('dashboard.mySpace.rep', 'Rep')}</p></div>
                             </div>
                             {/* Actions */}
                             <div className="flex items-center gap-2 mt-5">
                                 <button onClick={handleFollow} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-sm font-bold transition-all ${isFollowing ? 'bg-white/[0.06] border border-white/[0.1] text-surface-200/60 hover:text-red-400 hover:border-red-500/30' : 'bg-gradient-to-r from-brand-500 to-purple-500 text-white shadow-lg hover:shadow-brand-500/30'}`}>
-                                    <UserPlus size={14} /> {isFollowing ? 'Unfollow' : 'Follow'}
+                                    <UserPlus size={14} /> {isFollowing ? t('dashboard.mySpace.unfollow', 'Unfollow') : t('dashboard.mySpace.follow', 'Follow')}
                                 </button>
                                 <button onClick={() => { onStartDM?.(userId, profile.displayName); onClose(); }} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-sm font-bold bg-white/[0.06] border border-white/[0.1] text-surface-200/60 hover:text-brand-400 hover:border-brand-500/30 transition-all">
-                                    <Send size={14} /> Message
+                                    <Send size={14} /> {t('dashboard.mySpace.message', 'Message')}
                                 </button>
                             </div>
                         </>
                     ) : (
-                        <p className="text-sm text-surface-200/30 text-center py-8 pt-14">Profile not found</p>
+                        <p className="text-sm text-surface-200/30 text-center py-8 pt-14">{t('dashboard.mySpace.profileNotFound', 'Profile not found')}</p>
                     )}
                 </div>
             </div>
@@ -623,24 +625,71 @@ function UserProfileModal({ userId, onClose, onStartDM }) {
     );
 }
 
-/* ── Tip Modal ── */
+/* ── Tip Modal (Redesigned) ── */
 function TipModal({ postId, toUserId, toName, onClose, onTipped }) {
+    const { t } = useTranslation();
     const [amount, setAmount] = useState('');
     const [tipping, setTipping] = useState(false);
     const [done, setDone] = useState(false);
 
+    // Wallet & token state
+    const [wallets, setWallets] = useState([]);
+    const [selectedWalletId, setSelectedWalletId] = useState('');
+    const [tokens, setTokens] = useState([]);
+    const [selectedToken, setSelectedToken] = useState(null); // { symbol, contractAddress, balance }
+    const [walletLoading, setWalletLoading] = useState(true);
+    const [tokenLoading, setTokenLoading] = useState(false);
+    const [recipientProfile, setRecipientProfile] = useState(null);
+    const [profileLoading, setProfileLoading] = useState(true);
+
     const quickAmounts = ['0.01', '0.05', '0.1', '0.5', '1'];
 
+    // Fetch user wallets
+    useEffect(() => {
+        api.getWallets().then(r => {
+            const ws = r.wallets || [];
+            setWallets(ws);
+            const def = ws.find(w => w.isDefault) || ws[0];
+            if (def) setSelectedWalletId(def.id);
+        }).catch(() => {}).finally(() => setWalletLoading(false));
+    }, []);
+
+    // Fetch recipient profile (for wallet address)
+    useEffect(() => {
+        api.getUserProfile(toUserId).then(r => setRecipientProfile(r.profile)).catch(() => {}).finally(() => setProfileLoading(false));
+    }, [toUserId]);
+
+    // Fetch token balances when wallet changes
+    useEffect(() => {
+        if (!selectedWalletId) { setTokens([]); return; }
+        setTokenLoading(true);
+        api.getWalletBalance(selectedWalletId).then(r => {
+            const tks = (r.tokens || []).filter(t => Number(t.balance) > 0).map(t => ({
+                symbol: t.symbol || t.tokenSymbol || 'Unknown',
+                contractAddress: t.tokenContractAddress || '',
+                balance: t.balance,
+                price: t.price || 0,
+                logoUrl: t.logoUrl || '',
+            }));
+            setTokens(tks);
+            // Auto-select native or first token
+            const native = tks.find(t => !t.contractAddress || t.contractAddress === '0x' || t.symbol === 'OKB');
+            setSelectedToken(native || tks[0] || null);
+        }).catch(() => setTokens([])).finally(() => setTokenLoading(false));
+    }, [selectedWalletId]);
+
     const handleTip = async () => {
-        if (!amount || Number(amount) <= 0) return;
+        if (!amount || Number(amount) <= 0 || !selectedToken) return;
         setTipping(true);
         try {
             await api.recordTip({
                 postId: postId || null,
                 toUserId,
-                tokenSymbol: 'OKB',
+                tokenSymbol: selectedToken.symbol,
+                tokenContractAddress: selectedToken.contractAddress,
                 amount,
                 chainIndex: '196',
+                walletId: selectedWalletId,
             });
             setDone(true);
             onTipped?.();
@@ -649,48 +698,151 @@ function TipModal({ postId, toUserId, toName, onClose, onTipped }) {
         setTipping(false);
     };
 
+    const adjustAmount = (delta) => {
+        const cur = Number(amount) || 0;
+        const step = cur < 0.1 ? 0.01 : cur < 1 ? 0.05 : 0.1;
+        const next = Math.max(0, cur + delta * step);
+        setAmount(next.toFixed(next < 0.1 ? 4 : next < 1 ? 3 : 2));
+    };
+
+    const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+    const recipientAddr = recipientProfile?.walletAddress;
+    const OKX_ADDR_URL = (addr) => `https://www.okx.com/web3/explorer/xlayer/address/${addr}`;
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-            <div className="w-full max-w-sm mx-4 rounded-3xl bg-surface-800 border border-white/[0.08] shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
+            <div className="w-full max-w-md mx-4 rounded-3xl bg-surface-800 border border-white/[0.08] shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
-                    <h3 className="text-lg font-bold text-surface-100 flex items-center gap-2"><Zap size={18} className="text-amber-400" /> Tip {toName}</h3>
+                    <h3 className="text-lg font-bold text-surface-100 flex items-center gap-2"><Zap size={18} className="text-amber-400" /> {t('dashboard.mySpace.tipUser', 'Tip')} {toName}</h3>
                     <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-surface-200/50 hover:text-surface-100 transition-colors"><XIcon size={16} /></button>
                 </div>
-                <div className="p-5">
+                <div className="p-5 space-y-4">
                     {done ? (
                         <div className="text-center py-6">
                             <div className="text-4xl mb-2">🎉</div>
-                            <p className="text-sm font-bold text-emerald-400">Tip sent!</p>
+                            <p className="text-sm font-bold text-emerald-400">{t('dashboard.mySpace.tipSent', 'Tip sent!')}</p>
                         </div>
                     ) : (
                         <>
-                            <div className="relative mb-4">
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={amount}
-                                    onChange={e => setAmount(e.target.value)}
-                                    placeholder="0.00"
-                                    className="w-full bg-surface-900/60 border border-white/[0.06] rounded-2xl px-4 py-3 text-lg text-surface-100 outline-none text-center font-bold placeholder:text-surface-200/15 focus:border-amber-500/30 transition-colors"
-                                    autoFocus
-                                />
-                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400/60">OKB</span>
+                            {/* Recipient wallet address */}
+                            <div className="rounded-xl bg-surface-900/50 border border-white/[0.04] p-3">
+                                <p className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1">{t('dashboard.mySpace.tipRecipient', 'Recipient')}</p>
+                                {profileLoading ? (
+                                    <div className="h-4 w-40 bg-white/[0.05] rounded animate-pulse" />
+                                ) : recipientAddr ? (
+                                    <a href={OKX_ADDR_URL(recipientAddr)} target="_blank" rel="noopener noreferrer"
+                                        className="text-xs font-mono text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1.5 break-all">
+                                        {recipientAddr.slice(0, 10)}…{recipientAddr.slice(-8)}
+                                        <ExternalLink size={10} className="flex-shrink-0" />
+                                    </a>
+                                ) : (
+                                    <p className="text-xs text-amber-400/70 flex items-center gap-1.5">
+                                        <AlertTriangle size={12} className="flex-shrink-0" />
+                                        {t('dashboard.mySpace.tipNoWallet', 'This user has not linked a wallet address')}
+                                    </p>
+                                )}
                             </div>
-                            <div className="flex items-center gap-2 mb-5">
+
+                            {/* Wallet selector */}
+                            <div>
+                                <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1 block">{t('dashboard.mySpace.tipFromWallet', 'From Wallet')}</label>
+                                {walletLoading ? (
+                                    <div className="h-10 bg-white/[0.03] rounded-xl animate-pulse" />
+                                ) : wallets.length === 0 ? (
+                                    <p className="text-xs text-red-400/70 flex items-center gap-1.5">
+                                        <AlertTriangle size={12} />
+                                        {t('dashboard.mySpace.tipNoWallets', 'No wallets found. Create one in Wallets page.')}
+                                    </p>
+                                ) : (
+                                    <select
+                                        value={selectedWalletId}
+                                        onChange={e => setSelectedWalletId(e.target.value)}
+                                        className="w-full bg-surface-900/60 border border-white/[0.06] rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none focus:border-brand-500/30 transition-colors"
+                                    >
+                                        {wallets.map(w => (
+                                            <option key={w.id} value={w.id}>
+                                                {w.walletName || t('dashboard.mySpace.wallet', 'Wallet')} ({w.address?.slice(0, 6)}…{w.address?.slice(-4)})
+                                                {w.isDefault ? ' ★' : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
+
+                            {/* Token selector */}
+                            {selectedWalletId && (
+                                <div>
+                                    <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1 block">{t('dashboard.mySpace.tipToken', 'Token')}</label>
+                                    {tokenLoading ? (
+                                        <div className="h-10 bg-white/[0.03] rounded-xl animate-pulse" />
+                                    ) : tokens.length === 0 ? (
+                                        <p className="text-xs text-surface-200/25">{t('dashboard.mySpace.tipNoTokens', 'No tokens with balance in this wallet')}</p>
+                                    ) : (
+                                        <select
+                                            value={selectedToken?.symbol || ''}
+                                            onChange={e => setSelectedToken(tokens.find(tk => tk.symbol === e.target.value) || null)}
+                                            className="w-full bg-surface-900/60 border border-white/[0.06] rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none focus:border-brand-500/30 transition-colors"
+                                        >
+                                            {tokens.map(tk => (
+                                                <option key={tk.symbol + tk.contractAddress} value={tk.symbol}>
+                                                    {tk.symbol} — {Number(tk.balance).toFixed(4)}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Amount input */}
+                            <div>
+                                <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1 block">{t('dashboard.mySpace.tipAmount', 'Amount')}</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={amount}
+                                        onChange={e => setAmount(e.target.value)}
+                                        placeholder="0.00"
+                                        className="w-full bg-surface-900/60 border border-white/[0.08] rounded-2xl px-4 py-3.5 text-xl text-surface-100 outline-none text-center font-bold placeholder:text-surface-200/15 focus:border-amber-500/30 focus:ring-1 focus:ring-amber-500/10 transition-all"
+                                        autoFocus
+                                    />
+                                    {selectedToken && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-amber-400/50 uppercase">{selectedToken.symbol}</span>}
+                                </div>
+                                {/* Range slider for quick amount */}
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={selectedToken ? Math.min(Number(selectedToken.balance), 10) : 1}
+                                    step="0.01"
+                                    value={amount || 0}
+                                    onChange={e => setAmount(e.target.value)}
+                                    className="w-full mt-2 h-1.5 rounded-full appearance-none cursor-pointer accent-amber-500 bg-white/[0.06] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-r [&::-webkit-slider-thumb]:from-amber-400 [&::-webkit-slider-thumb]:to-orange-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-amber-500/30 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125"
+                                />
+                                {selectedToken && (
+                                    <p className="text-[9px] text-surface-200/20 mt-1 text-right">
+                                        {t('dashboard.mySpace.tipBalance', 'Balance')}: {Number(selectedToken.balance).toFixed(4)} {selectedToken.symbol}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Quick amounts */}
+                            <div className="flex items-center gap-2">
                                 {quickAmounts.map(q => (
                                     <button key={q} onClick={() => setAmount(q)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${amount === q ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' : 'bg-white/[0.03] border-white/[0.06] text-surface-200/35 hover:bg-white/[0.06]'}`}>
                                         {q}
                                     </button>
                                 ))}
                             </div>
+
+                            {/* Send button */}
                             <button
                                 onClick={handleTip}
-                                disabled={!amount || Number(amount) <= 0 || tipping}
+                                disabled={!amount || Number(amount) <= 0 || tipping || !selectedToken || wallets.length === 0}
                                 className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-bold shadow-lg hover:shadow-amber-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                             >
                                 {tipping ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                                Send Tip
+                                {t('dashboard.mySpace.sendTip', 'Send Tip')} {selectedToken ? selectedToken.symbol : ''}
                             </button>
                         </>
                     )}
@@ -700,8 +852,28 @@ function TipModal({ postId, toUserId, toName, onClose, onTipped }) {
     );
 }
 
-/* ── DM View (Messages Tab) ── */
-function DMView() {
+/* ── DM View (Messages Tab — Enhanced) ── */
+const DM_NICKNAMES_KEY = 'xbot_dm_nicknames';
+const DM_BLOCKED_KEY = 'xbot_dm_blocked';
+
+function getDmNicknames() { try { return JSON.parse(localStorage.getItem(DM_NICKNAMES_KEY) || '{}'); } catch { return {}; } }
+function setDmNickname(userId, nick) {
+    const all = getDmNicknames();
+    if (nick) all[String(userId)] = nick; else delete all[String(userId)];
+    localStorage.setItem(DM_NICKNAMES_KEY, JSON.stringify(all));
+}
+function getDmBlocked() { try { return JSON.parse(localStorage.getItem(DM_BLOCKED_KEY) || '[]'); } catch { return []; } }
+function toggleDmBlocked(userId) {
+    const all = getDmBlocked();
+    const id = String(userId);
+    const idx = all.indexOf(id);
+    if (idx >= 0) all.splice(idx, 1); else all.push(id);
+    localStorage.setItem(DM_BLOCKED_KEY, JSON.stringify(all));
+    return all;
+}
+
+function DMView({ initialChat, onClearInitialChat }) {
+    const { t } = useTranslation();
     const [conversations, setConversations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeChat, setActiveChat] = useState(null); // { userId, displayName }
@@ -710,11 +882,30 @@ function DMView() {
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
     const messagesEndRef = useRef(null);
+    const [dmProfileModal, setDmProfileModal] = useState(null); // userId for View Profile
+
+    // Enhanced features
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterTab, setFilterTab] = useState('all'); // 'all' | 'pending' | 'blocked'
+    const [nicknames, setNicknames] = useState(getDmNicknames());
+    const [blockedIds, setBlockedIds] = useState(getDmBlocked());
+    const [showActions, setShowActions] = useState(false);
+    const [editingNickname, setEditingNickname] = useState(false);
+    const [nickInput, setNickInput] = useState('');
+    const actionsRef = useRef(null);
 
     // Load conversations
     useEffect(() => {
         api.getConversations().then(r => setConversations(r.conversations || [])).catch(() => {}).finally(() => setLoading(false));
     }, []);
+
+    // Handle initialChat from parent (e.g. clicking "Message" on profile)
+    useEffect(() => {
+        if (initialChat && initialChat.userId) {
+            setActiveChat(initialChat);
+            onClearInitialChat?.();
+        }
+    }, [initialChat]);
 
     // Load messages for active chat
     useEffect(() => {
@@ -734,10 +925,8 @@ function DMView() {
         try {
             await api.sendMessage(activeChat.userId, { content: text.trim() });
             setText('');
-            // Refresh messages
             const r = await api.getMessages(activeChat.userId);
             setMessages(r.messages || []);
-            // Refresh conversations
             api.getConversations().then(r2 => setConversations(r2.conversations || [])).catch(() => {});
         } catch { /* ignore */ }
         setSending(false);
@@ -752,6 +941,65 @@ function DMView() {
         return () => clearInterval(iv);
     }, [activeChat?.userId]);
 
+    // Close actions menu on outside click
+    useEffect(() => {
+        const handler = (e) => { if (actionsRef.current && !actionsRef.current.contains(e.target)) setShowActions(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    // Nickname helpers
+    const getDisplayName = (conv) => {
+        const nick = nicknames[String(conv.partnerId)];
+        return nick || conv.displayName || `User ${String(conv.partnerId).slice(-4)}`;
+    };
+    const getActiveName = () => {
+        if (!activeChat) return '';
+        const nick = nicknames[String(activeChat.userId)];
+        return nick || activeChat.displayName || '';
+    };
+    const handleSaveNickname = () => {
+        if (!activeChat) return;
+        setDmNickname(activeChat.userId, nickInput.trim());
+        setNicknames(getDmNicknames());
+        setEditingNickname(false);
+    };
+
+    // Block helpers
+    const handleToggleBlock = (userId) => {
+        const newBlocked = toggleDmBlocked(userId);
+        setBlockedIds([...newBlocked]);
+        if (activeChat && String(activeChat.userId) === String(userId)) setActiveChat(null);
+        setShowActions(false);
+    };
+
+    // Filter conversations
+    const filteredConvos = useMemo(() => {
+        let list = [...conversations];
+        const blockedSet = new Set(blockedIds);
+
+        if (filterTab === 'blocked') {
+            list = list.filter(c => blockedSet.has(String(c.partnerId)));
+        } else if (filterTab === 'pending') {
+            list = list.filter(c => !blockedSet.has(String(c.partnerId)) && !c.lastMessageIsOwn && c.unreadCount > 0);
+        } else {
+            list = list.filter(c => !blockedSet.has(String(c.partnerId)));
+        }
+
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            list = list.filter(c => {
+                const name = getDisplayName(c).toLowerCase();
+                const id = String(c.partnerId);
+                return name.includes(q) || id.includes(q);
+            });
+        }
+
+        return list;
+    }, [conversations, filterTab, searchQuery, blockedIds, nicknames]);
+
+    const isBlocked = activeChat ? blockedIds.includes(String(activeChat.userId)) : false;
+
     return (
         <div className="space-y-5 animate-fadeIn">
             <h2 className="text-2xl font-bold text-surface-100 flex items-center gap-3">
@@ -764,40 +1012,75 @@ function DMView() {
             <div className="flex gap-4 min-h-[500px]">
                 {/* Conversations sidebar */}
                 <div className="w-72 flex-shrink-0 rounded-2xl border border-white/[0.06] bg-surface-800/60 overflow-hidden flex flex-col">
-                    <div className="p-3 border-b border-white/[0.04]">
-                        <p className="text-[10px] text-surface-200/30 font-bold uppercase tracking-wider">{t('dashboard.mySpace.navConversations')}</p>
+                    {/* Search bar */}
+                    <div className="p-3 border-b border-white/[0.04] space-y-2">
+                        <div className="relative">
+                            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-200/20" />
+                            <input
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder={t('dashboard.mySpace.dmSearch', 'Search by name, UID...')}
+                                className="w-full bg-surface-900/50 border border-white/[0.04] rounded-xl pl-8 pr-3 py-2 text-[11px] text-surface-100 outline-none placeholder:text-surface-200/15 focus:border-brand-500/20 transition-colors"
+                            />
+                        </div>
+                        {/* Filter tabs */}
+                        <div className="flex items-center gap-1">
+                            {[
+                                { id: 'all', label: t('dashboard.mySpace.dmAll', 'All') },
+                                { id: 'pending', label: t('dashboard.mySpace.dmPending', 'Pending') },
+                                { id: 'blocked', label: t('dashboard.mySpace.dmBlocked', 'Blocked') },
+                            ].map(f => (
+                                <button key={f.id} onClick={() => setFilterTab(f.id)}
+                                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${filterTab === f.id ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20' : 'text-surface-200/25 hover:text-surface-200/50'}`}>
+                                    {f.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                     <div className="flex-1 overflow-y-auto">
                         {loading ? (
                             <div className="space-y-2 p-3">
                                 {[1,2,3].map(i => <div key={i} className="h-14 bg-white/[0.03] rounded-xl animate-pulse" />)}
                             </div>
-                        ) : conversations.length === 0 ? (
+                        ) : filteredConvos.length === 0 ? (
                             <div className="text-center py-10">
-                                <p className="text-[11px] text-surface-200/20">{t('dashboard.mySpace.noMessagesYet')}</p>
-                                <p className="text-[9px] text-surface-200/15 mt-1">{t('dashboard.mySpace.startConversation')}</p>
+                                <p className="text-[11px] text-surface-200/20">
+                                    {filterTab === 'pending' ? t('dashboard.mySpace.dmNoPending', 'No pending messages') :
+                                     filterTab === 'blocked' ? t('dashboard.mySpace.dmNoBlocked', 'No blocked users') :
+                                     searchQuery ? t('dashboard.mySpace.dmNoResults', 'No results') :
+                                     t('dashboard.mySpace.noMessagesYet')}
+                                </p>
+                                {filterTab === 'all' && !searchQuery && (
+                                    <p className="text-[9px] text-surface-200/15 mt-1">{t('dashboard.mySpace.startConversation')}</p>
+                                )}
                             </div>
-                        ) : conversations.map(c => (
-                            <button
-                                key={c.partnerId}
-                                onClick={() => setActiveChat({ userId: c.partnerId, displayName: c.displayName })}
-                                className={`w-full flex items-center gap-3 p-3 transition-all text-left hover:bg-white/[0.04] ${activeChat?.userId === c.partnerId ? 'bg-brand-500/10 border-l-2 border-brand-500' : ''}`}
-                            >
-                                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500/40 to-purple-500/40 flex items-center justify-center text-xs text-surface-100 font-bold flex-shrink-0">
-                                    {(c.displayName || 'U')[0].toUpperCase()}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-semibold text-surface-100 truncate">{c.displayName}</span>
-                                        {c.unreadCount > 0 && <span className="w-4 h-4 rounded-full bg-brand-500 text-[7px] text-white font-bold flex items-center justify-center flex-shrink-0">{c.unreadCount}</span>}
+                        ) : filteredConvos.map(c => {
+                            const displayName = getDisplayName(c);
+                            const isBlockedConvo = blockedIds.includes(String(c.partnerId));
+                            return (
+                                <button
+                                    key={c.partnerId}
+                                    onClick={() => setActiveChat({ userId: c.partnerId, displayName: c.displayName })}
+                                    className={`w-full flex items-center gap-3 p-3 transition-all text-left hover:bg-white/[0.04] ${activeChat?.userId === c.partnerId ? 'bg-brand-500/10 border-l-2 border-brand-500' : ''} ${isBlockedConvo ? 'opacity-50' : ''}`}
+                                >
+                                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500/40 to-purple-500/40 flex items-center justify-center text-xs text-surface-100 font-bold flex-shrink-0">
+                                        {(displayName || 'U')[0].toUpperCase()}
                                     </div>
-                                    <p className="text-[10px] text-surface-200/30 truncate mt-0.5">
-                                        {c.lastMessageIsOwn ? `${t('dashboard.mySpace.you')}: ` : ''}{c.lastMessage}
-                                    </p>
-                                </div>
-                                <span className="text-[8px] text-surface-200/15 flex-shrink-0">{timeSince(c.lastMessageAt)}</span>
-                            </button>
-                        ))}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-semibold text-surface-100 truncate">{displayName}</span>
+                                            {nicknames[String(c.partnerId)] && <span className="text-[8px] text-surface-200/20 truncate">({c.displayName})</span>}
+                                            {isBlockedConvo && <Ban size={10} className="text-red-400/50 flex-shrink-0" />}
+                                            {c.unreadCount > 0 && !isBlockedConvo && <span className="w-4 h-4 rounded-full bg-brand-500 text-[7px] text-white font-bold flex items-center justify-center flex-shrink-0">{c.unreadCount}</span>}
+                                        </div>
+                                        <p className="text-[10px] text-surface-200/30 truncate mt-0.5">
+                                            {c.lastMessageIsOwn ? `${t('dashboard.mySpace.you')}: ` : ''}{c.lastMessage}
+                                        </p>
+                                    </div>
+                                    <span className="text-[8px] text-surface-200/15 flex-shrink-0">{timeSince(c.lastMessageAt)}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -812,16 +1095,64 @@ function DMView() {
                         </div>
                     ) : (
                         <>
-                            {/* Chat header with back button */}
+                            {/* Chat header with actions menu */}
                             <div className="flex items-center gap-3 p-4 border-b border-white/[0.06]">
                                 <button onClick={() => setActiveChat(null)} className="p-1.5 rounded-lg hover:bg-white/[0.06] text-surface-200/40 hover:text-surface-100 transition-colors" title={t('dashboard.mySpace.back')}>
                                     <ArrowLeft size={16} />
                                 </button>
                                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500/40 to-purple-500/40 flex items-center justify-center text-xs text-surface-100 font-bold">
-                                    {(activeChat.displayName || 'U')[0].toUpperCase()}
+                                    {(getActiveName() || 'U')[0].toUpperCase()}
                                 </div>
-                                <span className="text-sm font-semibold text-surface-100">{activeChat.displayName}</span>
+                                <div className="flex-1 min-w-0">
+                                    <span className="text-sm font-semibold text-surface-100 truncate block">{getActiveName()}</span>
+                                    {nicknames[String(activeChat.userId)] && (
+                                        <span className="text-[9px] text-surface-200/25 block">{activeChat.displayName}</span>
+                                    )}
+                                </div>
+                                {isBlocked && <span className="text-[9px] text-red-400/60 flex items-center gap-1"><Ban size={10} /> {t('dashboard.mySpace.dmBlockedLabel', 'Blocked')}</span>}
+
+                                {/* Actions menu */}
+                                <div className="relative" ref={actionsRef}>
+                                    <button onClick={() => setShowActions(!showActions)} className="p-1.5 rounded-lg hover:bg-white/[0.06] text-surface-200/30 hover:text-surface-100 transition-colors">
+                                        <MoreVertical size={16} />
+                                    </button>
+                                    {showActions && (
+                                        <div className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-surface-900 border border-white/[0.08] shadow-2xl z-10 py-1 animate-fadeIn">
+                                            <button onClick={() => { setDmProfileModal(activeChat.userId); setShowActions(false); }}
+                                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-200/60 hover:text-surface-100 hover:bg-white/[0.04] transition-colors">
+                                                <User size={12} /> {t('dashboard.mySpace.dmViewProfile', 'View Profile')}
+                                            </button>
+                                            <button onClick={() => { setNickInput(nicknames[String(activeChat.userId)] || ''); setEditingNickname(true); setShowActions(false); }}
+                                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-200/60 hover:text-surface-100 hover:bg-white/[0.04] transition-colors">
+                                                <Pencil size={12} /> {t('dashboard.mySpace.dmSetNickname', 'Set Nickname')}
+                                            </button>
+                                            <button onClick={() => handleToggleBlock(activeChat.userId)}
+                                                className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${isBlocked ? 'text-emerald-400/70 hover:text-emerald-400 hover:bg-emerald-500/5' : 'text-red-400/70 hover:text-red-400 hover:bg-red-500/5'}`}>
+                                                {isBlocked ? <Shield size={12} /> : <Ban size={12} />}
+                                                {isBlocked ? t('dashboard.mySpace.dmUnblock', 'Unblock') : t('dashboard.mySpace.dmBlock', 'Block User')}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
+
+                            {/* Nickname editing bar */}
+                            {editingNickname && (
+                                <div className="flex items-center gap-2 px-4 py-2 bg-brand-500/5 border-b border-brand-500/10">
+                                    <Pencil size={12} className="text-brand-400 flex-shrink-0" />
+                                    <input
+                                        value={nickInput}
+                                        onChange={e => setNickInput(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleSaveNickname(); if (e.key === 'Escape') setEditingNickname(false); }}
+                                        placeholder={t('dashboard.mySpace.dmNickPlaceholder', 'Enter nickname...')}
+                                        className="flex-1 bg-transparent text-xs text-surface-100 outline-none placeholder:text-surface-200/20"
+                                        autoFocus
+                                        maxLength={30}
+                                    />
+                                    <button onClick={handleSaveNickname} className="text-[10px] text-brand-400 font-bold hover:text-brand-300">{t('dashboard.common.save', 'Save')}</button>
+                                    <button onClick={() => setEditingNickname(false)} className="text-[10px] text-surface-200/30 hover:text-surface-100"><XIcon size={12} /></button>
+                                </div>
+                            )}
 
                             {/* Messages */}
                             <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -846,30 +1177,41 @@ function DMView() {
                                 <div ref={messagesEndRef} />
                             </div>
 
-                            {/* Composer */}
+                            {/* Composer (disabled if blocked) */}
                             <div className="p-3 border-t border-white/[0.06]">
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        value={text}
-                                        onChange={e => setText(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
-                                        placeholder={t('dashboard.mySpace.typeMessage')}
-                                        className="flex-1 bg-surface-900/50 border border-white/[0.06] rounded-2xl px-4 py-2.5 text-sm text-surface-100 outline-none placeholder:text-surface-200/15 focus:border-brand-500/20 transition-colors"
-                                    />
-                                    <button onClick={sendMsg} disabled={!text.trim() || sending} className="p-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white hover:shadow-brand-500/30 disabled:opacity-20 transition-all">
-                                        {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                                    </button>
-                                </div>
+                                {isBlocked ? (
+                                    <div className="flex items-center justify-center gap-2 py-2 text-xs text-surface-200/20">
+                                        <Ban size={12} />
+                                        {t('dashboard.mySpace.dmBlockedComposer', 'You blocked this user. Unblock to send messages.')}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            value={text}
+                                            onChange={e => setText(e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
+                                            placeholder={t('dashboard.mySpace.typeMessage')}
+                                            className="flex-1 bg-surface-900/50 border border-white/[0.06] rounded-2xl px-4 py-2.5 text-sm text-surface-100 outline-none placeholder:text-surface-200/15 focus:border-brand-500/20 transition-colors"
+                                        />
+                                        <button onClick={sendMsg} disabled={!text.trim() || sending} className="p-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white hover:shadow-brand-500/30 disabled:opacity-20 transition-all">
+                                            {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </>
                     )}
                 </div>
             </div>
+            {dmProfileModal && (
+                <UserProfileModal userId={dmProfileModal} onClose={() => setDmProfileModal(null)} onStartDM={(uid, name) => { setActiveChat({ userId: uid, displayName: name }); setDmProfileModal(null); }} />
+            )}
         </div>
     );
 }
 /* ── Social Leaderboard View ── */
 function SocialLeaderboardView() {
+    const { t } = useTranslation();
     const [leaders, setLeaders] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -913,10 +1255,10 @@ function SocialLeaderboardView() {
                                     <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-500/40 to-purple-500/40 flex items-center justify-center text-lg text-white font-bold shadow-xl ${i === 1 ? 'ring-2 ring-amber-500/30' : ''}`}>
                                         {(p?.displayName || 'U')[0].toUpperCase()}
                                     </div>
-                                    <p className="text-xs font-bold text-surface-100 mt-2 truncate max-w-[80px]">{p?.displayName || 'User'}</p>
-                                    <p className="text-[10px] text-amber-400 font-bold mt-0.5">{p?.reputation || 0} rep</p>
+                                    <p className="text-xs font-bold text-surface-100 mt-2 truncate max-w-[80px]">{p?.displayName || t('dashboard.mySpace.user', 'User')}</p>
+                                    <p className="text-[10px] text-amber-400 font-bold mt-0.5">{p?.reputation || 0} {t('dashboard.mySpace.rep', 'Rep')}</p>
                                     <div className={`w-20 ${podiumSizes[i]} mt-2 rounded-t-2xl bg-gradient-to-b ${podiumBg[i]} border border-b-0 flex items-end justify-center pb-2`}>
-                                        <span className="text-[9px] text-surface-200/40">{parseFloat(p?.totalTipsReceived || 0).toFixed(2)} tips</span>
+                                        <span className="text-[9px] text-surface-200/40">{parseFloat(p?.totalTipsReceived || 0).toFixed(2)} {t('dashboard.mySpace.tips', 'tips')}</span>
                                     </div>
                                 </div>
                             ))}
@@ -1297,6 +1639,7 @@ function MyProfileView() {
 
 /* ── Create Post Modal ── */
 function CreatePostModal({ onClose, onCreated }) {
+    const { t } = useTranslation();
     const [content, setContent] = useState('');
     const [posting, setPosting] = useState(false);
 
@@ -1315,14 +1658,14 @@ function CreatePostModal({ onClose, onCreated }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
             <div className="w-full max-w-lg mx-4 rounded-3xl bg-surface-800 border border-white/[0.08] shadow-2xl animate-scaleIn" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
-                    <h3 className="text-lg font-bold text-surface-100 flex items-center gap-2"><Plus size={18} className="text-brand-400" /> Create Post</h3>
+                    <h3 className="text-lg font-bold text-surface-100 flex items-center gap-2"><Plus size={18} className="text-brand-400" /> {t('dashboard.mySpace.createPost', 'Create Post')}</h3>
                     <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-surface-200/50 hover:text-surface-100 transition-colors"><XIcon size={16} /></button>
                 </div>
                 <div className="p-5">
                     <textarea
                         value={content}
                         onChange={e => setContent(e.target.value)}
-                        placeholder="What's on your mind? Share trading insights, token analysis..."
+                        placeholder={t('dashboard.mySpace.createPostPlaceholder', "What's on your mind? Share trading insights, token analysis...")}
                         className="w-full h-32 bg-surface-900/60 border border-white/[0.06] rounded-2xl p-4 text-sm text-surface-100 placeholder:text-surface-200/20 outline-none resize-none focus:border-brand-500/30 transition-colors"
                         autoFocus
                     />
@@ -1334,7 +1677,7 @@ function CreatePostModal({ onClose, onCreated }) {
                             className="flex items-center gap-2 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-lg hover:shadow-brand-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                         >
                             {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                            Post
+                            {t('dashboard.mySpace.post', 'Post')}
                         </button>
                     </div>
                 </div>
@@ -1345,6 +1688,7 @@ function CreatePostModal({ onClose, onCreated }) {
 
 /* ── Comment Section ── */
 function CommentSection({ postId }) {
+    const { t } = useTranslation();
     const [comments, setComments] = useState([]);
     const [text, setText] = useState('');
     const [loading, setLoading] = useState(true);
@@ -1407,6 +1751,7 @@ function CommentSection({ postId }) {
 
 /* ── Post Card ── */
 function SocialPostCard({ post, onLike, onDelete, currentUserId, onViewProfile, onTip }) {
+    const { t } = useTranslation();
     const [showComments, setShowComments] = useState(false);
     const [liked, setLiked] = useState(post.isLiked);
     const [likesCount, setLikesCount] = useState(post.likesCount || 0);
@@ -1420,7 +1765,7 @@ function SocialPostCard({ post, onLike, onDelete, currentUserId, onViewProfile, 
     };
 
     const handleDelete = async () => {
-        if (!confirm('Delete this post?')) return;
+        if (!confirm(t('dashboard.mySpace.deletePostConfirm', 'Delete this post?'))) return;
         try {
             await api.deletePost(post.id);
             onDelete?.(post.id);
@@ -1436,7 +1781,7 @@ function SocialPostCard({ post, onLike, onDelete, currentUserId, onViewProfile, 
                 </button>
                 <div className="flex-1 min-w-0">
                     <button onClick={() => onViewProfile?.(post.userId)} className="text-sm font-semibold text-surface-100 hover:text-brand-400 transition-colors cursor-pointer">{post.displayName || `User ${String(post.userId).slice(-4)}`}</button>
-                    <p className="text-[10px] text-surface-200/25">{timeSince(post.createdAt)} ago</p>
+                    <p className="text-[10px] text-surface-200/25">{timeSince(post.createdAt)} {t('dashboard.mySpace.ago', 'ago')}</p>
                 </div>
                 {String(post.userId) === String(currentUserId) && (
                     <button onClick={handleDelete} className="p-1.5 rounded-lg text-surface-200/15 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100">
@@ -1480,7 +1825,8 @@ function SocialPostCard({ post, onLike, onDelete, currentUserId, onViewProfile, 
 }
 
 /* ── Social Feed View ── */
-function SocialFeedView() {
+function SocialFeedView({ onSwitchToMessages }) {
+    const { t } = useTranslation();
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState('newest');
@@ -1529,11 +1875,11 @@ function SocialFeedView() {
     const handleDelete = (id) => setPosts(prev => prev.filter(p => p.id !== id));
 
     const feedTabs = [
-        { id: 'newest', label: '🆕 Newest' },
-        { id: 'following', label: '👥 Following' },
-        { id: 'trending', label: '🔥 Trending' },
-        { id: 'top_tipped', label: '💰 Top Tipped' },
-        { id: 'mine', label: '📝 My Posts' },
+        { id: 'newest', label: `🆕 ${t('dashboard.mySpace.feedNewest', 'Newest')}` },
+        { id: 'following', label: `👥 ${t('dashboard.mySpace.feedFollowing', 'Following')}` },
+        { id: 'trending', label: `🔥 ${t('dashboard.mySpace.feedTrending', 'Trending')}` },
+        { id: 'top_tipped', label: `💰 ${t('dashboard.mySpace.feedTopTipped', 'Top Tipped')}` },
+        { id: 'mine', label: `📝 ${t('dashboard.mySpace.feedMyPosts', 'My Posts')}` },
     ];
 
     return (
@@ -1544,7 +1890,7 @@ function SocialFeedView() {
                     <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center">
                         <MessageCircle size={20} className="text-brand-400" />
                     </div>
-                    Social Feed
+                    {t('dashboard.socialHub.tabs.socialFeed', 'Social Feed')}
                 </h2>
                 <div className="flex items-center gap-2">
                     {/* Notification bell */}
@@ -1561,7 +1907,7 @@ function SocialFeedView() {
                         onClick={() => setShowCreate(true)}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-lg hover:shadow-brand-500/30 hover:scale-[1.02] active:scale-95 transition-all"
                     >
-                        <Plus size={16} /> Post
+                        <Plus size={16} /> {t('dashboard.mySpace.post', 'Post')}
                     </button>
                 </div>
             </div>
@@ -1569,8 +1915,8 @@ function SocialFeedView() {
             {/* Notification dropdown */}
             {showNotif && (
                 <div className="rounded-2xl border border-white/[0.08] bg-surface-800/95 backdrop-blur-xl p-4 space-y-2 max-h-[300px] overflow-y-auto">
-                    <h4 className="text-xs font-bold text-surface-200/50 uppercase tracking-wider">Notifications</h4>
-                    {notifications.notifications?.length === 0 && <p className="text-[11px] text-surface-200/20 text-center py-4">No notifications yet</p>}
+                    <h4 className="text-xs font-bold text-surface-200/50 uppercase tracking-wider">{t('dashboard.mySpace.notifications', 'Notifications')}</h4>
+                    {notifications.notifications?.length === 0 && <p className="text-[11px] text-surface-200/20 text-center py-4">{t('dashboard.mySpace.noNotifications', 'No notifications yet')}</p>}
                     {notifications.notifications?.map(n => (
                         <div key={n.id} className={`flex items-center gap-3 p-2.5 rounded-xl ${n.read ? 'bg-transparent' : 'bg-brand-500/5'} transition-colors`}>
                             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-500/30 to-purple-500/30 flex items-center justify-center text-[9px] font-bold text-surface-100">
@@ -1578,8 +1924,8 @@ function SocialFeedView() {
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className="text-[11px] text-surface-200/60">
-                                    <span className="font-semibold text-surface-100">{n.actorName || 'Someone'}</span>
-                                    {n.type === 'like' ? ' liked your post' : n.type === 'comment' ? ' commented on your post' : n.type === 'follow' ? ' started following you' : n.type === 'tip' ? ` tipped you` : ' interacted'}
+                                    <span className="font-semibold text-surface-100">{n.actorName || t('dashboard.mySpace.someone', 'Someone')}</span>
+                                    {' '}{n.type === 'like' ? t('dashboard.mySpace.notifLiked', 'liked your post') : n.type === 'comment' ? t('dashboard.mySpace.notifCommented', 'commented on your post') : n.type === 'follow' ? t('dashboard.mySpace.notifFollowed', 'started following you') : n.type === 'tip' ? t('dashboard.mySpace.notifTipped', 'tipped you') : t('dashboard.mySpace.notifInteracted', 'interacted')}
                                 </p>
                             </div>
                             <span className="text-[9px] text-surface-200/20 flex-shrink-0">{timeSince(n.createdAt)}</span>
@@ -1618,9 +1964,9 @@ function SocialFeedView() {
                 ) : posts.length === 0 ? (
                     <div className="text-center py-16">
                         <div className="text-4xl mb-3">📝</div>
-                        <p className="text-sm text-surface-200/30">No posts yet. Be the first to share!</p>
+                        <p className="text-sm text-surface-200/30">{t('dashboard.mySpace.noPostsYet', 'No posts yet. Be the first to share!')}</p>
                         <button onClick={() => setShowCreate(true)} className="mt-4 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold">
-                            <Plus size={14} className="inline mr-1" /> Create Post
+                            <Plus size={14} className="inline mr-1" /> {t('dashboard.mySpace.createPost', 'Create Post')}
                         </button>
                     </div>
                 ) : (
@@ -1642,7 +1988,7 @@ function SocialFeedView() {
                                 className="w-full py-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] text-surface-200/30 text-xs font-medium hover:bg-white/[0.04] hover:text-surface-200/50 transition-colors disabled:opacity-30"
                             >
                                 {loading ? <Loader2 size={14} className="animate-spin inline mr-1" /> : null}
-                                Load More
+                                {t('dashboard.mySpace.loadMore', 'Load More')}
                             </button>
                         )}
                     </>
@@ -1663,7 +2009,7 @@ function SocialFeedView() {
                     userId={profileModal}
                     onClose={() => setProfileModal(null)}
                     onStartDM={(uid, name) => {
-                        // Switch to messages tab (if parent provides callback)
+                        onSwitchToMessages?.(uid, name);
                     }}
                 />
             )}
@@ -1825,10 +2171,16 @@ function CommunitiesView({ t, navigate, tokenAddresses, prices, priceLoading, to
 export default function CommunityPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [activeFilter, setActiveFilter] = useState('all');
-    const [viewMode, setViewMode] = useState('profile');
-    const [tabHistory, setTabHistory] = useState(['profile']); // Navigation history
     const [dmUnread, setDmUnread] = useState(0);
+    const [dmInitialChat, setDmInitialChat] = useState(null); // { userId, displayName } for deep-link DM
+
+    const VALID_TABS = ['profile', 'communities', 'social', 'messages', 'leaderboard'];
+    const urlTab = searchParams.get('tab');
+    const viewMode = VALID_TABS.includes(urlTab) ? urlTab : 'profile';
+
+    const [tabHistory, setTabHistory] = useState([viewMode]);
 
     useEffect(() => {
         api.getUnreadDMs().then(r => setDmUnread(r.unreadCount || 0)).catch(() => {});
@@ -1844,17 +2196,17 @@ export default function CommunityPage() {
 
     const switchTab = useCallback((id) => {
         setTabHistory(prev => [...prev, id]);
-        setViewMode(id);
-    }, []);
+        setSearchParams({ tab: id }, { replace: false });
+    }, [setSearchParams]);
 
     const goBack = useCallback(() => {
         setTabHistory(prev => {
             if (prev.length <= 1) return prev;
             const next = prev.slice(0, -1);
-            setViewMode(next[next.length - 1]);
+            setSearchParams({ tab: next[next.length - 1] }, { replace: true });
             return next;
         });
-    }, []);
+    }, [setSearchParams]);
 
     const currentTab = tabs.find(tab => tab.id === viewMode);
     const canGoBack = tabHistory.length > 1;
@@ -1933,9 +2285,9 @@ export default function CommunityPage() {
             {viewMode === 'communities' ? (
                 <LazyCommunitiesView t={t} navigate={navigate} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
             ) : viewMode === 'social' ? (
-                <SocialFeedView />
+                <SocialFeedView onSwitchToMessages={(uid, name) => { setDmInitialChat({ userId: uid, displayName: name }); switchTab('messages'); }} />
             ) : viewMode === 'messages' ? (
-                <DMView />
+                <DMView initialChat={dmInitialChat} onClearInitialChat={() => setDmInitialChat(null)} />
             ) : viewMode === 'leaderboard' ? (
                 <SocialLeaderboardView />
             ) : (

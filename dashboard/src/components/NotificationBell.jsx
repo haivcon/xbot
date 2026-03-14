@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bell } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import useWsStore from '@/stores/wsStore';
 
 /**
@@ -7,10 +8,20 @@ import useWsStore from '@/stores/wsStore';
  * Subscribes to WebSocket events (swap completed, limit order, DCA, etc.)
  */
 export default function NotificationBell() {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
     const ref = useRef(null);
     const { lastMessage } = useWsStore();
+
+    const notifTitles = {
+        swap_complete: t('dashboard.notif.swapComplete', 'Swap Completed'),
+        limit_order_executed: t('dashboard.notif.limitOrder', 'Limit Order Executed'),
+        transfer_complete: t('dashboard.notif.transferComplete', 'Transfer Completed'),
+        dca_executed: t('dashboard.notif.dcaExecuted', 'DCA Executed'),
+        price_alert: t('dashboard.notif.priceAlert', 'Price Alert'),
+        report_generated: t('dashboard.notif.reportReady', 'Report Ready'),
+    };
 
     // Listen for new WS messages
     useEffect(() => {
@@ -24,7 +35,7 @@ export default function NotificationBell() {
             const notification = {
                 id: Date.now(),
                 type: data.type,
-                title: getNotificationTitle(data.type),
+                title: notifTitles[data.type] || t('dashboard.notif.notification', 'Notification'),
                 message: data.message || data.summary || JSON.stringify(data.data || {}).substring(0, 100),
                 ts: Date.now(),
                 read: false,
@@ -51,6 +62,14 @@ export default function NotificationBell() {
         setOpen(false);
     };
 
+    const formatTimeAgo = (ts) => {
+        const diff = Date.now() - ts;
+        if (diff < 60000) return t('dashboard.common.timeJustNow', 'Just now');
+        if (diff < 3600000) return `${Math.floor(diff / 60000)}${t('dashboard.common.timeMinAgo', 'm ago')}`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)}${t('dashboard.common.timeHourAgo', 'h ago')}`;
+        return `${Math.floor(diff / 86400000)}${t('dashboard.common.timeDayAgo', 'd ago')}`;
+    };
+
     return (
         <div ref={ref} className="relative">
             <button
@@ -68,10 +87,10 @@ export default function NotificationBell() {
             {open && (
                 <div className="absolute right-0 top-full mt-2 w-80 max-h-96 bg-surface-800 border border-white/10 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden z-50 animate-[fadeIn_0.15s_ease]">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-                        <span className="text-sm font-medium text-surface-100">Notifications</span>
+                        <span className="text-sm font-medium text-surface-100">{t('dashboard.header.notifications', 'Notifications')}</span>
                         {notifications.length > 0 && (
                             <button onClick={clearAll} className="text-[10px] text-surface-200/40 hover:text-red-400 transition-colors">
-                                Clear all
+                                {t('dashboard.notif.clearAll', 'Clear all')}
                             </button>
                         )}
                     </div>
@@ -79,7 +98,7 @@ export default function NotificationBell() {
                         {notifications.length === 0 ? (
                             <div className="py-10 text-center text-surface-200/30 text-xs">
                                 <Bell size={24} className="mx-auto mb-2 opacity-30" />
-                                No notifications yet
+                                {t('dashboard.notif.noNotifications', 'No notifications yet')}
                             </div>
                         ) : (
                             notifications.map(n => (
@@ -103,18 +122,6 @@ export default function NotificationBell() {
     );
 }
 
-function getNotificationTitle(type) {
-    const titles = {
-        swap_complete: 'Swap Completed',
-        limit_order_executed: 'Limit Order Executed',
-        transfer_complete: 'Transfer Completed',
-        dca_executed: 'DCA Executed',
-        price_alert: 'Price Alert',
-        report_generated: 'Report Ready',
-    };
-    return titles[type] || 'Notification';
-}
-
 function getNotificationIcon(type) {
     const icons = {
         swap_complete: '🔄',
@@ -125,12 +132,4 @@ function getNotificationIcon(type) {
         report_generated: '📋',
     };
     return icons[type] || '🔔';
-}
-
-function formatTimeAgo(ts) {
-    const diff = Date.now() - ts;
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    return `${Math.floor(diff / 86400000)}d ago`;
 }

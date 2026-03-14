@@ -95,8 +95,32 @@
   :root:not(.dark) .bg-surface-800\/20 { background-color: rgba(241, 245, 249, 0.5) !important; }
   :root:not(.dark) .bg-surface-800\/30 { background-color: rgba(241, 245, 249, 0.6) !important; }
   :root:not(.dark) .bg-surface-800\/40 { background-color: rgba(241, 245, 249, 0.7) !important; }
-  :root:not(.dark) .bg-surface-900\/50 { background-color: rgba(248, 250, 252, 0.8) !important; }
   :root:not(.dark) [class*="hover\:bg-white\/5"]:hover { background-color: rgba(15, 23, 42, 0.05) !important; }
+
+  /* Light mode — white-alpha backgrounds → slate equivalents */
+  :root:not(.dark) .bg-white\/\[0\.03\] { background-color: rgba(15, 23, 42, 0.03) !important; }
+  :root:not(.dark) .bg-white\/\[0\.06\] { background-color: rgba(15, 23, 42, 0.04) !important; }
+  :root:not(.dark) .bg-white\/\[0\.02\] { background-color: rgba(15, 23, 42, 0.02) !important; }
+  :root:not(.dark) .bg-white\/10 { background-color: rgba(15, 23, 42, 0.06) !important; }
+  :root:not(.dark) .bg-white\/5 { background-color: rgba(15, 23, 42, 0.04) !important; }
+
+  /* Light mode — text-white opacity → dark text */
+  :root:not(.dark) .text-white { color: #0f172a !important; }
+  :root:not(.dark) .text-white\/60 { color: rgba(51, 65, 85, 0.75) !important; }
+  :root:not(.dark) .text-white\/70 { color: rgba(51, 65, 85, 0.8) !important; }
+  :root:not(.dark) .text-white\/80 { color: rgba(51, 65, 85, 0.85) !important; }
+  :root:not(.dark) .text-white\/50 { color: rgba(51, 65, 85, 0.65) !important; }
+  :root:not(.dark) .text-white\/40 { color: rgba(51, 65, 85, 0.55) !important; }
+
+  /* Light mode — shadows */
+  :root:not(.dark) .shadow-black\/50 { --tw-shadow-color: rgba(148, 163, 184, 0.15) !important; }
+  :root:not(.dark) .shadow-black\/40 { --tw-shadow-color: rgba(148, 163, 184, 0.12) !important; }
+
+  /* Light mode — modal/dropdown overlays */
+  :root:not(.dark) .bg-black\/60 { background-color: rgba(15, 23, 42, 0.4) !important; }
+
+  /* Mobile bottom nav safe area */
+  .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
   /* Light mode — Chat content (markdown rendered) */
   :root:not(.dark) .chat-content { color: #334155 !important; }

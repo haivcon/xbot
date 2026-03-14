@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
 import { Bot, Globe, Shield, Sparkles, Send } from 'lucide-react';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default function LoginPage() {
-    const { t, i18n } = useTranslation();
+    const { t } = useTranslation();
     const { login, loginWithWebApp, loading, error } = useAuthStore();
     const telegramWidgetRef = useRef(null);
     const [botUsername, setBotUsername] = useState(null);
@@ -16,15 +17,12 @@ export default function LoginPage() {
         const tgWebApp = window.Telegram?.WebApp;
         if (tgWebApp?.initData) {
             setWebAppLoading(true);
-            // Expand Mini App to full height
             try { tgWebApp.expand(); } catch { /* ignore */ }
-            // Set theme color to match dashboard
             try { tgWebApp.setHeaderColor('#0f172a'); } catch { /* ignore */ }
             try { tgWebApp.setBackgroundColor('#0f172a'); } catch { /* ignore */ }
 
             loginWithWebApp(tgWebApp.initData)
                 .then(() => {
-                    // Signal Telegram that the app is ready
                     try { tgWebApp.ready(); } catch { /* ignore */ }
                 })
                 .catch((err) => {
@@ -44,7 +42,6 @@ export default function LoginPage() {
 
     // Handle Telegram Login callback
     useEffect(() => {
-        // Define global callback for Telegram Widget
         window.onTelegramAuth = async (user) => {
             try {
                 await login(user);
@@ -58,8 +55,6 @@ export default function LoginPage() {
     // Load Telegram Login Widget script
     useEffect(() => {
         if (!botUsername || !telegramWidgetRef.current) return;
-
-        // Clear previous widget
         telegramWidgetRef.current.innerHTML = '';
 
         const script = document.createElement('script');
@@ -74,8 +69,6 @@ export default function LoginPage() {
         telegramWidgetRef.current.appendChild(script);
     }, [botUsername]);
 
-    // Dev mode: removed — use Telegram Login Widget or /dashboard command only
-
     // Show loading screen during Mini App auto-login
     if (webAppLoading) {
         return (
@@ -85,7 +78,7 @@ export default function LoginPage() {
                         <Bot size={32} className="text-white" />
                     </div>
                     <div className="w-8 h-8 border-3 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-surface-200/60 text-sm">Logging in via Telegram...</p>
+                    <p className="text-surface-200/60 text-sm">{t('dashboard.auth.loggingIn')}</p>
                     {error && (
                         <p className="text-red-400 text-xs mt-2">{error}</p>
                     )}
@@ -95,16 +88,15 @@ export default function LoginPage() {
     }
 
     const features = [
-        { icon: Shield, title: 'Role-Based Access', desc: 'Owner & User dashboards' },
-        { icon: Globe, title: '6 Languages', desc: 'EN, VI, ZH, KO, RU, ID' },
-        { icon: Sparkles, title: 'Real-time', desc: 'Live bot monitoring' },
+        { icon: Shield, title: t('dashboard.landing.featAccess'), desc: t('dashboard.landing.featAccessDesc') },
+        { icon: Globe, title: t('dashboard.landing.featLanguages'), desc: t('dashboard.landing.featLanguagesDesc') },
+        { icon: Sparkles, title: t('dashboard.landing.featRealtime'), desc: t('dashboard.landing.featRealtimeDesc') },
     ];
 
     return (
         <div className="min-h-screen bg-surface-900 flex">
             {/* Left decorative panel */}
             <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-surface-900 via-brand-950/30 to-surface-900 items-center justify-center p-12 relative overflow-hidden">
-                {/* Decorative orbs */}
                 <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-brand-500/10 rounded-full blur-[100px]" />
                 <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-cyan-500/10 rounded-full blur-[120px]" />
 
@@ -165,14 +157,13 @@ export default function LoginPage() {
                             </div>
                         )}
 
-                        {/* ===== Telegram Login Widget ===== */}
                         <div className="space-y-4">
                             {/* Real Telegram Widget */}
                             <div ref={telegramWidgetRef} className="flex items-center justify-center min-h-[44px]">
                                 {!botUsername && (
                                     <div className="flex items-center gap-2 text-surface-200/40 text-sm">
                                         <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-                                        Loading...
+                                        {t('dashboard.auth.loadingWidget')}
                                     </div>
                                 )}
                             </div>
@@ -190,37 +181,25 @@ export default function LoginPage() {
                                 </a>
                             )}
 
-
                             {/* Security hint */}
                             <div className="mt-2">
                                 <p className="text-[11px] text-surface-200/30 text-center">
-                                    🔒 Your role (Owner/User) is verified via Telegram
+                                    🔒 {t('dashboard.auth.secureHint')}
                                 </p>
                                 <p className="text-[11px] text-surface-200/30 text-center mt-1">
-                                    💡 Type <code className="px-1 py-0.5 bg-white/5 rounded text-surface-200/50">/dashboard</code> in Telegram for auto-login
+                                    💡 {t('dashboard.auth.autoLoginHint')}
                                 </p>
                             </div>
                         </div>
 
                         {/* Language selector */}
                         <div className="mt-6 pt-4 border-t border-white/5">
-                            <select
-                                value={i18n.language?.substring(0, 2) || 'en'}
-                                onChange={(e) => i18n.changeLanguage(e.target.value)}
-                                className="w-full px-3 py-2 bg-surface-800/50 border border-white/5 rounded-xl text-sm text-surface-200 focus:outline-none cursor-pointer"
-                            >
-                                <option value="en">🇺🇸 English</option>
-                                <option value="vi">🇻🇳 Tiếng Việt</option>
-                                <option value="zh">🇨🇳 中文</option>
-                                <option value="ko">🇰🇷 한국어</option>
-                                <option value="ru">🇷🇺 Русский</option>
-                                <option value="id">🇮🇩 Indonesia</option>
-                            </select>
+                            <LanguageSelector variant="header" />
                         </div>
                     </div>
 
                     <p className="text-xs text-surface-200/30 text-center mt-6">
-                        XBot Dashboard v1.0 • Powered by Telegram
+                        {t('dashboard.auth.title')} v1.0 • {t('dashboard.auth.footerText')}
                     </p>
                 </div>
             </div>

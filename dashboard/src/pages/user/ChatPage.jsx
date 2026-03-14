@@ -1422,7 +1422,7 @@ export default function ChatPage() {
                         <div className="absolute inset-0 bg-brand-500/5 flex items-center justify-center z-10 pointer-events-none">
                             <div className="flex items-center gap-2 text-brand-400 text-sm font-medium">
                                 <Image size={20} />
-                                <span>Drop image to analyze</span>
+                                <span>{t('dashboard.chatPage.dropImage', 'Drop image to analyze')}</span>
                             </div>
                         </div>
                     )}
@@ -1574,7 +1574,7 @@ export default function ChatPage() {
                                     return (
                                         <div key={i} id={`msg-${i}`} className="mb-4">
                                             <div className="text-center text-[10px] text-surface-200/30 mb-2 flex items-center justify-center gap-1.5">
-                                                <Columns size={10} /> Model Comparison
+                                                <Columns size={10} /> {t('dashboard.chatPage.modelComparison', 'Model Comparison')}
                                             </div>
                                             <div className={`grid ${isMobile ? 'grid-cols-1 gap-2' : 'grid-cols-2 gap-3'}`}>
                                                 {[modelA, modelB].map((r, idx) => (

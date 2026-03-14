@@ -503,8 +503,8 @@ export default function TokenLookupPage() {
                                         <div className="flex gap-2 items-center">
                                             <select value={alertDir} onChange={e => setAlertDir(e.target.value)}
                                                 className="bg-surface-800 border border-white/10 rounded-lg px-2 py-2 text-xs text-surface-100">
-                                                <option value="above">Price above ↑</option>
-                                                <option value="below">Price below ↓</option>
+                                                <option value="above">{t('dashboard.tokenLookup.priceAbove', 'Price above')} ↑</option>
+                                                <option value="below">{t('dashboard.tokenLookup.priceBelow', 'Price below')} ↓</option>
                                             </select>
                                             <input type="number" value={alertPrice} onChange={e => setAlertPrice(e.target.value)}
                                                 step="any" placeholder="Target price (USD)"
@@ -697,7 +697,7 @@ export default function TokenLookupPage() {
                     {history.length > 0 && (
                         <div className="glass-card p-4 space-y-3">
                             <h3 className="text-xs font-bold text-surface-200/50 uppercase tracking-widest flex items-center gap-1.5">
-                                <Clock size={12} /> Recent Searches
+                                <Clock size={12} /> {t('dashboard.tokenLookup.recentSearches', 'Recent Searches')}
                             </h3>
                             <div className="flex flex-wrap gap-2">
                                 {history.map((h, i) => (

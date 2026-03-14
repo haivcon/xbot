@@ -165,6 +165,7 @@ function PortfolioChart({ days = 30 }) {
 
 /* ── Create Wallet Modal ── */
 function CreateWalletModal({ onClose, onCreated }) {
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
     const [copied, setCopied] = useState(false);
@@ -241,7 +242,7 @@ function CreateWalletModal({ onClose, onCreated }) {
                                     </div>
                                 </div>
                                 <p className="text-[9px] text-amber-400/50 mt-1 flex items-center gap-1">
-                                    <AlertTriangle size={8} /> Save this key! It will not be shown again.
+                                    <AlertTriangle size={8} /> {t('dashboard.walletPage.saveKeyWarning', 'Save this key! It will not be shown again.')}
                                 </p>
                             </div>
                         </div>
@@ -255,6 +256,7 @@ function CreateWalletModal({ onClose, onCreated }) {
 
 /* ── Import Wallet Modal (Bulk + File) ── */
 function ImportWalletModal({ onClose, onImported }) {
+    const { t } = useTranslation();
     const [rows, setRows] = useState([{ key: '', name: '' }]);
     const [showKeys, setShowKeys] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -355,7 +357,7 @@ function ImportWalletModal({ onClose, onImported }) {
                             onClick={() => fileRef.current?.click()}
                             className="w-full mb-3 py-3 border-2 border-dashed border-white/10 rounded-xl text-xs text-surface-200/40 hover:border-brand-500/30 hover:text-brand-400 transition-colors flex items-center justify-center gap-2"
                         >
-                            <Upload size={14} /> Upload file (.txt / .csv) or paste below
+                            <Upload size={14} /> {t('dashboard.walletPage.uploadOrPaste', 'Upload file (.txt / .csv) or paste below')}
                         </button>
 
                         <div className="space-y-2 mb-3" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
@@ -394,7 +396,7 @@ function ImportWalletModal({ onClose, onImported }) {
 
                         <div className="flex items-center gap-3 mb-5">
                             <button onClick={addRow} disabled={rows.length >= 50} className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                                <Plus size={12} /> Add key ({rows.length}/50)
+                                <Plus size={12} /> {t('dashboard.walletPage.addKey', 'Add key')} ({rows.length}/50)
                             </button>
                             <button onClick={() => setShowKeys(!showKeys)} className="text-xs text-surface-200/30 hover:text-surface-200/60 flex items-center gap-1 transition-colors ml-auto">
                                 {showKeys ? <EyeOff size={12} /> : <Eye size={12} />}
@@ -597,6 +599,7 @@ function ExportKeyModal({ walletId, walletAddress, onClose }) {
 
 /* ── Bulk Export Modal ── */
 function BulkExportModal({ walletIds, wallets, onClose }) {
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [keys, setKeys] = useState(null);
     const [showKeys, setShowKeys] = useState(false);
@@ -658,7 +661,7 @@ function BulkExportModal({ walletIds, wallets, onClose }) {
                         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4">
                             <p className="text-xs text-red-400 flex items-start gap-2">
                                 <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
-                                <span>Private keys will be revealed for {walletIds.length} wallet(s). Never share these keys. Auto-hides after 60 seconds.</span>
+                                <span>{t('dashboard.walletPage.bulkExportWarning', { count: walletIds.length })}</span>
                             </p>
                         </div>
                         <div className="mb-4 space-y-1">
@@ -697,7 +700,7 @@ function BulkExportModal({ walletIds, wallets, onClose }) {
                                 Copy All
                             </button>
                             <button onClick={downloadFile} className="btn-secondary flex-1 text-xs flex items-center justify-center gap-1">
-                                <FileText size={12} /> Save CSV
+                                <FileText size={12} /> {t('dashboard.walletPage.saveCsv', 'Save CSV')}
                             </button>
                         </div>
                         <p className="text-[9px] text-amber-400/50 mb-3 flex items-center gap-1">

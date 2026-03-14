@@ -10,6 +10,7 @@ import {
     Sparkles, ToggleLeft, ToggleRight, FileText,
     MessageSquare, HandMetal, Settings as SettingsIcon, Loader2
 } from 'lucide-react';
+import SettingsExport from '@/components/SettingsExport';
 
 const LANGUAGE_OPTIONS = [
     { value: 'en', label: 'English', icon: '🇺🇸' },
@@ -278,6 +279,9 @@ export default function SettingsPage() {
                     )}
                 </>
             )}
+
+            {/* ═══ Export / Import ═══ */}
+            <SettingsExport />
 
             {/* ═══ Save Button ═══ */}
             <div className="sticky bottom-4 z-10">

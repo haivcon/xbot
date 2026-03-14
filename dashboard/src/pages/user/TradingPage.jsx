@@ -2051,7 +2051,7 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
                         ))}
                     </div>
                     <button onClick={addBatchRow} className="w-full py-2 rounded-xl border border-dashed border-white/[0.1] text-[10px] text-surface-200/30 hover:text-surface-100 hover:border-white/[0.2] transition-colors flex items-center justify-center gap-1">
-                        <Plus size={10} /> Add Row
+                        <Plus size={10} /> {t('dashboard.trading.addRow', 'Add Row')}
                     </button>
 
                     {/* Execute batch */}
@@ -2110,7 +2110,7 @@ function ExecuteSwapButton({ chainIndex, fromTokenAddress, toTokenAddress, amoun
 
     if (!sharedWallets.length) return (
         <a href="#/wallets" className="mt-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-semibold hover:bg-amber-500/15 transition-colors">
-            <Wallet size={11} /> Create a wallet to execute swaps →
+            <Wallet size={11} /> {t('dashboard.trading.createWalletPrompt', 'Create a wallet to execute swaps')} →
         </a>
     );
 
@@ -2131,7 +2131,7 @@ function ExecuteSwapButton({ chainIndex, fromTokenAddress, toTokenAddress, amoun
                         <span className="text-[10px] text-surface-100 font-mono flex-1">{selectedWallet?.address?.slice(0, 10)}...{selectedWallet?.address?.slice(-6)}</span>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={() => setShowConfirm(false)} className="flex-1 py-2 rounded-lg bg-surface-800/60 border border-white/[0.08] text-xs text-surface-200/50 hover:text-surface-100 transition-colors">Cancel</button>
+                        <button onClick={() => setShowConfirm(false)} className="flex-1 py-2 rounded-lg bg-surface-800/60 border border-white/[0.08] text-xs text-surface-200/50 hover:text-surface-100 transition-colors">{t('dashboard.common.cancel', 'Cancel')}</button>
                         <button onClick={handleExecute} disabled={executing}
                             className="flex-1 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold hover:shadow-emerald-500/25 transition-all disabled:opacity-40">
                             {executing ? <Loader2 size={12} className="animate-spin mx-auto" /> : '✅ Confirm Swap'}
@@ -2141,7 +2141,7 @@ function ExecuteSwapButton({ chainIndex, fromTokenAddress, toTokenAddress, amoun
             ) : (
                 <button onClick={() => setShowConfirm(true)}
                     className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-lg hover:shadow-emerald-500/25 hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2">
-                    <Send size={13} /> Execute Swap
+                    <Send size={13} /> {t('dashboard.trading.executeSwap', 'Execute Swap')}
                 </button>
             )}
         </div>

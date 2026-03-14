@@ -40,9 +40,11 @@ const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 function SuspenseWrapper({ children }) {
     return (
-        <Suspense fallback={<PageSkeleton />}>
-            {children}
-        </Suspense>
+        <ErrorBoundary>
+            <Suspense fallback={<PageSkeleton />}>
+                {children}
+            </Suspense>
+        </ErrorBoundary>
     );
 }
 

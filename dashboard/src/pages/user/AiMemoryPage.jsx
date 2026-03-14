@@ -47,7 +47,7 @@ export default function AiMemoryPage() {
     };
 
     const deletePreference = async (key) => {
-        if (!confirm(`Delete "${key}"?`)) return;
+        if (!confirm(t('dashboard.aiMemoryPage.deleteConfirm', { key }))) return;
         try {
             await api.request(`/user/preferences/${encodeURIComponent(key)}`, { method: 'DELETE' });
             await loadPreferences();

@@ -239,8 +239,8 @@ export default function Sidebar({ open, onClose }) {
             items: [
                 { to: '/overview', icon: LayoutDashboard, label: t('dashboard.sidebar.home') },
                 { to: '/token-lookup', icon: Search, label: t('dashboard.sidebar.tokenLookup') || 'Token Lookup' },
-                { to: '/meme-scanner', icon: Zap, label: 'Meme Scanner' },
-                { to: '/discovery', icon: Compass, label: 'Discovery' },
+                { to: '/meme-scanner', icon: Zap, label: t('dashboard.sidebar.memeScanner') },
+                { to: '/discovery', icon: Compass, label: t('dashboard.sidebar.discovery') },
                 { to: '/leaderboard', icon: Trophy, label: t('dashboard.sidebar.leaderboard') },
                 { to: '/alerts', icon: Bell, label: t('dashboard.sidebar.alerts') },
             ],
@@ -378,7 +378,7 @@ export default function Sidebar({ open, onClose }) {
                     <button
                         onClick={toggleTheme}
                         className="flex items-center justify-center w-11 h-11 bg-white/[0.03] border border-white/5 rounded-xl hover:bg-white/[0.06] hover:border-white/10 transition-all"
-                        title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                        title={theme === 'dark' ? t('dashboard.header.lightMode') : t('dashboard.header.darkMode')}
                     >
                         {theme === 'dark' ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-brand-400" />}
                     </button>

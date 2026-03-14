@@ -16,16 +16,16 @@ const ACTION_LABELS = {
 };
 
 const SEARCH_TARGETS = [
-    { label: 'Users', path: '/owner/users', icon: '👤' },
-    { label: 'Groups', path: '/owner/groups', icon: '💬' },
+    { key: 'searchUsers', path: '/owner/users', icon: '👤' },
+    { key: 'searchGroups', path: '/owner/groups', icon: '💬' },
 ];
 
-function timeAgo(ts) {
+function timeAgo(ts, t) {
     const diff = Math.floor(Date.now() / 1000) - ts;
-    if (diff < 60) return 'just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
+    if (diff < 60) return t('dashboard.common.timeJustNow');
+    if (diff < 3600) return `${Math.floor(diff / 60)}${t('dashboard.common.timeMinAgo')}`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}${t('dashboard.common.timeHourAgo')}`;
+    return `${Math.floor(diff / 86400)}${t('dashboard.common.timeDayAgo')}`;
 }
 
 export default function Header({ onMenuClick }) {
@@ -111,6 +111,7 @@ export default function Header({ onMenuClick }) {
                 <button
                     onClick={onMenuClick}
                     className="lg:hidden p-2 rounded-xl hover:bg-white/5 dark:hover:bg-white/5 text-surface-200/70 dark:text-surface-200/70 transition-colors"
+                    aria-label={t('dashboard.common.menu', 'Menu')}
                 >
                     <Menu size={20} />
                 </button>
@@ -133,7 +134,7 @@ export default function Header({ onMenuClick }) {
                             isLight ? 'bg-white border border-slate-200' : 'bg-surface-800 border border-white/10'
                         }`}>
                             <div className={`px-3 py-2 text-[10px] font-medium ${isLight ? 'text-slate-400' : 'text-surface-200/30'}`}>
-                                {t('dashboard.header.searchIn') || 'Search in...'}
+                                {t('dashboard.header.searchIn')}
                             </div>
                             {SEARCH_TARGETS.map((target) => (
                                 <button
@@ -144,7 +145,7 @@ export default function Header({ onMenuClick }) {
                                     }`}
                                 >
                                     <span>{target.icon}</span>
-                                    <span>{target.label}</span>
+                                    <span>{t(`dashboard.header.${target.key}`)}</span>
                                     <span className={`ml-auto text-[10px] ${isLight ? 'text-slate-400' : 'text-surface-200/30'}`}>
                                         "{searchQuery.trim()}"
                                     </span>
@@ -161,12 +162,12 @@ export default function Header({ onMenuClick }) {
                     {connected ? (
                         <>
                             <Wifi size={13} className="text-emerald-400" />
-                            <span className="text-[10px] font-medium text-emerald-400/80">Live</span>
+                            <span className="text-[10px] font-medium text-emerald-400/80">{t('dashboard.header.live')}</span>
                         </>
                     ) : (
                         <>
                             <WifiOff size={13} className="text-surface-200/30" />
-                            <span className="text-[10px] font-medium text-surface-200/30">Offline</span>
+                            <span className="text-[10px] font-medium text-surface-200/30">{t('dashboard.header.offline')}</span>
                         </>
                     )}
                 </div>
@@ -196,7 +197,8 @@ export default function Header({ onMenuClick }) {
                 <button
                     onClick={toggleTheme}
                     className="p-2.5 rounded-xl hover:bg-white/5 dark:hover:bg-white/5 text-surface-200/50 dark:text-surface-200/50 transition-all duration-300"
-                    title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                    title={theme === 'dark' ? t('dashboard.header.lightMode') : t('dashboard.header.darkMode')}
+                    aria-label={theme === 'dark' ? t('dashboard.header.lightMode') : t('dashboard.header.darkMode')}
                 >
                     {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
                 </button>
@@ -223,13 +225,13 @@ export default function Header({ onMenuClick }) {
                         }`}>
                             <div className={`flex items-center justify-between px-4 py-3 border-b ${isLight ? 'border-slate-200' : 'border-white/5'}`}>
                                 <h4 className={`text-sm font-semibold ${isLight ? 'text-slate-800' : 'text-surface-100'}`}>
-                                    {t('dashboard.header.notifications') || 'Notifications'}
+                                    {t('dashboard.header.notifications')}
                                 </h4>
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={toggleSound}
                                         className={`p-1 rounded ${isLight ? 'hover:bg-slate-100 text-slate-400' : 'hover:bg-white/10 text-surface-200/40'}`}
-                                        title={soundEnabled ? 'Mute notifications' : 'Unmute notifications'}
+                                        title={soundEnabled ? t('dashboard.header.muteNotif') : t('dashboard.header.unmuteNotif')}
                                     >
                                         {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
                                     </button>
@@ -241,7 +243,7 @@ export default function Header({ onMenuClick }) {
                             <div className="overflow-auto max-h-72">
                                 {notifications.length === 0 ? (
                                     <div className={`px-4 py-8 text-center text-xs ${isLight ? 'text-slate-400' : 'text-surface-200/40'}`}>
-                                        {t('dashboard.common.noData') || 'No notifications yet'}
+                                        {t('dashboard.common.noData')}
                                     </div>
                                 ) : (
                                     notifications.map((n) => (
@@ -260,7 +262,7 @@ export default function Header({ onMenuClick }) {
                                                         {n.details || n.chatId}
                                                     </p>
                                                 </div>
-                                                <span className={`text-[10px] shrink-0 ${isLight ? 'text-slate-300' : 'text-surface-200/30'}`}>{timeAgo(n.ts)}</span>
+                                                <span className={`text-[10px] shrink-0 ${isLight ? 'text-slate-300' : 'text-surface-200/30'}`}>{timeAgo(n.ts, t)}</span>
                                             </div>
                                         </div>
                                     ))

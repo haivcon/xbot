@@ -73,7 +73,7 @@ export default function UsersPage() {
     };
 
     const handleBulkBan = async () => {
-        if (!selected.size || !confirm(`Ban ${selected.size} users?`)) return;
+        if (!selected.size || !confirm(t('dashboard.users.confirmBulkBan', { count: selected.size }))) return;
         for (const id of selected) {
             try { await api.banUser(id, 'Bulk banned from dashboard'); } catch {}
         }
@@ -82,7 +82,7 @@ export default function UsersPage() {
     };
 
     const handleBulkUnban = async () => {
-        if (!selected.size || !confirm(`Unban ${selected.size} users?`)) return;
+        if (!selected.size || !confirm(t('dashboard.users.confirmBulkUnban', { count: selected.size }))) return;
         for (const id of selected) {
             try { await api.unbanUser(id); } catch {}
         }
@@ -204,7 +204,7 @@ export default function UsersPage() {
                                 <th className="text-left px-5 py-3 text-surface-200/50 font-medium">Name</th>
                                 <th className="text-left px-5 py-3 text-surface-200/50 font-medium">{t('dashboard.users.language')}</th>
                                 <th className="text-left px-5 py-3 text-surface-200/50 font-medium">{t('dashboard.users.lastSeen')}</th>
-                                <th className="text-right px-5 py-3 text-surface-200/50 font-medium">Wallet Limit</th>
+                                <th className="text-right px-5 py-3 text-surface-200/50 font-medium">{t('dashboard.users.walletLimit', 'Wallet Limit')}</th>
                                 <th className="text-right px-5 py-3 text-surface-200/50 font-medium">{t('dashboard.common.actions')}</th>
                             </tr>
                         </thead>
@@ -276,19 +276,19 @@ export default function UsersPage() {
                 <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-[fadeIn_0.2s_ease] pointer-events-auto">
                     <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-surface-800/95 border border-white/10 shadow-2xl shadow-black/50 backdrop-blur-xl">
                         <CheckSquare size={16} className="text-brand-400" />
-                        <span className="text-sm text-surface-100 font-medium">{selected.size} selected</span>
+                        <span className="text-sm text-surface-100 font-medium">{t('dashboard.users.selectedCount', { count: selected.size })}</span>
                         <div className="w-px h-5 bg-white/10" />
                         {tab === 'banned' ? (
                             <button onClick={handleBulkUnban} className="px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-all">
-                                ✅ Unban All
+                                ✅ {t('dashboard.users.unbanAll', 'Unban All')}
                             </button>
                         ) : (
                             <button onClick={handleBulkBan} className="px-3 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-medium hover:bg-red-500/25 transition-all">
-                                🚫 Ban All
+                                🚫 {t('dashboard.users.banAll', 'Ban All')}
                             </button>
                         )}
                         <button onClick={() => setSelected(new Set())} className="px-2 py-1.5 rounded-lg text-surface-200/40 hover:text-surface-200/70 text-xs transition-all">
-                            Cancel
+                            {t('dashboard.common.cancel', 'Cancel')}
                         </button>
                     </div>
                 </div>

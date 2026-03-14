@@ -81,8 +81,8 @@ export default function AuditLogPage() {
                         <Shield size={18} className="text-amber-400" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-bold text-surface-100">Audit Log</h1>
-                        <p className="text-xs text-surface-200/40">{total} events recorded</p>
+                        <h1 className="text-xl font-bold text-surface-100">{t('dashboard.auditLog.title', 'Audit Log')}</h1>
+                        <p className="text-xs text-surface-200/40">{t('dashboard.auditLog.eventsRecorded', { count: total })}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -90,13 +90,13 @@ export default function AuditLogPage() {
                         <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                     </button>
                     <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-surface-200/50 text-xs transition-all">
-                        <Download size={14} /> Export CSV
+                        <Download size={14} /> {t('dashboard.auditLog.exportCsv', 'Export CSV')}
                     </button>
                     <button onClick={() => setViewMode(v => v === 'table' ? 'timeline' : 'table')}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs transition-all ${
                             viewMode === 'timeline' ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30' : 'bg-white/5 hover:bg-white/10 text-surface-200/50'
                         }`}>
-                        <BarChart3 size={14} /> {viewMode === 'timeline' ? 'Table' : 'Timeline'}
+                        <BarChart3 size={14} /> {viewMode === 'timeline' ? t('dashboard.auditLog.table', 'Table') : t('dashboard.auditLog.timeline', 'Timeline')}
                     </button>
                 </div>
             </div>
@@ -107,7 +107,7 @@ export default function AuditLogPage() {
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-200/30" />
                     <input
                         type="text"
-                        placeholder="Search by user, action, or details..."
+                        placeholder={t('dashboard.auditLog.searchPlaceholder', 'Search by user, action, or details...')}
                         value={search}
                         onChange={e => handleSearchChange(e.target.value)}
                         className="input-field w-full !pl-9 !py-2.5 !text-sm"
@@ -125,7 +125,7 @@ export default function AuditLogPage() {
                                     : 'bg-white/5 text-surface-200/40 hover:bg-white/10 border border-transparent'
                             }`}
                         >
-                            {a === 'all' ? 'All' : a.replace(/_/g, ' ')}
+                            {a === 'all' ? t('dashboard.common.all', 'All') : a.replace(/_/g, ' ')}
                         </button>
                     ))}
                 </div>
@@ -139,7 +139,7 @@ export default function AuditLogPage() {
                     <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
                         className="input-field !py-1.5 !px-2.5 !text-[11px] !w-auto" />
                     {(dateFrom || dateTo) && (
-                        <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-[10px] text-surface-200/30 hover:text-red-400 transition-colors">Clear</button>
+                        <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-[10px] text-surface-200/30 hover:text-red-400 transition-colors">{t('dashboard.common.clear', 'Clear')}</button>
                     )}
                 </div>
             </div>
@@ -147,7 +147,7 @@ export default function AuditLogPage() {
             {/* Timeline View */}
             {viewMode === 'timeline' && logs.length > 0 && (
                 <div className="glass-card p-5">
-                    <h3 className="text-xs font-semibold text-surface-200/50 mb-3 uppercase tracking-wider">Activity Timeline</h3>
+                    <h3 className="text-xs font-semibold text-surface-200/50 mb-3 uppercase tracking-wider">{t('dashboard.auditLog.activityTimeline', 'Activity Timeline')}</h3>
                     <div className="space-y-2">
                         {logs.slice(0, 15).map((log, i) => (
                             <div key={log.id || i} className="flex items-start gap-3">
@@ -192,7 +192,7 @@ export default function AuditLogPage() {
                                     </tr>
                                 ))
                             ) : logs.length === 0 ? (
-                                <tr><td colSpan={5} className="px-4 py-12 text-center text-xs text-surface-200/30">No audit logs found</td></tr>
+                                <tr><td colSpan={5} className="px-4 py-12 text-center text-xs text-surface-200/30">{t('dashboard.auditLog.noLogs', 'No audit logs found')}</td></tr>
                             ) : (
                                 logs.map((log, i) => (
                                     <tr key={log.id || i} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
