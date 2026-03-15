@@ -753,6 +753,144 @@ module.exports.ONCHAIN_TOOLS = [
                 name: 'browse_marketplace',
                 description: 'Browse and manage AI agent plugins in the marketplace. Actions: list, install, remove, info. Vietnamese: "marketplace", "cài plugin", "xem plugin", "chợ agent".',
                 parameters: { type: 'object', properties: { action: { type: 'string', description: '"list", "install", "remove", "info"' }, pluginId: { type: 'string', description: 'Plugin ID (for install/remove/info)' }, category: { type: 'string', description: 'Filter by category: "trading", "analytics", "social", "utility"' } }, required: ['action'] }
+            },
+            // ── #4: Meme Sniper Intelligence Radar ──
+            {
+                name: 'scan_meme_radar',
+                description: 'Start/stop real-time meme token radar scanning. Finds new meme tokens, scores risk, and identifies snipe candidates. Vietnamese: "quét meme", "radar meme", "tìm meme mới", "snipe token". English: "scan memes", "meme radar", "find new tokens".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"start", "stop", "status", "candidates", "heatmap"' }, maxMarketCap: { type: 'string', description: 'Max market cap filter for snipe candidates' }, minScore: { type: 'string', description: 'Min risk score (0-100). Default "60"' } }, required: ['action'] }
+            },
+            // ── #10: Paper Trading Academy ──
+            {
+                name: 'paper_trade',
+                description: 'Paper trading (virtual money, real prices). Practice trading without risk. Vietnamese: "giao dịch ảo", "paper trade", "tập trade", "portfolio ảo". English: "paper trade", "practice trading", "virtual portfolio".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"buy", "sell", "portfolio", "leaderboard", "challenge", "level"' }, token: { type: 'string', description: 'Token symbol to trade' }, amount: { type: 'string', description: 'Amount in USD or tokens' } }, required: ['action'] }
+            },
+            // ── #15: Emergency Panic Sell ──
+            {
+                name: 'emergency_sell_all',
+                description: 'EMERGENCY: Sell ALL tokens in wallet to stablecoin in one command. Includes honeypot detection and recovery report. ⚠️ Requires confirmation. Vietnamese: "panic sell", "bán hết", "khẩn cấp bán tất cả", "sell all". English: "panic button", "emergency sell", "sell everything".',
+                parameters: { type: 'object', properties: { targetStable: { type: 'string', description: 'Stablecoin to convert to. Default "USDT"' }, dryRun: { type: 'boolean', description: 'If true, simulate without executing. Default true' }, confirm: { type: 'boolean', description: 'Must be true to execute. Default false for safety' } }, required: [] }
+            },
+            // ── #16: Smart DCA Bot ──
+            {
+                name: 'manage_dca',
+                description: 'Manage Smart DCA (Dollar Cost Averaging) bot. AI adjusts buy amount based on MA20, RSI, and whale activity. Vietnamese: "mua định kỳ", "DCA", "mua mỗi ngày", "tắt DCA". English: "DCA bot", "daily buy", "auto buy".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"create", "cancel", "list", "stats"' }, token: { type: 'string', description: 'Token to DCA into' }, amount: { type: 'string', description: 'Base amount per buy in USD' }, interval: { type: 'string', description: '"hourly", "4h", "12h", "daily", "weekly". Default "daily"' }, smartMode: { type: 'boolean', description: 'Enable AI-adjusted amounts. Default true' } }, required: ['action'] }
+            },
+            // ── #14: CEX-DEX Price Bridge ──
+            {
+                name: 'compare_cex_dex_price',
+                description: 'Compare token prices between CEX (OKX) and DEX (multiple chains) to find the best route. Calculates fees and gas. Vietnamese: "so sánh giá", "giá sàn nào rẻ", "mua ở đâu tốt". English: "compare prices", "best price", "CEX vs DEX".',
+                parameters: { type: 'object', properties: { token: { type: 'string', description: 'Token symbol to compare (e.g. "OKB", "ETH")' }, amount: { type: 'string', description: 'Amount in USD to buy. Default "100"' }, chains: { type: 'string', description: 'Comma-separated chain IDs. Default "196,1,56"' } }, required: ['token'] }
+            },
+            // ── #25: Strategy Backtester ──
+            {
+                name: 'backtest_strategy',
+                description: 'Backtest a trading strategy against historical price data. Supports: Fixed DCA, Smart DCA, MA Crossover, RSI Bounce, Whale Follow. Vietnamese: "backtest", "kiểm tra chiến lược", "test strategy". English: "backtest strategy", "test trading plan".',
+                parameters: { type: 'object', properties: { strategy: { type: 'string', description: '"dca_fixed", "smart_dca", "ma_crossover", "rsi_bounce", "whale_follow"' }, token: { type: 'string', description: 'Token to backtest on' }, period: { type: 'string', description: '"7d", "30d", "90d", "1y". Default "30d"' }, initialCapital: { type: 'string', description: 'Starting capital in USD. Default "1000"' } }, required: ['strategy', 'token'] }
+            },
+            // ── #29: Multi-Wallet Strategy Manager ──
+            {
+                name: 'manage_wallet_groups',
+                description: 'Organize wallets into strategy groups (HODL, DCA, Sniper, Yield, Arbitrage, Reserve). Vietnamese: "nhóm ví", "chiến lược ví", "quản lý đa ví". English: "wallet groups", "multi-wallet", "strategy manager".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"create_group", "delete_group", "add_wallet", "remove_wallet", "list_groups", "rebalance_check"' }, groupName: { type: 'string', description: 'Name of the wallet group' }, strategy: { type: 'string', description: '"hodl", "dca", "sniper", "yield", "arbitrage", "reserve"' }, walletId: { type: 'string', description: 'Wallet ID to add/remove' } }, required: ['action'] }
+            },
+            // ── #11: Wallet Security Guardian ──
+            {
+                name: 'scan_wallet_security',
+                description: 'Comprehensive wallet security scan: approval scanner, anomaly detection, security scoring, pre-swap honeypot check. Vietnamese: "kiểm tra bảo mật ví", "quét approval", "điểm an toàn ví", "revoke approval". English: "security scan", "check approvals", "wallet safety".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"full_scan", "check_approvals", "security_score", "pre_swap_check"' }, walletAddress: { type: 'string', description: 'Wallet address to scan' }, tokenAddress: { type: 'string', description: 'Token address (for pre_swap_check)' } }, required: ['action'] }
+            },
+            // ── #17: AI Daily Market Report ──
+            {
+                name: 'manage_daily_report',
+                description: 'Enable/disable automated AI daily market report. Includes: market overview, whale activity, meme spotlight, portfolio summary, AI verdict. Vietnamese: "bản tin hàng ngày", "bật báo cáo sáng", "tắt daily report". English: "daily report", "morning brief", "market summary".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"enable", "disable", "send_now", "status", "set_time"' }, hour: { type: 'string', description: 'Hour to receive report (0-23). Default "8"' } }, required: ['action'] }
+            },
+            // ── #18: Custom Alert Rules Engine ──
+            {
+                name: 'manage_alert_rules',
+                description: 'Create custom multi-condition alerts using natural language. Supports: price above/below, whale buys, smart money, volume, holder count. Vietnamese: "tạo cảnh báo tùy chỉnh", "alert khi...", "báo khi OKB dưới $50 VÀ whale mua". English: "custom alert", "alert when", "create rule".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"create", "list", "delete", "parse_text"' }, ruleText: { type: 'string', description: 'Natural language rule (for create/parse_text)' }, ruleId: { type: 'string', description: 'Rule ID (for delete)' } }, required: ['action'] }
+            },
+            // ── #21: Whale Wallet Cloner ──
+            {
+                name: 'manage_whale_tracking',
+                description: 'Track and mirror whale wallet trades. Auto-copy trades with proportional sizing. Vietnamese: "theo dõi cá voi", "clone ví whale", "copy cá voi", "mirror whale". English: "track whale", "clone whale", "copy wallet".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"track", "untrack", "list", "stats", "set_auto_mirror"' }, whaleAddress: { type: 'string', description: 'Whale wallet address' }, label: { type: 'string', description: 'Custom label for the whale' }, maxPerTrade: { type: 'string', description: 'Max USD per mirrored trade. Default "50"' }, autoMirror: { type: 'boolean', description: 'Enable auto-mirror trades. Default false' } }, required: ['action'] }
+            },
+            // ── #22: AI Narrative Detector ──
+            {
+                name: 'detect_narratives',
+                description: 'Detect trending crypto narratives (AI, RWA, DePIN, GameFi, DeFi, Meme, L2, BTC Eco, SocialFi, Privacy). Checks portfolio alignment. Vietnamese: "xu hướng narrative", "trend gì đang hot", "danh mục có theo trend không". English: "trending narratives", "what narrative is hot", "portfolio alignment".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"trending", "check_alignment", "analyze_text"' }, text: { type: 'string', description: 'Text to analyze (for analyze_text)' }, hours: { type: 'string', description: 'Lookback hours. Default "24"' } }, required: ['action'] }
+            },
+            // ── #28: Token Unlock Tracker ──
+            {
+                name: 'check_token_vesting',
+                description: 'Track token unlock/vesting schedules. Get next unlock date, supply impact analysis. Vietnamese: "lịch unlock token", "token nào sắp unlock", "vesting schedule", "bao giờ unlock". English: "token unlock", "vesting schedule", "upcoming unlocks".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"check", "add_schedule", "upcoming", "impact"' }, token: { type: 'string', description: 'Token symbol' }, days: { type: 'string', description: 'Lookahead days. Default "30"' } }, required: ['action'] }
+            },
+            // ── #30: Social Sentiment Radar ──
+            {
+                name: 'analyze_sentiment',
+                description: 'Analyze social sentiment for a token. Includes Fear & Greed Index. Vietnamese: "tâm lý thị trường", "sentiment", "sợ hay tham", "fear greed index". English: "market sentiment", "fear greed", "social mood".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"analyze", "fear_greed", "trend", "keyword_cloud"' }, token: { type: 'string', description: 'Token to analyze' }, text: { type: 'string', description: 'Text to analyze sentiment (optional)' } }, required: ['action'] }
+            },
+            // ── #13: DeFi Yield Autopilot ──
+            {
+                name: 'manage_yield_autopilot',
+                description: 'Auto yield farming optimization — scans pools, auto-rebalances to highest APY, monitors impermanent loss. Vietnamese: "yield farming tự động", "bật autopilot", "APY tốt nhất", "impermanent loss". English: "yield autopilot", "auto farm", "best APY".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"enable", "disable", "status", "scan_pools", "check_il"' }, amount: { type: 'string', description: 'Amount to deposit in USD' }, token: { type: 'string', description: 'Token to farm with. Default "USDT"' } }, required: ['action'] }
+            },
+            // ── #19: Anti-Scam Group Moderation ──
+            {
+                name: 'check_scam',
+                description: 'Check URLs and token addresses for scam indicators. Includes: phishing detection, dev rug history, bundler check, anti-shill. Vietnamese: "kiểm tra lừa đảo", "có phải scam không", "check scam". English: "is this a scam", "check scam", "verify token".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"check_url", "check_token", "top_shillers", "enable_auto_mod", "disable_auto_mod"' }, url: { type: 'string', description: 'URL to check (for check_url)' }, tokenAddress: { type: 'string', description: 'Token address (for check_token)' } }, required: ['action'] }
+            },
+            // ── #20: Referral System ──
+            {
+                name: 'manage_referral',
+                description: 'Referral and rewards system — generate referral codes, earn rewards for inviting friends. Vietnamese: "giới thiệu bạn", "referral", "code giới thiệu", "thưởng mời bạn". English: "referral code", "invite friends", "referral rewards".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"get_code", "stats", "leaderboard", "apply_code"' }, code: { type: 'string', description: 'Referral code (for apply_code)' } }, required: ['action'] }
+            },
+            // ── #23: Gas Optimizer ──
+            {
+                name: 'get_optimal_gas',
+                description: 'Get optimal gas timing and cost estimation. Finds cheapest time to transact. Vietnamese: "gas rẻ nhất khi nào", "tối ưu gas", "phí gas". English: "cheapest gas", "gas timing", "gas optimizer".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"current", "best_time", "estimate_cost", "history"' }, chainId: { type: 'string', description: 'Chain ID. Default "196"' }, gasLimit: { type: 'string', description: 'Gas limit for cost estimation. Default "21000"' } }, required: ['action'] }
+            },
+            // ── #26: Prediction Market ──
+            {
+                name: 'manage_predictions',
+                description: 'Community prediction market — create predictions, bet on outcomes, view leaderboard. Vietnamese: "dự đoán giá", "đặt cược", "tạo prediction". English: "create prediction", "bet on", "prediction market".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"create", "bet", "list", "resolve", "my_bets"' }, question: { type: 'string', description: 'Prediction question (for create)' }, predictionId: { type: 'string', description: 'Prediction ID (for bet/resolve)' }, option: { type: 'string', description: '"0" or "1" (for bet)' }, amount: { type: 'string', description: 'Bet amount in USDT' } }, required: ['action'] }
+            },
+            // ── #27: Airdrop Hunter ──
+            {
+                name: 'check_airdrop_eligibility',
+                description: 'Check wallet activity score and airdrop eligibility. Analyzes tx count, unique protocols, chains, bridge activity. Vietnamese: "kiểm tra airdrop", "ví được airdrop không", "điểm hoạt động ví". English: "airdrop eligibility", "activity score", "am I eligible".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"check_score", "active_airdrops", "claim_status"' }, walletAddress: { type: 'string', description: 'Wallet to check' } }, required: ['action'] }
+            },
+            // ── #24: Crypto Tax Reporter ──
+            {
+                name: 'generate_tax_report',
+                description: 'Generate crypto tax report with gain/loss calculations. Supports FIFO, LIFO, Average cost methods. Vietnamese: "báo cáo thuế", "tính thuế crypto", "lãi lỗ giao dịch". English: "tax report", "capital gains", "export CSV".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"generate", "export_csv", "summary"' }, taxYear: { type: 'string', description: 'Tax year. Default current year' }, method: { type: 'string', description: '"fifo", "lifo", "average". Default "fifo"' } }, required: ['action'] }
+            },
+            // ── B1: AI Portfolio Report ──
+            {
+                name: 'ai_portfolio_report',
+                description: 'Generate comprehensive AI portfolio analysis: profit/loss breakdown, risk analysis, top performers, AI recommendations. Vietnamese: "báo cáo portfolio", "phân tích danh mục", "portfolio AI". English: "portfolio report", "analyze my portfolio", "portfolio summary".',
+                parameters: { type: 'object', properties: { period: { type: 'string', description: '"24h", "7d", "30d", "all". Default "7d"' } } }
+            },
+            // ── B2: AI Price Alert (Natural Language) ──
+            {
+                name: 'create_ai_price_alert',
+                description: 'Create price alerts using natural language — no need for /price command. Vietnamese: "báo khi ETH lên 3000", "nhắc khi OKB dưới 50", "cảnh báo giá". English: "alert me when ETH hits 3000", "notify when BTC drops to 60000".',
+                parameters: { type: 'object', properties: { description: { type: 'string', description: 'Natural language alert description' }, token: { type: 'string', description: 'Token symbol' }, targetPrice: { type: 'string', description: 'Target price in USD' }, direction: { type: 'string', description: '"above" or "below"' } }, required: ['token', 'targetPrice', 'direction'] }
             }
         ]
     }

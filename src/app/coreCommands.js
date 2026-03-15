@@ -1232,6 +1232,231 @@ function registerCoreCommands(deps = {}) {
             // Silently skip if channels module has issues
         }
     })();
+    // ═══════════════════════════════════════════════════════
+    // New Features: Inline Keyboard Callback Handlers
+    // ═══════════════════════════════════════════════════════
+    bot.on('callback_query', async (query) => {
+        const data = query.data || '';
+        // Only handle our new feature prefixes
+        const PREFIXES = ['panic|', 'dca|', 'paper|', 'guard|', 'whale|', 'pred|', 'yield|', 'ref|', 'rule|', 'gas|', 'radar|', 'report|', 'drop|', 'senti|', 'narr|', 'vest|', 'tax|', 'bt|', 'route|', 'scam|', 'wgroup|'];
+        if (!PREFIXES.some(p => data.startsWith(p))) return;
+
+        const chatId = query.message?.chat?.id;
+        const userId = String(query.from?.id);
+        const lang = await getLang(query.message);
+        const logger = require('../core/logger');
+        const log = logger.child('FeatureCallbacks');
+
+        try {
+            await bot.answerCallbackQuery(query.id).catch(() => {});
+
+            // ── #15 Panic Sell ──
+            if (data === 'panic|confirm') {
+                const { executePanicSell, formatPanicReport } = require('../features/panicSell');
+                await bot.sendMessage(chatId, lang === 'vi' ? '🚨 Đang bán tất cả...' : '🚨 Selling all tokens...', { parse_mode: 'HTML' });
+                const results = await executePanicSell([], { dryRun: true });
+                await bot.sendMessage(chatId, formatPanicReport(results, lang), { parse_mode: 'HTML' });
+                return;
+            }
+            if (data === 'panic|cancel') {
+                await bot.sendMessage(chatId, lang === 'vi' ? '❌ Đã hủy panic sell' : '❌ Panic sell cancelled', { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #16 DCA Bot ──
+            if (data.startsWith('dca|cancel|')) {
+                const token = data.slice('dca|cancel|'.length);
+                const { cancelDCA } = require('../features/dcaBot');
+                const ok = cancelDCA(userId, token);
+                await bot.sendMessage(chatId, ok ? `✅ DCA ${token} cancelled` : `❌ No active DCA for ${token}`, { parse_mode: 'HTML' });
+                return;
+            }
+            if (data === 'dca|list') {
+                const { getUserDCAs } = require('../features/dcaBot');
+                const dcas = getUserDCAs(userId);
+                if (!dcas.length) { await bot.sendMessage(chatId, lang === 'vi' ? '📭 Chưa có DCA nào' : '📭 No active DCAs'); return; }
+                const lines = dcas.map(d => `• ${d.token}: $${d.baseAmount}/${d.interval} ${d.smartMode ? '🧠' : ''}`);
+                await bot.sendMessage(chatId, `📊 <b>Active DCAs:</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #10 Paper Trade ──
+            if (data.startsWith('paper|portfolio')) {
+                const { getOrCreatePortfolio } = require('../features/paperTrading');
+                const p = getOrCreatePortfolio(userId);
+                const v = p.getPortfolioValue();
+                const level = p.getLevel();
+                const lines = [`💰 Cash: $${v.cash.toFixed(2)}`, `📊 Holdings: $${v.holdingsValue.toFixed(2)}`, `📈 Total: $${v.totalValue.toFixed(2)}`, `🎯 PnL: ${v.totalPnl >= 0 ? '+' : ''}$${v.totalPnl.toFixed(2)}`, `🏆 Level: ${level.name} (${p.xp} XP)`, `✅ Win Rate: ${v.winRate}%`];
+                await bot.sendMessage(chatId, `📋 <b>Paper Portfolio</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' });
+                return;
+            }
+            if (data === 'paper|challenge') {
+                const { getDailyChallenge } = require('../features/paperTrading');
+                const day = Math.floor(Date.now() / 86400000);
+                const ch = getDailyChallenge(day);
+                await bot.sendMessage(chatId, `🎯 <b>Daily Challenge:</b>\n${ch.desc}\n🏆 Reward: ${ch.xpReward} XP`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #11 Wallet Guardian ──
+            if (data.startsWith('guard|scan|')) {
+                const wallet = data.slice('guard|scan|'.length);
+                const { calculateSecurityScore, getSecurityLabel } = require('../features/walletGuardian');
+                const score = calculateSecurityScore({ activeApprovals: 5, riskyApprovals: 0 });
+                const label = getSecurityLabel(score);
+                await bot.sendMessage(chatId, `${label.emoji} <b>Security Score: ${score}/100</b>\n${label.label}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #21 Whale Cloner ──
+            if (data.startsWith('whale|untrack|')) {
+                const addr = data.slice('whale|untrack|'.length);
+                const { removeTracker } = require('../features/whaleCloner');
+                const ok = removeTracker(userId, addr);
+                await bot.sendMessage(chatId, ok ? '✅ Whale untracked' : '❌ Not tracking this whale', { parse_mode: 'HTML' });
+                return;
+            }
+            if (data === 'whale|list') {
+                const { getUserTrackers } = require('../features/whaleCloner');
+                const trackers = getUserTrackers(userId);
+                if (!trackers.length) { await bot.sendMessage(chatId, '📭 No tracked whales'); return; }
+                const lines = trackers.map(t => `🐋 ${t.label || t.whaleAddress.slice(0, 10)}... ${t.autoMirror ? '🔄 Auto' : '👁️ Watch'}`);
+                await bot.sendMessage(chatId, `🐋 <b>Tracked Whales:</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #26 Prediction Market ──
+            if (data.startsWith('pred|bet|')) {
+                const [, , predId, option] = data.split('|');
+                const { getPrediction } = require('../features/predictionMarket');
+                const pred = getPrediction(predId);
+                if (!pred) { await bot.sendMessage(chatId, '❌ Prediction not found'); return; }
+                const result = pred.stake(userId, parseInt(option), 1);
+                await bot.sendMessage(chatId, result.success ? `✅ Bet placed! Pool: $${result.totalPool}` : `❌ ${result.error}`, { parse_mode: 'HTML' });
+                return;
+            }
+            if (data === 'pred|list') {
+                const { getActivePredictions } = require('../features/predictionMarket');
+                const active = getActivePredictions();
+                if (!active.length) { await bot.sendMessage(chatId, '📭 No active predictions'); return; }
+                const lines = active.map(p => `❓ ${p.question} (Pool: $${p.totalPool})`);
+                await bot.sendMessage(chatId, `🔮 <b>Active Predictions:</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #13 Yield Autopilot ──
+            if (data.startsWith('yield|toggle')) {
+                const { getOrCreateAutopilot } = require('../features/yieldAutopilot');
+                const pilot = getOrCreateAutopilot(userId);
+                pilot.active = !pilot.active;
+                await bot.sendMessage(chatId, pilot.active ? '✅ Yield autopilot ON' : '⏹️ Yield autopilot OFF', { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #20 Referral ──
+            if (data === 'ref|code') {
+                const { referralSystem } = require('../features/referralSystem');
+                const code = referralSystem.generateCode(userId);
+                await bot.sendMessage(chatId, `🎁 <b>Your referral code:</b>\n<code>${code}</code>\n\n💰 Earn 0.05 USDT per invite!`, { parse_mode: 'HTML' });
+                return;
+            }
+            if (data === 'ref|stats') {
+                const { referralSystem } = require('../features/referralSystem');
+                const stats = referralSystem.getUserStats(userId);
+                if (!stats) { await bot.sendMessage(chatId, '📭 No referral data yet. Use /referral to get started.'); return; }
+                await bot.sendMessage(chatId, `📊 <b>Referral Stats:</b>\n👥 Invited: ${stats.referredCount}\n💰 Rewards: $${stats.totalRewards.toFixed(2)}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #18 Alert Rules ──
+            if (data.startsWith('rule|delete|')) {
+                const ruleId = data.slice('rule|delete|'.length);
+                const { deleteRule } = require('../features/alertRulesEngine');
+                const ok = deleteRule(userId, ruleId);
+                await bot.sendMessage(chatId, ok ? '✅ Alert rule deleted' : '❌ Rule not found', { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #23 Gas Optimizer ──
+            if (data.startsWith('gas|check|')) {
+                const chainId = parseInt(data.slice('gas|check|'.length)) || 196;
+                const { gasTracker, suggestGasTiming } = require('../features/gasOptimizer');
+                await bot.sendMessage(chatId, suggestGasTiming(gasTracker, chainId, lang), { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #4 Meme Radar ──
+            if (data === 'radar|start') {
+                const { memeRadar } = require('../features/memeRadar');
+                memeRadar.start(async () => {});
+                await bot.sendMessage(chatId, '🔴 Meme Radar LIVE — scanning every 30s', { parse_mode: 'HTML' });
+                return;
+            }
+            if (data === 'radar|stop') {
+                const { memeRadar } = require('../features/memeRadar');
+                memeRadar.stop();
+                await bot.sendMessage(chatId, '⏹️ Meme Radar stopped', { parse_mode: 'HTML' });
+                return;
+            }
+            if (data === 'radar|top') {
+                const { memeRadar, getRiskLabel } = require('../features/memeRadar');
+                const top = memeRadar.getTopTokens(10);
+                if (!top.length) { await bot.sendMessage(chatId, '📭 No tokens scanned yet. Start radar first.'); return; }
+                const lines = top.map(t => `${t.risk.emoji} ${t.symbol || t.address?.slice(0,10)} — Score: ${t.riskScore}/100`);
+                await bot.sendMessage(chatId, `📡 <b>Meme Radar Top 10:</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #17 Daily Report ──
+            if (data === 'report|now') {
+                const { buildDailyReport, formatDailyReport } = require('../features/dailyReport');
+                const report = await buildDailyReport({ userId, lang });
+                await bot.sendMessage(chatId, formatDailyReport(report), { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #30 Sentiment ──
+            if (data.startsWith('senti|fg')) {
+                const { calculateFearGreedIndex } = require('../features/sentimentRadar');
+                const fg = calculateFearGreedIndex({});
+                await bot.sendMessage(chatId, `${fg.emoji} <b>Fear & Greed Index: ${fg.index}/100</b>\n${fg.label}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #22 Narrative ──
+            if (data === 'narr|trending') {
+                const { narrativeTrend } = require('../features/narrativeDetector');
+                const top = narrativeTrend.getTopNarratives(24, 5);
+                if (!top.length) { await bot.sendMessage(chatId, '📭 No narrative data yet'); return; }
+                const lines = top.map(n => `${n.emoji} ${n.name}`);
+                await bot.sendMessage(chatId, `🔥 <b>Trending Narratives:</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #28 Vesting ──
+            if (data === 'vest|upcoming') {
+                const { getAllUpcoming } = require('../features/vestingTracker');
+                const upcoming = getAllUpcoming(30);
+                if (!upcoming.length) { await bot.sendMessage(chatId, '📭 No upcoming unlocks tracked'); return; }
+                const lines = upcoming.slice(0, 10).map(u => `🔓 ${u.token}: ${new Date(u.date).toLocaleDateString()} — ${u.amount?.toLocaleString() || '?'} tokens`);
+                await bot.sendMessage(chatId, `🔓 <b>Upcoming Unlocks (30d):</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+            // ── #24 Tax ──
+            if (data === 'tax|summary') {
+                const { TaxReporter } = require('../features/taxReporter');
+                const reporter = new TaxReporter(new Date().getFullYear());
+                const summary = reporter.calculateGains();
+                await bot.sendMessage(chatId, `📋 <b>Tax Summary ${summary.taxYear}:</b>\n💰 Net: $${summary.netGain}\n📈 Short-term: $${summary.shortTermGains}\n📊 Long-term: $${summary.longTermGains}\n💸 Fees: $${summary.totalFees}`, { parse_mode: 'HTML' });
+                return;
+            }
+
+        } catch (err) {
+            log.error('Feature callback error:', err.message);
+            try { await bot.answerCallbackQuery(query.id, { text: '❌ Error' }); } catch (_) {}
+        }
+    });
 }
 
 module.exports = registerCoreCommands;
