@@ -74,9 +74,7 @@ export default function LoginPage() {
         return (
             <div className="min-h-screen bg-surface-900 flex items-center justify-center">
                 <div className="text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center shadow-2xl shadow-brand-500/30 mx-auto mb-6 animate-pulse">
-                        <Bot size={32} className="text-white" />
-                    </div>
+                    <img src="/xbot-logo.png" alt="XBot" className="w-16 h-16 rounded-2xl shadow-2xl shadow-brand-500/30 mx-auto mb-6 animate-pulse object-cover" />
                     <div className="w-8 h-8 border-3 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                     <p className="text-surface-200/60 text-sm">{t('dashboard.auth.loggingIn')}</p>
                     {error && (
@@ -101,9 +99,7 @@ export default function LoginPage() {
                 <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-cyan-500/10 rounded-full blur-[120px]" />
 
                 <div className="relative z-10 max-w-lg">
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center shadow-2xl shadow-brand-500/30 mb-8">
-                        <Bot size={40} className="text-white" />
-                    </div>
+                    <img src="/xbot-logo.png" alt="XBot" className="w-20 h-20 rounded-2xl shadow-2xl shadow-brand-500/30 mb-8 object-cover" />
                     <h1 className="text-4xl font-extrabold text-white mb-4 leading-tight">
                         {t('dashboard.auth.title')}
                     </h1>
@@ -134,9 +130,7 @@ export default function LoginPage() {
                 <div className="w-full max-w-sm">
                     {/* Mobile logo */}
                     <div className="lg:hidden flex items-center gap-3 mb-8">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-brand-500/25">
-                            <Bot size={24} className="text-white" />
-                        </div>
+                        <img src="/xbot-logo.png" alt="XBot" className="w-12 h-12 rounded-xl shadow-lg shadow-brand-500/25 object-cover" />
                         <div>
                             <h1 className="text-xl font-bold text-white">{t('dashboard.auth.title')}</h1>
                             <p className="text-xs text-surface-200/50">{t('dashboard.auth.subtitle')}</p>

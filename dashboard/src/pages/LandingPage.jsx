@@ -39,9 +39,7 @@ export default function LandingPage({ onLogin }) {
             {/* Header */}
             <header className="relative z-10 flex items-center justify-between px-6 md:px-12 py-5 border-b border-white/5">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-brand-500/25">
-                        <Bot size={20} className="text-white" />
-                    </div>
+                    <img src="/xbot-logo.png" alt="XBot" className="w-10 h-10 rounded-xl shadow-lg shadow-brand-500/25 object-cover" />
                     <span className="text-lg font-bold text-white tracking-tight">{config.appName}</span>
                 </div>
 

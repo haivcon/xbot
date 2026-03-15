@@ -273,9 +273,7 @@ export default function Sidebar({ open, onClose }) {
             {/* Logo area */}
             <div className="flex items-center justify-between h-16 px-5 border-b border-white/5">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-brand-500/25">
-                        <Bot size={20} className="text-white" />
-                    </div>
+                    <img src="/xbot-logo.png" alt="XBot" className="w-9 h-9 rounded-xl shadow-lg shadow-brand-500/25 object-cover" />
                     <div>
                         <h1 className="text-sm font-bold text-surface-100">{config.appName}</h1>
                         <span className="text-[10px] font-medium text-surface-200/50 uppercase tracking-wider">{config.appTagline}</span>

@@ -86,9 +86,7 @@ export default function LoginModal({ open, onClose }) {
                 <div className="p-8">
                     {/* Header */}
                     <div className="flex items-center gap-3 mb-6">
-                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-brand-500/25">
-                            <Bot size={22} className="text-white" />
-                        </div>
+                        <img src="/xbot-logo.png" alt="XBot" className="w-11 h-11 rounded-xl shadow-lg shadow-brand-500/25 object-cover" />
                         <div>
                             <h2 className="text-lg font-bold text-white">
                                 {t('dashboard.auth.loginBtn') || 'Login with Telegram'}
