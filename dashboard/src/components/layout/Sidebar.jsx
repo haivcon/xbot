@@ -35,6 +35,7 @@ import {
     Compass,
     ChevronRight,
     Sparkles,
+    TrendingUp,
 } from 'lucide-react';
 import useThemeStore from '@/stores/themeStore';
 
@@ -161,6 +162,9 @@ function SidebarGroup({ groupKey, label, icon: GroupIcon, items, collapsed, onTo
                             >
                                 <Icon size={18} />
                                 <span>{item.label}</span>
+                                {item.badge && (
+                                    <span className="ml-auto px-1.5 py-0 text-[9px] font-bold bg-amber-500/20 text-amber-400 rounded border border-amber-500/30 uppercase">{item.badge}</span>
+                                )}
                             </NavLink>
                         );
                     })}
@@ -219,6 +223,7 @@ export default function Sidebar({ open, onClose }) {
             items: [
                 { to: '/chat', icon: Bot, label: t('dashboard.sidebar.aiChat') || 'AI Chat' },
                 { to: '/ai-memory', icon: Brain, label: t('dashboard.sidebar.aiMemory') || 'AI Memory' },
+                { to: '/ai-trader', icon: TrendingUp, label: t('dashboard.sidebar.aiTrader') || 'AI Trader', badge: 'β' },
             ],
         },
         {

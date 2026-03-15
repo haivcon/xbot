@@ -43,6 +43,7 @@
 | ⚙️ **Hybrid Operation** | AI natural language + slash command fallback. |
 | 🛡️ **Honeypot Protection** | Scans tokens before swaps to block rug-pulls and scams. |
 | 🏦 **DeFi & OnchainOS** | Cross-chain DEX swaps, real-time data, multi-wallet management. |
+| 📈 **AI Trading Agent** | Autonomous signal-based trading with VWAP/DCA, triple-barrier risk engine, paper mode, and Telegram alerts. |
 
 ### 🖼️ Showcase & Capabilities
 
@@ -517,7 +518,7 @@ Built with **React 19 + Vite 6**, featuring glassmorphism design, dark/light mod
 | 📅 **Posts** | Scheduled broadcast management |
 | ⚙️ **Config** | Runtime config, API key management (masked) |
 
-#### 👤 User Pages (8 pages)
+#### 👤 User Pages (9 pages)
 | Page | Features |
 |---|---|
 | 🤖 **AI Chat** | Browser-based AI chat with real-time streaming |
@@ -525,6 +526,7 @@ Built with **React 19 + Vite 6**, featuring glassmorphism design, dark/light mod
 | 👛 **Wallets** | Create/manage wallets, token balances, explorer links |
 | 📊 **Trading** | Swap quotes, gas tracker, token rankings, tx history |
 | 💹 **OKX Trading** | Advanced OKX DeFi tools |
+| 📈 **AI Trader** | Autonomous trading agent with paper mode, signal dashboard, positions, VWAP/DCA execution, CSV export |
 | 🏆 **Leaderboard** | Game rankings |
 | 🌐 **Social Hub** | Communities, feed, DMs, creator leaderboard, profiles |
 | ⚙️ **Settings** | User preferences |
@@ -647,6 +649,12 @@ cd .. && pm2 restart xbot         # Restart
 - [x] Transaction History Explorer
 - [x] Token Ranking & Discovery tools
 - [x] Auto Trading Agent — Signal-based automated buy/sell
+- [x] AI Trading: Balance pre-check, on-chain sell, concurrent mutex, receipt verification
+- [x] AI Trading: Telegram notifications, MemeRadar integration, gas estimation
+- [x] AI Trading: Chain ID mapping, retry broadcast, paper trading mode
+- [x] AI Trading: CSV trade history export, DCA/VWAP smart routing, Wallet Guardian
+- [x] AI Trading: Triple-barrier position engine (stop-loss, take-profit, trailing stop, time limit)
+- [x] AI Trading: Technical signals (Bollinger Bands, MACD+BB, SuperTrend)
 - [x] Copy Trading System — Follow top traders
 - [x] Multi-Step Trading Wizard
 - [x] Cross-Chain Arbitrage Scanner
@@ -700,6 +708,7 @@ If XBot helped your project, please consider supporting development!
 | ⚙️ **混合双引擎运行** | AI 自然语言全自动 + 斜杠指令手动降级。 |
 | 🛡️ **貔貅盘深度防御** | 交易前动态扫描代币合约，拦截貔貅盘、杀手税和极端滑点。 |
 | 🏦 **DeFi 与数字资产** | 跨链 DEX 闪兑、实时行情、多钱包聚合管理。 |
+| 📈 **AI 自动交易代理** | 信号驱动自动交易，VWAP/DCA智能执行、三重屏障风控、模拟交易、Telegram通知。 |
 
 <details>
 <summary>🖼️ 点击展开 12 张功能截图</summary>
@@ -866,7 +875,7 @@ cd .. && pm2 restart xbot
 | 📅 **推送** | 定时广播管理 |
 | ⚙️ **配置** | API 密钥管理（脱敏） |
 
-#### 👤 用户页面（8 页）
+#### 👤 用户页面（9 页）
 | 页面 | 功能 |
 |---|---|
 | 🤖 **AI 对话** | 浏览器 AI 实时聊天 |
@@ -874,6 +883,7 @@ cd .. && pm2 restart xbot
 | 👛 **钱包** | 创建/管理钱包，余额查看 |
 | 📊 **交易** | 报价、Gas、排行榜、历史 |
 | 💹 **OKX 交易** | 高级 DeFi 工具 |
+| 📈 **AI 交易代理** | 自动交易、模拟模式、信号面板、持仓管理、VWAP/DCA执行、CSV导出 |
 | 🏆 **排行榜** | 游戏排名 |
 | 🌐 **社交中心** | 社区、动态、私信、排行 |
 | ⚙️ **设置** | 偏好设置 |
@@ -956,6 +966,7 @@ cd .. && pm2 restart xbot
 | ⚙️ **Động cơ kép** | AI tự hành + fallback sang slash command. |
 | 🛡️ **Chống Honeypot** | Quét contract token trước mỗi swap để chặn lừa đảo. |
 | 🏦 **DeFi xuyên chuỗi** | Swap DEX, giá real-time, quản lý đa ví. |
+| 📈 **AI Trading Agent** | Giao dịch tự động theo tín hiệu, VWAP/DCA, rào chắn ba lớp, chế độ giả lập, thông báo Telegram. |
 
 <details>
 <summary>🖼️ Bấm xem 12 ảnh minh hoạ</summary>
@@ -1197,7 +1208,7 @@ cd .. && pm2 restart xbot
 | 📅 **Bài Đăng** | Quản lý bài đăng định kỳ |
 | ⚙️ **Cấu Hình** | API key (ẩn bảo mật) |
 
-#### 👤 Trang Người Dùng (8 trang)
+#### 👤 Trang Người Dùng (9 trang)
 | Trang | Chức năng |
 |---|---|
 | 🤖 **Chat AI** | Chat AI real-time trên trình duyệt |
@@ -1205,6 +1216,7 @@ cd .. && pm2 restart xbot
 | 👛 **Ví** | Tạo/quản lý ví, số dư token |
 | 📊 **Giao Dịch** | Báo giá, Gas, xếp hạng token |
 | 💹 **OKX Trading** | Công cụ DeFi nâng cao |
+| 📈 **AI Trader** | Giao dịch tự động, chế độ giả lập, bảng tín hiệu, vị thế, VWAP/DCA, xuất CSV |
 | 🏆 **Xếp Hạng** | Bảng xếp hạng game |
 | 🌐 **Social Hub** | Cộng đồng, bài viết, nhắn tin, xếp hạng |
 | ⚙️ **Cài Đặt** | Tuỳ chọn người dùng |
@@ -1271,6 +1283,7 @@ Chào mừng mọi PR! Phát triển plugin trong `src/skills/` và mở Pull Re
 | ⚙️ **하이브리드 운영** | AI 자연어 + 슬래시 명령어 폴백 |
 | 🛡️ **허니팟 방어** | 스왑 전 토큰 스캔으로 사기 차단 |
 | 🏦 **DeFi & OnchainOS** | 크로스체인 DEX 스왑, 실시간 데이터, 멀티 지갑 |
+| 📈 **AI 트레이딩 에이전트** | 신호 기반 자동 트레이딩, VWAP/DCA, 트리플 배리어, 페이퍼 모드, 텔레그램 알림 |
 
 <details>
 <summary>🖼️ 스크린샷 12장 보기</summary>
@@ -1369,6 +1382,7 @@ sudo ufw allow 22 && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw enable
 | ⚙️ **Гибридный режим** | AI + slash-команды |
 | 🛡️ **Защита от Honeypot** | Сканирование токенов перед свопом |
 | 🏦 **DeFi** | Кросс-чейн свопы, кошельки, рыночные данные |
+| 📈 **AI Торговый Агент** | Автотрейдинг по сигналам, VWAP/DCA, тройной барьер, бумажная торговля, уведомления Telegram |
 
 <details>
 <summary>🖼️ 12 скриншотов</summary>
@@ -1446,6 +1460,7 @@ sudo ufw allow 22 && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw enable
 | ⚙️ **Mode Hybrid** | AI bahasa alami + slash command fallback |
 | 🛡️ **Anti-Honeypot** | Scan token sebelum swap untuk blokir penipuan |
 | 🏦 **DeFi** | Cross-chain swap, data real-time, multi-wallet |
+| 📈 **AI Trading Agent** | Trading otomatis berbasis sinyal, VWAP/DCA, triple barrier, paper mode, notifikasi Telegram |
 
 <details>
 <summary>🖼️ Lihat 12 screenshot</summary>

@@ -12,6 +12,7 @@ import {
     ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home, Columns, Lock
 } from 'lucide-react';
 import { hapticImpact, hapticNotification } from '@/utils/telegram';
+import AiTraderPanel from '@/components/AiTraderPanel';
 
 /* ─── Markdown renderer (lightweight, XSS-safe) ─── */
 function renderMarkdown(text) {
@@ -492,6 +493,7 @@ export default function ChatPage() {
     const [userApiKeys, setUserApiKeys] = useState([]);
     // AI Settings panel state
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+    const [showAiTrader, setShowAiTrader] = useState(false);
     const [settingsTab, setSettingsTab] = useState('model');
     const [selectedPersona, setSelectedPersona] = useState('default');
     const [selectedProvider, setSelectedProvider] = useState('google');
@@ -1291,6 +1293,7 @@ export default function ChatPage() {
     ];
 
     return (
+        <>
         <div className={`flex overflow-hidden bg-surface-900/50 ${isMobile ? 'chat-page-mobile h-[100dvh]' : 'h-full rounded-2xl border border-white/5'}`}>
             {/* Sidebar */}
             <div className={`${sidebarOpen ? (isMobile ? 'chat-sidebar-sheet bottom-sheet-enter' : 'translate-x-0') : (isMobile ? 'translate-y-full' : '-translate-x-full md:translate-x-0')}
@@ -1788,6 +1791,12 @@ export default function ChatPage() {
                                 {selectedPersona === 'custom' ? '✏️' : (PERSONA_OPTIONS.find(p => p.value === selectedPersona)?.icon || '🤖')}
                                 <span className="truncate max-w-[60px]">{selectedPersona === 'custom' ? t('dashboard.chatPage.custom', 'Custom') : (PERSONA_OPTIONS.find(p => p.value === selectedPersona)?.label || 'Default')}</span>
                             </button>
+                            {/* AI Trader chip */}
+                            <button onClick={() => setShowAiTrader(true)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] bg-gradient-to-r from-brand-500/10 to-purple-500/10 border border-brand-500/20 text-brand-400 hover:border-brand-500/40 transition-all">
+                                🤖 <span>AI Trader</span>
+                                <span className="px-1 py-0 text-[8px] font-bold bg-amber-500/20 text-amber-400 rounded">β</span>
+                            </button>
                             {/* Compare mode indicator */}
                             {compareMode && <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-400">{t('dashboard.chatPage.compareIndicator', '⚔️ Compare')}</span>}
                         </div>
@@ -2279,5 +2288,13 @@ export default function ChatPage() {
                 </>
             )}
         </div>
+        {/* AI Trader Panel */}
+        <AiTraderPanel visible={showAiTrader} onClose={() => setShowAiTrader(false)} />
+        {/* Animation CSS */}
+        <style>{`
+            @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            .animate-slide-in-right { animation: slideInRight 0.25s ease-out; }
+        `}</style>
+        </>
     );
 }

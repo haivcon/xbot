@@ -71,6 +71,9 @@ function getSecurityLabel(score) {
   return { emoji: '🔴', label: 'HIGH RISK' };
 }
 
+// Severity ranking for proper comparison
+const SEVERITY_RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, NONE: 0 };
+
 // ─── Pre-Swap Safety Check ───
 async function preSwapCheck(tokenAddress, options = {}) {
   const { advancedInfoFn, bundleInfoFn, devInfoFn } = options;
@@ -82,24 +85,32 @@ async function preSwapCheck(tokenAddress, options = {}) {
       if (info.isHoneypot) risks.push({ type: 'honeypot', severity: 'CRITICAL', detail: 'Token is a honeypot' });
       if ((info.buyTax || 0) > 10) risks.push({ type: 'high_tax', severity: 'HIGH', detail: `Buy tax: ${info.buyTax}%` });
       if ((info.sellTax || 0) > 10) risks.push({ type: 'high_tax', severity: 'HIGH', detail: `Sell tax: ${info.sellTax}%` });
-    } catch (e) { /* skip */ }
+    } catch (e) { log.warn('preSwapCheck advancedInfo error:', e.message); }
   }
 
   if (bundleInfoFn) {
     try {
       const bundle = await bundleInfoFn(tokenAddress);
       if ((bundle.bundlerPercent || 0) > 30) risks.push({ type: 'bundler', severity: 'MEDIUM', detail: `Bundler: ${bundle.bundlerPercent}%` });
-    } catch (e) { /* skip */ }
+    } catch (e) { log.warn('preSwapCheck bundleInfo error:', e.message); }
   }
 
   if (devInfoFn) {
     try {
       const dev = await devInfoFn(tokenAddress);
       if ((dev.rugCount || 0) > 0) risks.push({ type: 'dev_rug', severity: 'CRITICAL', detail: `Dev rug count: ${dev.rugCount}` });
-    } catch (e) { /* skip */ }
+    } catch (e) { log.warn('preSwapCheck devInfo error:', e.message); }
   }
 
-  return { safe: risks.length === 0, risks, highestSeverity: risks[0]?.severity || 'NONE' };
+  // Determine highest severity by ranking, not by first element
+  let highestSeverity = 'NONE';
+  for (const r of risks) {
+    if ((SEVERITY_RANK[r.severity] || 0) > (SEVERITY_RANK[highestSeverity] || 0)) {
+      highestSeverity = r.severity;
+    }
+  }
+
+  return { safe: risks.length === 0, risks, highestSeverity };
 }
 
 const approvalScanner = new ApprovalScanner();

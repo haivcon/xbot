@@ -105,7 +105,7 @@ async function getUserAiModelPreferences(userId) {
     if (!normalizedUser) return null;
     const row = await dbGet('SELECT modelFamily, thinkingLevel, preferredKeyIndex FROM user_ai_preferences WHERE userId = ? LIMIT 1', [normalizedUser]);
     if (!row) return null;
-    return { modelFamily: row.modelFamily || 'gemini-2.5-flash', thinkingLevel: row.thinkingLevel || null, preferredKeyIndex: row.preferredKeyIndex ?? 0 };
+    return { modelFamily: row.modelFamily || 'gemini-3-flash', thinkingLevel: row.thinkingLevel || null, preferredKeyIndex: row.preferredKeyIndex ?? 0 };
 }
 
 async function saveUserAiModelPreferences(userId, preferences) {

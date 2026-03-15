@@ -42,7 +42,16 @@ class MemeRadar {
     const risk = getRiskLabel(score);
     const entry = { ...token, riskScore: score, risk, addedAt: Date.now() };
     this.trackedTokens.set(token.address || token.symbol, entry);
+    // Prune stale entries to prevent unbounded memory growth
+    if (this.trackedTokens.size > 200) this.cleanup();
     return entry;
+  }
+
+  cleanup() {
+    const now = Date.now();
+    for (const [key, entry] of this.trackedTokens.entries()) {
+      if (now - entry.addedAt > this.maxAge) this.trackedTokens.delete(key);
+    }
   }
 
   getTopTokens(limit = 20, sortBy = 'riskScore') {

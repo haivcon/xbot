@@ -363,8 +363,8 @@ function createChatRoutes() {
                 const response = await client.models.generateContent({
                     model,
                     contents: currentHistory,
-                    systemInstruction: session._systemInstruction,
                     config: {
+                        systemInstruction: session._systemInstruction,
                         tools: mergedTools,
                         temperature: 0.7,
                         maxOutputTokens: 8192,
@@ -728,11 +728,21 @@ function createChatRoutes() {
                 : '';
 
             const aiaPrompt = buildAIAPrompt({ personaSection });
-            const fullSystemPrompt = sysInstr + '\n\n' + aiaPrompt +
-                '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
+            const dashboardNote = '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
                 'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
                 'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
-                'Always display them in FULL. Keep responses conversational and helpful.' + prefsCtx;
+                'Always display them in FULL. Keep responses conversational and helpful.';
+            // ── PROMPT ARCHITECTURE (sandwich technique): ──
+            // 1. PERSONA IDENTITY (top — primacy bias, sets the character)
+            // 2. TECHNICAL CONTEXT (middle — onchain tools, AIA rules)
+            // 3. PERSONA REINFORCEMENT (bottom — recency bias, seals the character)
+            const personaHeader = personaText
+                ? `🎭 YOUR CHARACTER IDENTITY:\n${personaText}\n\nYou MUST stay in this character for ALL responses below. Your tools and capabilities are listed next, but your PERSONALITY must always shine through.\n\n---\n`
+                : '';
+            const personaFooter = personaText
+                ? `\n\n---\n🎭 REMINDER — STAY IN CHARACTER:\n${personaText}\nEvery response must reflect this personality in tone, word choice, and style. Never revert to generic assistant mode.`
+                : '';
+            const fullSystemPrompt = personaHeader + sysInstr + '\n\n' + aiaPrompt + dashboardNote + prefsCtx + personaFooter;
 
             // ══════════ GEMINI ══════════
             if (provider === 'google') {
@@ -773,7 +783,7 @@ function createChatRoutes() {
             let currentHistory = [...sessionHistory];
             let round = 0;
 
-            log.info(`[Stream] Starting: model=${model}, history=${currentHistory.length} msgs, tools=${mergedTools[0]?.functionDeclarations?.length || 0}`);
+            log.info(`[Stream] Starting: model=${model}, persona=${persona || 'none'}, personaText=${personaText ? personaText.substring(0, 50) + '...' : 'EMPTY'}, history=${currentHistory.length} msgs, tools=${mergedTools[0]?.functionDeclarations?.length || 0}`);
 
             while (round < MAX_TOOL_ROUNDS) {
                 if (aborted) break;
@@ -783,8 +793,12 @@ function createChatRoutes() {
                     response = await client.models.generateContentStream({
                         model,
                         contents: currentHistory,
-                        systemInstruction: session._systemInstruction,
-                        config: { tools: mergedTools, temperature: 0.7, maxOutputTokens: 8192 }
+                        config: {
+                            systemInstruction: session._systemInstruction,
+                            tools: mergedTools,
+                            temperature: 0.7,
+                            maxOutputTokens: 8192
+                        }
                     });
                 } catch (apiErr) {
                     log.error(`[Stream][Round ${round}] API error: ${apiErr?.message}`);
@@ -1276,6 +1290,260 @@ function createChatRoutes() {
             res.json({ modelA: resultA, modelB: resultB });
         } catch (err) {
             log.child('Compare').error('Compare error:', err);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ══════════════════════════════════════════════════════════════
+    // AI AUTO-TRADE AGENT (BETA)
+    // ══════════════════════════════════════════════════════════════
+    const autoTrading = require('../features/autoTrading');
+
+    // POST /ai/agent/enable — Enable AI Trading Agent
+    router.post('/ai/agent/enable', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const result = await autoTrading.enableAgent(userId, req.body || {});
+            res.json(result);
+        } catch (err) {
+            log.error('[Agent] Enable error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // POST /ai/agent/disable — Disable AI Trading Agent
+    router.post('/ai/agent/disable', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const result = await autoTrading.disableAgent(userId);
+            res.json(result);
+        } catch (err) {
+            log.error('[Agent] Disable error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // POST /ai/agent/pause — Pause/Resume AI Trading Agent
+    router.post('/ai/agent/pause', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const pause = req.body?.pause !== false;
+            const result = await autoTrading.pauseAgent(userId, pause);
+            res.json(result);
+        } catch (err) {
+            log.error('[Agent] Pause error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // GET /ai/agent/status — Get agent status with PnL
+    router.get('/ai/agent/status', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const status = await autoTrading.getAgentStatus(userId);
+            res.json(status);
+        } catch (err) {
+            log.error('[Agent] Status error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // PUT /ai/agent/config — Update agent config
+    router.put('/ai/agent/config', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const result = await autoTrading.updateAgentConfig(userId, req.body || {});
+            res.json(result);
+        } catch (err) {
+            log.error('[Agent] Config update error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // GET /ai/agent/plans — Get trade plans (optional ?status=pending)
+    router.get('/ai/agent/plans', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const ALLOWED_STATUSES = ['pending', 'approved', 'executed', 'rejected', 'failed', 'closed'];
+            const status = ALLOWED_STATUSES.includes(req.query.status) ? req.query.status : null;
+            const limit = Math.min(Math.max(1, Number(req.query.limit) || 20), 100);
+            const plans = await autoTrading.getTradePlans(userId, status, limit);
+            res.json({ plans });
+        } catch (err) {
+            log.error('[Agent] Plans error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // POST /ai/agent/plans/:id/approve — Approve a trade plan
+    router.post('/ai/agent/plans/:id/approve', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const planId = Number(req.params.id);
+            if (!planId || isNaN(planId)) return res.status(400).json({ error: 'Invalid plan ID' });
+            const modifiedAmount = req.body?.amount ? Number(req.body.amount) : null;
+            if (modifiedAmount !== null && (isNaN(modifiedAmount) || modifiedAmount <= 0)) return res.status(400).json({ error: 'Invalid amount' });
+            const result = await autoTrading.approvePlan(userId, planId, modifiedAmount);
+            res.json(result);
+        } catch (err) {
+            log.error('[Agent] Approve error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // POST /ai/agent/plans/:id/reject — Reject a trade plan
+    router.post('/ai/agent/plans/:id/reject', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const planId = Number(req.params.id);
+            if (!planId || isNaN(planId)) return res.status(400).json({ error: 'Invalid plan ID' });
+            const reason = req.body?.reason || '';
+            const result = await autoTrading.rejectPlan(userId, planId, reason);
+            res.json(result);
+        } catch (err) {
+            log.error('[Agent] Reject error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── Position Management (Triple Barrier Engine) ──
+    const tradeEngine = require('../features/tradeExecutionEngine');
+
+    // GET /ai/agent/positions — Get active and closed positions
+    router.get('/ai/agent/positions', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const positions = await tradeEngine.getActivePositions(userId);
+            res.json({ positions });
+        } catch (err) {
+            log.error('[Agent] Positions error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // POST /ai/agent/positions/:id/close — Manually close a position
+    router.post('/ai/agent/positions/:id/close', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const posId = Number(req.params.id);
+            if (!posId || isNaN(posId)) return res.status(400).json({ error: 'Invalid position ID' });
+            const result = await tradeEngine.manualClosePosition(userId, posId);
+            res.json(result);
+        } catch (err) {
+            log.error('[Agent] Close position error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── Wallet Selection for AI Trader ──
+    router.get('/ai/agent/wallets', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { dbAll } = require('../../db/core');
+            const wallets = await dbAll('SELECT id, address, chainIndex, isDefault FROM user_trading_wallets WHERE userId = ? ORDER BY isDefault DESC, id ASC', [userId]) || [];
+            res.json({ wallets });
+        } catch (err) {
+            res.json({ wallets: [] });
+        }
+    });
+
+    // #11 CSV export endpoint
+    router.get('/ai/agent/export', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const result = await autoTrading.exportTradeHistory(userId);
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', 'attachment; filename=trade_history.csv');
+            res.send(result.csv || '');
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── Smart Order Execution (VWAP + DCA) ──
+    const smartExecutor = require('../features/smartOrderExecutor');
+
+    // POST /ai/agent/execute/vwap — Start VWAP execution
+    router.post('/ai/agent/execute/vwap', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { planId, totalAmountUsd, chunks, intervalMs } = req.body || {};
+            if (!planId) return res.status(400).json({ error: 'planId required' });
+            const safeChunks = Math.min(Math.max(2, Number(chunks) || 3), 20);
+            const safeInterval = Math.min(Math.max(10000, Number(intervalMs) || 30000), 300000);
+            const { dbGet } = require('../../db/core');
+            const plan = await dbGet('SELECT * FROM auto_trading_plans WHERE id = ? AND userId = ?', [planId, userId]);
+            if (!plan) return res.status(404).json({ error: 'Plan not found' });
+            const result = smartExecutor.startVwapExecution({
+                userId, planId, chainIndex: plan.chainIndex, tokenAddress: plan.tokenAddress,
+                tokenSymbol: plan.tokenSymbol, totalAmountUsd: totalAmountUsd || plan.suggestedAmountUsd,
+                chunks: safeChunks, intervalMs: safeInterval, action: plan.action || 'buy'
+            });
+            res.json(result);
+        } catch (err) {
+            log.error('[Agent] VWAP start error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // POST /ai/agent/execute/dca — Start DCA execution
+    router.post('/ai/agent/execute/dca', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { planId, levels, weights } = req.body || {};
+            if (!planId) return res.status(400).json({ error: 'planId required' });
+            const { dbGet } = require('../../db/core');
+            const plan = await dbGet('SELECT * FROM auto_trading_plans WHERE id = ? AND userId = ?', [planId, userId]);
+            if (!plan) return res.status(404).json({ error: 'Plan not found' });
+            const result = smartExecutor.startDcaExecution({
+                userId, planId, chainIndex: plan.chainIndex, tokenAddress: plan.tokenAddress,
+                tokenSymbol: plan.tokenSymbol, entryPrice: plan.tokenPrice || 0,
+                totalAmountUsd: plan.modifiedAmountUsd || plan.suggestedAmountUsd,
+                levels: levels || [0, -3, -6, -10], weights: weights || [0.25, 0.25, 0.25, 0.25]
+            });
+            res.json(result);
+        } catch (err) {
+            log.error('[Agent] DCA start error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // GET /ai/agent/executions — List active smart executions
+    router.get('/ai/agent/executions', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        res.json({ executions: smartExecutor.listActiveExecutions(userId) });
+    });
+
+    // ── Technical Signals Analysis ──
+    // GET /ai/agent/signals/:chainIndex/:tokenAddress — Get tech analysis for a token
+    router.get('/ai/agent/signals/:chainIndex/:tokenAddress', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { chainIndex, tokenAddress } = req.params;
+            if (!/^0x[a-fA-F0-9]{40}$/.test(tokenAddress) && !/^[a-zA-Z0-9]{32,44}$/.test(tokenAddress)) {
+                return res.status(400).json({ error: 'Invalid token address format' });
+            }
+            const techSignals = require('../features/technicalSignals');
+            const analysis = await techSignals.analyzeToken(chainIndex, tokenAddress, req.query.bar || '1H');
+            res.json(analysis);
+        } catch (err) {
+            log.error('[Agent] Signals error:', err.message);
             res.status(500).json({ error: err.message });
         }
     });

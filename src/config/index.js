@@ -188,7 +188,7 @@ const GROQ_API_KEYS = (() => {
 
     return Array.from(new Set(keys));
 })();
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3-flash-preview';
 const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
 const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Kore';
 const GEMINI_TTS_VOICE_OPTIONS = [
