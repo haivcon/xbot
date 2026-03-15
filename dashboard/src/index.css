@@ -115,6 +115,14 @@
   :root:not(.dark) .border-white\/10 { border-color: rgba(15, 23, 42, 0.15) !important; }
   :root:not(.dark) .border-white\/20 { border-color: rgba(15, 23, 42, 0.2) !important; }
 
+  /* Light mode — divide (list separators) */
+  :root:not(.dark) .divide-white\/3 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(15, 23, 42, 0.06) !important; }
+  :root:not(.dark) .divide-white\/5 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(15, 23, 42, 0.08) !important; }
+
+  /* Light mode — ring (focus indicators) */
+  :root:not(.dark) .ring-white\/10 { --tw-ring-color: rgba(15, 23, 42, 0.1) !important; }
+  :root:not(.dark) .ring-white\/20 { --tw-ring-color: rgba(15, 23, 42, 0.15) !important; }
+
   /* Light mode — ChatPage specific overrides */
   :root:not(.dark) .text-surface-200\/90 { color: rgba(51, 65, 85, 0.95) !important; }
   :root:not(.dark) .text-surface-200\/25 { color: rgba(51, 65, 85, 0.35) !important; }
@@ -125,6 +133,29 @@
   :root:not(.dark) .bg-surface-800\/30 { background-color: rgba(241, 245, 249, 0.6) !important; }
   :root:not(.dark) .bg-surface-800\/40 { background-color: rgba(241, 245, 249, 0.7) !important; }
   :root:not(.dark) [class*="hover\:bg-white\/5"]:hover { background-color: rgba(15, 23, 42, 0.05) !important; }
+  :root:not(.dark) [class*="hover\:bg-white\/3"]:hover { background-color: rgba(15, 23, 42, 0.03) !important; }
+  :root:not(.dark) [class*="hover\:bg-white\/10"]:hover { background-color: rgba(15, 23, 42, 0.06) !important; }
+
+  /* Light mode — hover:text-surface → visible on light bg */
+  :root:not(.dark) [class*="hover\:text-surface-100"]:hover { color: #0f172a !important; }
+  :root:not(.dark) [class*="hover\:text-surface-200"]:hover { color: #334155 !important; }
+
+  /* Light mode — hover:bg-surface → light slate hover backgrounds */
+  :root:not(.dark) [class*="hover\:bg-surface-600"]:hover { background-color: #cbd5e1 !important; }
+  :root:not(.dark) [class*="hover\:bg-surface-700"]:hover { background-color: #e2e8f0 !important; }
+  :root:not(.dark) [class*="hover\:bg-surface-800"]:hover { background-color: #f1f5f9 !important; }
+
+  /* Light mode — gradient from/to surface → light equivalents */
+  :root:not(.dark) .from-surface-800 { --tw-gradient-from: #f1f5f9 !important; }
+  :root:not(.dark) .from-surface-900 { --tw-gradient-from: #f8fafc !important; }
+  :root:not(.dark) .to-surface-900 { --tw-gradient-to: #f8fafc !important; }
+
+  /* Light mode — bg-black overlays → softer */
+  :root:not(.dark) .bg-black\/20 { background-color: rgba(15, 23, 42, 0.1) !important; }
+  :root:not(.dark) .bg-black\/30 { background-color: rgba(15, 23, 42, 0.15) !important; }
+  :root:not(.dark) .bg-black\/40 { background-color: rgba(15, 23, 42, 0.25) !important; }
+  :root:not(.dark) .bg-black\/50 { background-color: rgba(15, 23, 42, 0.3) !important; }
+  :root:not(.dark) .bg-black\/80 { background-color: rgba(15, 23, 42, 0.6) !important; }
 
   /* Light mode — white-alpha backgrounds → slate equivalents */
   :root:not(.dark) .bg-white\/\[0\.03\] { background-color: rgba(15, 23, 42, 0.03) !important; }
