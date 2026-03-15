@@ -82,6 +82,11 @@
   :root:not(.dark) .text-surface-200\/40 { color: rgba(51, 65, 85, 0.5) !important; }
   :root:not(.dark) .text-surface-200\/30 { color: rgba(51, 65, 85, 0.4) !important; }
   :root:not(.dark) .text-surface-200\/35 { color: rgba(51, 65, 85, 0.45) !important; }
+  /* Additional text-surface-200 variants for full coverage */
+  :root:not(.dark) .text-surface-200\/10 { color: rgba(51, 65, 85, 0.2) !important; }
+  :root:not(.dark) .text-surface-200\/15 { color: rgba(51, 65, 85, 0.25) !important; }
+  :root:not(.dark) .text-surface-200\/20 { color: rgba(51, 65, 85, 0.3) !important; }
+  :root:not(.dark) .text-surface-200\/45 { color: rgba(51, 65, 85, 0.55) !important; }
   
   /* Light mode background overrides */
   :root:not(.dark) .bg-surface-900 { background-color: #f8fafc !important; }
@@ -91,6 +96,19 @@
   :root:not(.dark) .bg-surface-800\/50 { background-color: rgba(241, 245, 249, 0.8) !important; }
   :root:not(.dark) .bg-surface-700 { background-color: #e2e8f0 !important; }
   :root:not(.dark) .bg-surface-700\/80 { background-color: rgba(226, 232, 240, 0.9) !important; }
+  /* Additional bg-surface variants for full coverage */
+  :root:not(.dark) .bg-surface-200\/20 { background-color: rgba(203, 213, 225, 0.3) !important; }
+  :root:not(.dark) .bg-surface-200\/30 { background-color: rgba(203, 213, 225, 0.4) !important; }
+  :root:not(.dark) .bg-surface-700\/20 { background-color: rgba(226, 232, 240, 0.4) !important; }
+  :root:not(.dark) .bg-surface-700\/40 { background-color: rgba(226, 232, 240, 0.6) !important; }
+  :root:not(.dark) .bg-surface-700\/50 { background-color: rgba(226, 232, 240, 0.7) !important; }
+  :root:not(.dark) .bg-surface-700\/60 { background-color: rgba(226, 232, 240, 0.8) !important; }
+  :root:not(.dark) .bg-surface-800\/90 { background-color: rgba(241, 245, 249, 0.97) !important; }
+  :root:not(.dark) .bg-surface-800\/95 { background-color: rgba(241, 245, 249, 0.98) !important; }
+  :root:not(.dark) .bg-surface-900\/30 { background-color: rgba(248, 250, 252, 0.5) !important; }
+  :root:not(.dark) .bg-surface-900\/40 { background-color: rgba(248, 250, 252, 0.6) !important; }
+  :root:not(.dark) .bg-surface-900\/60 { background-color: rgba(248, 250, 252, 0.8) !important; }
+  :root:not(.dark) .bg-surface-900\/95 { background-color: rgba(248, 250, 252, 0.98) !important; }
   
   /* Light mode border overrides */
   :root:not(.dark) .border-white\/5 { border-color: rgba(15, 23, 42, 0.1) !important; }
@@ -114,6 +132,7 @@
   :root:not(.dark) .bg-white\/\[0\.02\] { background-color: rgba(15, 23, 42, 0.02) !important; }
   :root:not(.dark) .bg-white\/10 { background-color: rgba(15, 23, 42, 0.06) !important; }
   :root:not(.dark) .bg-white\/5 { background-color: rgba(15, 23, 42, 0.04) !important; }
+  :root:not(.dark) .bg-white\/20 { background-color: rgba(15, 23, 42, 0.08) !important; }
 
   /* Light mode — text-white opacity → dark text */
   :root:not(.dark) .text-white { color: #0f172a !important; }
