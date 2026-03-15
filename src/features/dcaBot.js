@@ -52,10 +52,9 @@ class DCAStrategy {
       reasons.push(`RSI ${market.rsi} (overbought) → reduce`);
     }
 
-    // Whale selling pressure → pause
+    // Whale selling pressure → pause (skip min clamp)
     if (market.whaleSellPressure) {
-      multiplier = 0;
-      reasons.push('Whale sell pressure detected → PAUSE');
+      return { amount: 0, multiplier: 0, reason: 'Whale sell pressure detected → PAUSE' };
     }
 
     multiplier = Math.max(this.minMultiplier, Math.min(this.maxMultiplier, multiplier));
@@ -66,7 +65,7 @@ class DCAStrategy {
   recordBuy(price, amount, tokensReceived) {
     this.totalInvested += amount;
     this.totalTokens += tokensReceived;
-    this.history.push({ price, amount, tokensReceived, avgPrice: this.totalInvested / this.totalTokens, ts: Date.now() });
+    this.history.push({ price, amount, tokensReceived, avgPrice: this.totalTokens ? this.totalInvested / this.totalTokens : 0, ts: Date.now() });
     return this.getStats();
   }
 

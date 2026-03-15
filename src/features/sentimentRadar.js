@@ -91,8 +91,9 @@ class SentimentHistory {
     const cutoff = Date.now() - (hours * 3600000);
     const freqs = {};
     for (const e of this.entries.filter(e => e.timestamp > cutoff)) {
-      const words = [...POSITIVE_WORDS, ...NEGATIVE_WORDS].filter(w => e.label);
-      for (const w of words) { freqs[w] = (freqs[w] || 0) + 1; }
+      const isPositive = e.label === 'BULLISH' || e.label === 'SLIGHTLY_BULLISH';
+      const relevantWords = isPositive ? POSITIVE_WORDS : NEGATIVE_WORDS;
+      for (const w of relevantWords) { freqs[w] = (freqs[w] || 0) + 1; }
     }
     return Object.entries(freqs).sort((a, b) => b[1] - a[1]).slice(0, 20);
   }

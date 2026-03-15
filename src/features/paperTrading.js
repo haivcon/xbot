@@ -42,7 +42,7 @@ class PaperPortfolio {
     const h = this.holdings[symbol];
     h.totalCost += cost;
     h.amount += amount;
-    h.avgPrice = h.totalCost / h.amount;
+    h.avgPrice = h.amount ? h.totalCost / h.amount : 0;
     const trade = { type: 'BUY', symbol, amount, price, cost, ts: Date.now() };
     this.trades.push(trade);
     this.xp += 10;
