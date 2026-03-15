@@ -723,6 +723,36 @@ module.exports.ONCHAIN_TOOLS = [
                 name: 'get_smart_trades',
                 description: 'Trades filtered by wallet type: KOL, Smart Money, Whale, Sniper. Vietnamese: "ai đang mua", "smart money có mua không". Unlike get_recent_trades, filters by reputation.',
                 parameters: { type: 'object', properties: { chainIndex: { type: 'string' }, tokenContractAddress: { type: 'string' }, tagFilter: { type: 'string', description: '"1"=KOL, "2"=Dev, "3"=Smart Money, "4"=Whale, "5"=New, "6"=Suspicious, "7"=Sniper, "8"=Phishing, "9"=Bundle' }, limit: { type: 'string', description: 'Max 500. Default 50' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            },
+            // ── Idea #6: AI Deep Research ──
+            {
+                name: 'deep_research_token',
+                description: 'Run a comprehensive AI deep research analysis on a token. Calls 10+ APIs to produce a detailed report with Technical Score, Safety Score, Whale Interest, and AI Verdict. Vietnamese: "phân tích sâu", "research token", "đánh giá token". Use when user wants a thorough, multi-dimensional analysis beyond simple price/info.',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Chain ID. Default "196"' }, tokenContractAddress: { type: 'string', description: 'Token contract address OR symbol' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            },
+            // ── Idea #1: AI Auto Trading Agent ──
+            {
+                name: 'manage_auto_trading',
+                description: 'Manage autonomous AI trading agent. Actions: enable, disable, status, set_config. Vietnamese: "bật auto trade", "tắt auto trade", "cấu hình trading AI", "trạng thái agent". The agent monitors Smart Money/Whale signals and auto-trades based on AI risk scoring.',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"enable", "disable", "status", "set_config"' }, riskLevel: { type: 'string', description: '"conservative", "moderate", "aggressive". Default "conservative"' }, maxAmountUsd: { type: 'string', description: 'Max USD per auto trade. Default "5"' }, chains: { type: 'string', description: 'Comma-separated chains to watch. Default "196,1,56,501"' }, stopLossPct: { type: 'number', description: 'Stop loss %. Default 20' }, takeProfitPct: { type: 'number', description: 'Take profit %. Default 50' } }, required: ['action'] }
+            },
+            // ── Idea #9: Cross-Chain Arbitrage Scanner ──
+            {
+                name: 'scan_arbitrage',
+                description: 'Scan for cross-chain price arbitrage opportunities. Compares the same token price across multiple chains and calculates net profit after gas. Vietnamese: "tìm chênh lệch giá", "arbitrage", "kiếm lời xuyên chuỗi".',
+                parameters: { type: 'object', properties: { tokenSymbol: { type: 'string', description: 'Token symbol to scan (e.g. "ETH", "USDT")' }, chains: { type: 'string', description: 'Comma-separated chain IDs. Default "1,56,196,137,42161,8453"' } }, required: ['tokenSymbol'] }
+            },
+            // ── Idea #5: Copy Trading ──
+            {
+                name: 'manage_copy_trading',
+                description: 'Social copy trading — follow top traders and auto-copy their trades. Actions: register (become leader), follow, unfollow, leaderboard, my_followers. Vietnamese: "copy trade", "theo dõi trader", "bảng xếp hạng", "leader", "đăng ký copy".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"register", "follow", "unfollow", "leaderboard", "my_followers", "status"' }, leaderId: { type: 'string', description: 'Leader user ID (for follow/unfollow)' }, walletAddress: { type: 'string', description: 'Your wallet address (for register as leader)' }, maxCopyAmount: { type: 'string', description: 'Max USD to copy per trade. Default "10"' } }, required: ['action'] }
+            },
+            // ── Idea #7: Agent Marketplace ──
+            {
+                name: 'browse_marketplace',
+                description: 'Browse and manage AI agent plugins in the marketplace. Actions: list, install, remove, info. Vietnamese: "marketplace", "cài plugin", "xem plugin", "chợ agent".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"list", "install", "remove", "info"' }, pluginId: { type: 'string', description: 'Plugin ID (for install/remove/info)' }, category: { type: 'string', description: 'Filter by category: "trading", "analytics", "social", "utility"' } }, required: ['action'] }
             }
         ]
     }

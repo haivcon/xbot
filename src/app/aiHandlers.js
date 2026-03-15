@@ -1816,7 +1816,23 @@ function createAiHandlers(deps) {
         });
         parts.push(imagePart);
       }
-      parts.push({ text: promptText });
+      // T3: DeFi-aware image analysis — enhance prompt when photo is present
+      if (hasPhoto) {
+        // Only apply DeFi framing for crypto-related context
+        const _isCryptoCtx = !promptText.trim() || /defi|dex|swap|token|price|pool|liquidity|chart|wallet|nft|crypto|okx|uniswap|pancake|trade|gas|slippage|apy|tvl|yield|farm|stake/i.test(promptText);
+        if (_isCryptoCtx) {
+          try {
+            const { buildDeFiImagePrompt } = require('../features/smartChatAI');
+            parts.push({ text: buildDeFiImagePrompt(promptText) });
+          } catch (e) {
+            parts.push({ text: promptText || 'Analyze this image' });
+          }
+        } else {
+          parts.push({ text: promptText });
+        }
+      } else {
+        parts.push({ text: promptText });
+      }
       try {
         await bot.sendChatAction(msg.chat.id, hasPhoto ? 'upload_photo' : 'typing');
       } catch (error) {
@@ -3589,6 +3605,29 @@ function createAiHandlers(deps) {
    * Core AIB request processing logic - can be called from /aib command or auto-detection
    */
   async function processAibRequest(msg, userPrompt) {
+    const { aiQueue } = require('../features/smartChatAI');
+    const userId = msg.from?.id?.toString();
+
+    // T4: Rate-limit — check if user already has max concurrent requests
+    const userCount = aiQueue.userRunning.get(userId) || 0;
+    if (userCount >= aiQueue.maxPerUser) {
+      const lang0 = await getLang(msg);
+      const busyLabels = { vi: '⏳ Đang xử lý yêu cầu trước. Vui lòng đợi...', en: '⏳ Processing previous request. Please wait...' };
+      await sendReply(msg, busyLabels[lang0] || busyLabels.en);
+      return;
+    }
+
+    // Wrap actual processing in queue
+    try {
+      await aiQueue.enqueue(userId, () => _processAibRequestInner(msg, userPrompt));
+    } catch (queueErr) {
+      log.warn('AIQueue error:', queueErr.message);
+      const lang0 = await getLang(msg);
+      await sendReply(msg, `❌ ${queueErr.message || 'AI request failed'}`);
+    }
+  }
+
+  async function _processAibRequestInner(msg, userPrompt) {
     let lang = await getLang(msg);
     try {
       lang = require('../features/ai/onchain/helpers').detectPromptLanguage(userPrompt, lang);

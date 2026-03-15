@@ -1109,4 +1109,116 @@ module.exports = {
             return `❌ Error: ${error.msg || error.message}`;
         }
     },
+
+    // ═══════════════════════════════════════════════════════
+    // Idea #6: AI Deep Research
+    // ═══════════════════════════════════════════════════════
+    async deep_research_token(args, context) {
+        try {
+            let chainIndex = args.chainIndex || '196';
+            let tokenAddress = args.tokenContractAddress;
+
+            // Auto-resolve symbols
+            if (tokenAddress && !tokenAddress.startsWith('0x') && tokenAddress.length < 20) {
+                const resolved = await autoResolveToken(tokenAddress, chainIndex);
+                if (resolved.error) return resolved.error;
+                chainIndex = resolved.chainIndex;
+                tokenAddress = resolved.tokenAddress;
+            }
+
+            const lang = context?.lang || 'en';
+            const { deepResearch, formatResearchReport } = require('../../../skills/onchain/researchPipeline');
+            const report = await deepResearch(chainIndex, tokenAddress, { lang });
+            const card = formatResearchReport(report, lang);
+
+            return {
+                displayMessage: card,
+                action: true,
+                success: true
+            };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════
+    // Idea #1: AI Auto Trading Agent
+    // ═══════════════════════════════════════════════════════
+    async manage_auto_trading(args, context) {
+        try {
+            const { manageAutoTrading } = require('../../autoTrading');
+            return await manageAutoTrading(args, context);
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════
+    // Idea #9: Cross-Chain Arbitrage Scanner
+    // ═══════════════════════════════════════════════════════
+    async scan_arbitrage(args, context) {
+        try {
+            const { scanArbitrage } = require('../../arbitrageScanner');
+            return await scanArbitrage(args.tokenSymbol, args.chains, context);
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════
+    // Idea #5: Copy Trading
+    // ═══════════════════════════════════════════════════════
+    async manage_copy_trading(args, context) {
+        try {
+            const copy = require('../../copyTrading');
+            const action = (args.action || 'status').toLowerCase();
+            switch (action) {
+                case 'register':
+                    return await copy.registerAsLeader(context.userId, args.walletAddress, context);
+                case 'follow':
+                    return await copy.followLeader(context.userId, args.leaderId, { maxCopyAmount: args.maxCopyAmount, ...context });
+                case 'unfollow':
+                    return await copy.unfollowLeader(context.userId, args.leaderId, context);
+                case 'leaderboard':
+                    return await copy.getLeaderboard(context);
+                case 'my_followers':
+                    return await copy.getFollowers(context.userId, context);
+                case 'status':
+                    return await copy.getFollowers(context.userId, context);
+                default:
+                    return `❌ Unknown action: ${action}. Use: register, follow, unfollow, leaderboard, my_followers, status`;
+            }
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════
+    // Idea #7: Agent Marketplace
+    // ═══════════════════════════════════════════════════════
+    async browse_marketplace(args, context) {
+        try {
+            const mp = require('../../marketplace');
+            const action = (args.action || 'list').toLowerCase();
+            switch (action) {
+                case 'list':
+                    return await mp.listPlugins(args.category, context);
+                case 'install':
+                    return await mp.installPlugin(args.pluginId, context);
+                case 'remove':
+                    return await mp.uninstallPlugin(args.pluginId, context);
+                case 'info': {
+                    // No dedicated getPluginInfo — use listPlugins and filter
+                    const all = await mp.listPlugins(null, context);
+                    if (typeof all === 'string') return all;
+                    return all;
+                }
+                default:
+                    return `❌ Unknown action: ${action}. Use: list, install, remove, info`;
+            }
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
 };
+

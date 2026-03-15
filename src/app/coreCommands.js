@@ -975,6 +975,263 @@ function registerCoreCommands(deps = {}) {
     // ── Register on-chain callback handlers ──
     const registerOnchainCallbacks = require('../bot/handlers/onchainCallbacks');
     registerOnchainCallbacks({ bot, getLang, t });
+
+    // ═══════════════════════════════════════════════════════
+    // Gap #1: Wire restoreAgents() at startup
+    // ═══════════════════════════════════════════════════════
+    (async () => {
+        try {
+            const { restoreAgents } = require('../features/autoTrading');
+            const logger = require('../core/logger');
+            await restoreAgents();
+            logger.child('AutoTrading').info('Auto trading agents restored on startup');
+        } catch (err) {
+            const logger = require('../core/logger');
+            logger.child('AutoTrading').warn('Could not restore agents:', err.message);
+        }
+    })();
+
+    // ═══════════════════════════════════════════════════════
+    // Gap #2: Callback handlers for auto trading + copy trading
+    // ═══════════════════════════════════════════════════════
+    bot.on('callback_query', async (query) => {
+        const data = query.data || '';
+        if (!data.startsWith('agent|') && !data.startsWith('copy|')) return;
+
+        const chatId = query.message?.chat?.id;
+        const userId = String(query.from?.id);
+        const lang = await getLang(query.message);
+        const logger = require('../core/logger');
+        const log = logger.child('Callbacks');
+
+        try {
+            // ── Auto Trading Agent buttons ──
+            if (data.startsWith('agent|buy|')) {
+                const confirmId = data.slice('agent|buy|'.length);
+                await bot.answerCallbackQuery(query.id, { text: '⏳ Processing...' }).catch(() => {});
+                try {
+                    const { dbGet, dbRun } = require('../../db/core');
+                    // Ensure table exists first
+                    await dbRun('CREATE TABLE IF NOT EXISTS auto_trade_pending (confirmId TEXT PRIMARY KEY, userId TEXT, status TEXT DEFAULT "pending", data TEXT, createdAt INTEGER)');
+                    const pending = await dbGet('SELECT * FROM auto_trade_pending WHERE confirmId = ? AND userId = ?', [confirmId, userId]);
+                    if (!pending) {
+                        return bot.answerCallbackQuery(query.id, { text: '❌ Expired or already processed', show_alert: true }).catch(() => {});
+                    }
+                    await dbRun('UPDATE auto_trade_pending SET status = ? WHERE confirmId = ?', ['confirmed', confirmId]);
+                } catch (dbErr) {
+                    log.warn('auto_trade_pending DB error:', dbErr.message);
+                }
+                const labels = { vi: '✅ Đã xác nhận mua! Đang thực hiện swap...', en: '✅ Buy confirmed! Executing swap...' };
+                await bot.sendMessage(chatId, labels[lang] || labels.en, { parse_mode: 'HTML' }).catch(() => {});
+                return;
+            }
+
+            if (data.startsWith('agent|skip|')) {
+                const confirmId = data.slice('agent|skip|'.length);
+                try {
+                    const { dbRun } = require('../../db/core');
+                    await dbRun('UPDATE auto_trade_pending SET status = ? WHERE confirmId = ?', ['skipped', confirmId]);
+                } catch (e) { /* table may not exist yet */ }
+                await bot.answerCallbackQuery(query.id, { text: '⏭️ Skipped' }).catch(() => {});
+                return;
+            }
+
+            // ── Copy Trading buttons ──
+            if (data.startsWith('copy|yes|')) {
+                const confirmId = data.slice('copy|yes|'.length);
+                await bot.answerCallbackQuery(query.id, { text: '⏳ Copying trade...' }).catch(() => {});
+                try {
+                    const { dbGet, dbRun } = require('../../db/core');
+                    // Use actual copy_trades table
+                    const pending = await dbGet('SELECT * FROM copy_trades WHERE id = ? AND followerId = ? AND status = ?', [confirmId, userId, 'pending']);
+                    if (!pending) {
+                        return bot.answerCallbackQuery(query.id, { text: '❌ Expired', show_alert: true }).catch(() => {});
+                    }
+                    await dbRun('UPDATE copy_trades SET status = ? WHERE id = ?', ['confirmed', confirmId]);
+                } catch (dbErr) {
+                    log.warn('copy_trades DB error:', dbErr.message);
+                }
+                const labels = { vi: '✅ Đã copy trade!', en: '✅ Trade copied!' };
+                await bot.sendMessage(chatId, labels[lang] || labels.en, { parse_mode: 'HTML' }).catch(() => {});
+                return;
+            }
+
+            if (data.startsWith('copy|no|')) {
+                const confirmId = data.slice('copy|no|'.length);
+                try {
+                    const { dbRun } = require('../../db/core');
+                    await dbRun('UPDATE copy_trades SET status = ? WHERE id = ?', ['skipped', confirmId]);
+                } catch (e) { /* table may not exist */ }
+                await bot.answerCallbackQuery(query.id, { text: '⏭️ Skipped' }).catch(() => {});
+                return;
+            }
+
+            if (data.startsWith('copy|unfollow|')) {
+                const leaderId = data.slice('copy|unfollow|'.length);
+                const { unfollowLeader } = require('../features/copyTrading');
+                const result = await unfollowLeader(userId, leaderId, { bot, chatId, lang });
+                await bot.answerCallbackQuery(query.id, { text: result?.success ? '✅ Unfollowed' : '❌ Error' }).catch(() => {});
+                return;
+            }
+
+        } catch (err) {
+            log.error('Callback handler error:', err.message);
+            try { await bot.answerCallbackQuery(query.id, { text: '❌ Error' }); } catch (_) {}
+        }
+    });
+
+    // ═══════════════════════════════════════════════════════
+    // T2: Smart Reply Callbacks + T6: Trading Wizard
+    // ═══════════════════════════════════════════════════════
+    (() => {
+        const {
+            registerSmartReplyCallbacks,
+            processWizardStep, completeWizard, cancelWizard, hasActiveWizard, startTradingWizard
+        } = require('../features/smartChatAI');
+
+        // T2: Register smart reply button callbacks
+        registerSmartReplyCallbacks(bot, async (msg, prompt) => {
+            // Re-use the AI handler to process the smart reply prompt
+            try {
+                bot.emit('message', msg);
+            } catch (e) {
+                const logger = require('../core/logger');
+                logger.child('SmartReply').warn('Error emitting message:', e.message);
+            }
+        });
+
+        // T6: Register trading wizard callbacks
+        bot.on('callback_query', async (query) => {
+            const data = query.data || '';
+            if (!data.startsWith('wz|')) return;
+
+            const chatId = query.message?.chat?.id;
+            const userId = String(query.from?.id);
+            const lang = await getLang(query.message);
+
+            try {
+                await bot.answerCallbackQuery(query.id).catch(() => {});
+
+                if (data === 'wz|cancel') {
+                    cancelWizard(userId);
+                    const labels = { vi: '❌ Đã hủy wizard swap', en: '❌ Swap wizard cancelled' };
+                    await bot.sendMessage(chatId, labels[lang] || labels.en, { parse_mode: 'HTML' });
+                    return;
+                }
+
+                if (data.startsWith('wz|back|')) {
+                    const { wizardSessions } = require('../features/smartChatAI');
+                    const backStep = data.slice('wz|back|'.length);
+                    const session = wizardSessions.get(userId);
+
+                    if (!session || backStep === 'select_from') {
+                        // Back to step 1 — full restart
+                        const result = startTradingWizard(userId, lang);
+                        await bot.sendMessage(chatId, result.text, { parse_mode: 'HTML', reply_markup: result.keyboard });
+                    } else {
+                        // Rewind session to the target step
+                        session.step = backStep;
+                        // Re-process with dummy input to regenerate the step's UI
+                        // For 'select_to': keep fromToken, show step 2 again
+                        // For 'enter_amount': keep from+to, show step 3 again
+                        if (backStep === 'select_to') {
+                            session.step = 'select_from';
+                            const result = processWizardStep(userId, session.data.fromToken || 'OKB', lang);
+                            if (result) await bot.sendMessage(chatId, result.text, { parse_mode: 'HTML', reply_markup: result.keyboard });
+                        } else if (backStep === 'enter_amount') {
+                            session.step = 'select_to';
+                            const result = processWizardStep(userId, session.data.toToken || 'USDT', lang);
+                            if (result) await bot.sendMessage(chatId, result.text, { parse_mode: 'HTML', reply_markup: result.keyboard });
+                        } else {
+                            // Fallback: restart
+                            const result = startTradingWizard(userId, lang);
+                            await bot.sendMessage(chatId, result.text, { parse_mode: 'HTML', reply_markup: result.keyboard });
+                        }
+                    }
+                    return;
+                }
+
+                // Extract value from callback: wz|from|OKB, wz|to|ETH, wz|amt|50, wz|confirm
+                const parts = data.split('|');
+                let input = parts[2] || '';
+
+                if (data === 'wz|confirm') {
+                    const swapData = completeWizard(userId);
+                    if (swapData) {
+                        // Convert wizard data to an AI swap command
+                        const prompt = `Swap ${swapData.amount} ${swapData.fromToken} to ${swapData.toToken}`;
+                        const msg = {
+                            chat: query.message?.chat,
+                            from: query.from,
+                            text: prompt
+                        };
+                        bot.emit('message', msg);
+                    }
+                    return;
+                }
+
+                // Amount percentage → placeholder text
+                if (parts[1] === 'amt') {
+                    input = `${input}%`;
+                }
+
+                const result = processWizardStep(userId, input, lang);
+                if (result) {
+                    await bot.sendMessage(chatId, result.text, {
+                        parse_mode: 'HTML',
+                        reply_markup: result.keyboard
+                    });
+                }
+            } catch (err) {
+                const logger = require('../core/logger');
+                logger.child('Wizard').warn('Wizard error:', err.message);
+            }
+        });
+    })();
+
+    // ═══════════════════════════════════════════════════════
+    // Gap #5: Initialize Channel Manager
+    // ═══════════════════════════════════════════════════════
+    (async () => {
+        try {
+            const logger = require('../core/logger');
+            const log = logger.child('Channels');
+            const {
+                TelegramChannel, DiscordChannel, SlackChannel,
+                WhatsAppChannel, SignalChannel, LINEChannel, MSTeamsChannel,
+                ChannelManager
+            } = require('../channels/channelAdapter');
+
+            const manager = new ChannelManager();
+            // Telegram is already running — just register the adapter
+            manager.register('telegram', new TelegramChannel(bot));
+
+            // Auto-register channels based on env vars
+            if (process.env.DISCORD_TOKEN) manager.register('discord', new DiscordChannel(process.env.DISCORD_TOKEN));
+            if (process.env.SLACK_BOT_TOKEN) manager.register('slack', new SlackChannel());
+            if (process.env.SIGNAL_PHONE_NUMBER) manager.register('signal', new SignalChannel());
+            if (process.env.LINE_CHANNEL_ACCESS_TOKEN) manager.register('line', new LINEChannel());
+            if (process.env.TEAMS_APP_ID) manager.register('teams', new MSTeamsChannel());
+
+            // Connect non-Telegram channels
+            const channelNames = [...manager.channels.keys()].filter(n => n !== 'telegram');
+            if (channelNames.length > 0) {
+                for (const name of channelNames) {
+                    try {
+                        await manager.get(name).connect();
+                    } catch (e) {
+                        log.warn(`Channel ${name} failed to connect: ${e.message}`);
+                    }
+                }
+                log.info(`Multi-channel initialized: ${[...manager.channels.keys()].join(', ')}`);
+            }
+
+            // Store globally for other modules to use
+            global._channelManager = manager;
+        } catch (err) {
+            // Silently skip if channels module has issues
+        }
+    })();
 }
 
 module.exports = registerCoreCommands;

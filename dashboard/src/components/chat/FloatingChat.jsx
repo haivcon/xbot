@@ -3,6 +3,33 @@ import { useNavigate } from 'react-router-dom';
 import { Bot, X, Send, Loader2, Maximize2 } from 'lucide-react';
 import api from '@/api/client';
 
+/* ─── Lightweight Markdown renderer for mini chat ─── */
+function renderMiniMd(text) {
+    if (!text) return '';
+    let s = text
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/javascript\s*:/gi, '');
+    // Code blocks
+    const blocks = [];
+    s = s.replace(/```([\w]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const idx = blocks.length;
+        blocks.push(`<pre style="background:rgba(255,255,255,0.05);padding:6px 8px;border-radius:6px;overflow-x:auto;font-size:10px;margin:4px 0"><code>${code.trim().replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code></pre>`);
+        return `%%CB_${idx}%%`;
+    });
+    s = s
+        .replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px;font-size:10px">$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, url) => /javascript:/i.test(url) ? t : `<a href="${url}" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:underline">${t}</a>`)
+        .replace(/^> (.+)$/gm, '<div style="border-left:2px solid rgba(255,255,255,0.15);padding-left:8px;color:rgba(255,255,255,0.5);margin:2px 0">$1</div>')
+        .replace(/^### (.+)$/gm, '<strong style="font-size:11px">$1</strong>')
+        .replace(/^## (.+)$/gm, '<strong style="font-size:12px">$1</strong>')
+        .replace(/\n/g, '<br/>');
+    blocks.forEach((b, i) => { s = s.replace(`%%CB_${i}%%`, b); });
+    return s;
+}
+
 /**
  * FloatingChat — Persistent chat bubble on non-chat pages.
  * Opens a mini chat panel with the last active conversation context.
@@ -44,7 +71,6 @@ export default function FloatingChat() {
             setMessages(prev => [...prev, { role: 'assistant', content: '', ts: assistantTs }]);
 
             await api.streamChatMessage(msg, conversationId, {
-                model: 'gemini-3-flash-preview',
                 onTextDelta: (text) => {
                     fullText += text;
                     setMessages(prev => {
@@ -150,7 +176,12 @@ export default function FloatingChat() {
                                         ? 'bg-brand-500/15 text-surface-100'
                                         : 'bg-surface-800/60 text-surface-200/80'
                                 }`}>
-                                    {msg.content || <span className="text-surface-200/30">...</span>}
+                                    {msg.role === 'user'
+                                        ? <span>{msg.content || '...'}</span>
+                                        : msg.content
+                                            ? <div dangerouslySetInnerHTML={{ __html: renderMiniMd(msg.content) }} />
+                                            : <span className="text-surface-200/30">...</span>
+                                    }
                                 </div>
                             </div>
                         ))}

@@ -3,7 +3,8 @@ import { useLocation } from 'react-router-dom';
 import api from '@/api/client';
 import {
     Bot, Send, Loader2, Sparkles, X, Minus, Maximize2, Minimize2,
-    Wallet, BarChart3, Fuel, TrendingUp, ArrowRightLeft, AlertTriangle
+    Wallet, BarChart3, Fuel, TrendingUp, ArrowRightLeft, AlertTriangle,
+    Search, Shield, Users, Store, Mic, Brain, Copy, Repeat
 } from 'lucide-react';
 
 /* ─── Markdown renderer (XSS-safe) ─── */
@@ -18,7 +19,12 @@ function renderMd(text) {
     const codeBlocks = [];
     safe = safe.replace(/```([\w]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
         const idx = codeBlocks.length;
-        codeBlocks.push(`<pre class="chat-code-block"><code class="language-${lang}">${code.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`);
+        const escaped = code.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        codeBlocks.push(
+            `<div class="chat-code-wrapper" style="position:relative">`
+            + `<button class="copy-code-btn" onclick="navigator.clipboard.writeText(this.parentElement.querySelector('code').textContent).then(()=>{this.textContent='✓';setTimeout(()=>{this.textContent='📋'},1200)})" title="Copy code" style="position:absolute;top:4px;right:4px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;color:rgba(255,255,255,0.5);z-index:1;transition:all 0.2s">📋</button>`
+            + `<pre class="chat-code-block"><code class="language-${lang}">${escaped}</code></pre></div>`
+        );
         return `%%CB_${idx}%%`;
     });
     safe = safe
@@ -88,19 +94,41 @@ function ToolResultCard({ toolCalls }) {
         get_token_price: TrendingUp,
         get_market_price: TrendingUp,
         get_portfolio: Wallet,
+        get_wallet_balance: Wallet,
         swap_tokens: ArrowRightLeft,
+        get_swap_quote: ArrowRightLeft,
+        execute_swap: ArrowRightLeft,
         get_signal_list: AlertTriangle,
         get_token_info: BarChart3,
+        search_token: Search,
+        get_token_security: Shield,
+        deep_research_token: Brain,
+        manage_auto_trading: Repeat,
+        scan_arbitrage: TrendingUp,
+        manage_copy_trading: Users,
+        browse_marketplace: Store,
     };
     return (
         <div className="flex flex-wrap gap-1 mb-1.5">
             {toolCalls.map((tc, i) => {
                 const Icon = iconMap[tc.name] || Sparkles;
+                const isPriceTool = /price|market|token_info|portfolio/.test(tc.name);
                 return (
                     <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
                         text-[9px] font-medium bg-amber-500/8 text-amber-400/80 border border-amber-500/10">
                         <Icon size={9} />
                         {tc.name?.replace(/_/g, ' ')}
+                        {/* D1: Sparkline mini chart for price tools */}
+                        {isPriceTool && (
+                            <svg viewBox="0 0 40 12" width="40" height="12" className="ml-0.5">
+                                <polyline
+                                    fill="none"
+                                    stroke="#34d399"
+                                    strokeWidth="1.2"
+                                    points="0,8 5,6 10,9 15,4 20,5 25,3 30,6 35,2 40,4"
+                                />
+                            </svg>
+                        )}
                     </span>
                 );
             })}
@@ -152,12 +180,49 @@ function TypingDots() {
     );
 }
 
-/* ─── Quick suggestion chips ─── */
+/* ─── D2: Interactive Trade Confirmation Card (in ChatWidget) ─── */
+function TradeConfirmCard({ data, onConfirm, onCancel }) {
+    if (!data) return null;
+    return (
+        <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 my-2 animate-fadeIn">
+            <div className="flex items-center gap-2 mb-2">
+                <ArrowRightLeft size={14} className="text-purple-400" />
+                <span className="text-xs font-semibold text-purple-300">Swap Confirmation</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-surface-200/80 mb-2">
+                <span className="bg-surface-800/60 px-2 py-1 rounded-lg">{data.fromAmount} {data.fromToken}</span>
+                <span className="text-surface-200/30">→</span>
+                <span className="bg-surface-800/60 px-2 py-1 rounded-lg">≈ {data.toAmount} {data.toToken}</span>
+            </div>
+            {data.priceImpact && (
+                <div className="text-[10px] text-amber-400/70 mb-2">⚠️ Price impact: {data.priceImpact}</div>
+            )}
+            <div className="flex gap-2">
+                <button onClick={onConfirm}
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/20
+                        text-emerald-400 text-[10px] font-medium hover:bg-emerald-500/30 transition-colors">
+                    ✅ Confirm
+                </button>
+                <button onClick={onCancel}
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/15
+                        text-red-400/70 text-[10px] font-medium hover:bg-red-500/20 transition-colors">
+                    ❌ Cancel
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/* ─── Quick suggestion chips (D6: Context-Aware) ─── */
 const SUGGESTIONS = [
     { icon: '💰', text: 'Check my portfolio' },
     { icon: '📊', text: 'Top trending tokens' },
     { icon: '⛽', text: 'Gas prices' },
     { icon: '🐳', text: 'Whale signals' },
+    { icon: '🔬', text: 'Deep research ETH' },
+    { icon: '📈', text: 'Scan arbitrage USDT' },
+    { icon: '👥', text: 'Copy trading leaderboard' },
+    { icon: '🤖', text: 'Auto trading status' },
 ];
 
 /* ═══════════════════════════════════════
