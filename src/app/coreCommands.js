@@ -1254,7 +1254,21 @@ function registerCoreCommands(deps = {}) {
             if (data === 'panic|confirm') {
                 const { executePanicSell, formatPanicReport } = require('../features/panicSell');
                 await bot.sendMessage(chatId, lang === 'vi' ? '🚨 Đang bán tất cả...' : '🚨 Selling all tokens...', { parse_mode: 'HTML' });
+                // First run dry to show preview, user must press panic|execute for real sell
                 const results = await executePanicSell([], { dryRun: true });
+                await bot.sendMessage(chatId, formatPanicReport(results, lang), {
+                    parse_mode: 'HTML',
+                    reply_markup: { inline_keyboard: [[
+                        { text: '🚨 EXECUTE REAL SELL', callback_data: 'panic|execute' },
+                        { text: '❌ Cancel', callback_data: 'panic|cancel' }
+                    ]] }
+                });
+                return;
+            }
+            if (data === 'panic|execute') {
+                const { executePanicSell, formatPanicReport } = require('../features/panicSell');
+                await bot.sendMessage(chatId, lang === 'vi' ? '🚨🚨 ĐANG BÁN THẬT...' : '🚨🚨 EXECUTING REAL SELL...', { parse_mode: 'HTML' });
+                const results = await executePanicSell([], { dryRun: false });
                 await bot.sendMessage(chatId, formatPanicReport(results, lang), { parse_mode: 'HTML' });
                 return;
             }
@@ -1301,10 +1315,12 @@ function registerCoreCommands(deps = {}) {
             // ── #11 Wallet Guardian ──
             if (data.startsWith('guard|scan|')) {
                 const wallet = data.slice('guard|scan|'.length);
-                const { calculateSecurityScore, getSecurityLabel } = require('../features/walletGuardian');
-                const score = calculateSecurityScore({ activeApprovals: 5, riskyApprovals: 0 });
+                const { approvalScanner, calculateSecurityScore, getSecurityLabel } = require('../features/walletGuardian');
+                const approvalCount = approvalScanner.getApprovalCount(wallet);
+                const riskyCount = approvalScanner.getRiskyApprovals(wallet).length;
+                const score = calculateSecurityScore({ activeApprovals: approvalCount, riskyApprovals: riskyCount });
                 const label = getSecurityLabel(score);
-                await bot.sendMessage(chatId, `${label.emoji} <b>Security Score: ${score}/100</b>\n${label.label}`, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, `${label.emoji} <b>Security Score: ${score}/100</b>\n${label.label}\n📋 Approvals: ${approvalCount} (${riskyCount} risky)`, { parse_mode: 'HTML' });
                 return;
             }
 
@@ -1327,11 +1343,13 @@ function registerCoreCommands(deps = {}) {
 
             // ── #26 Prediction Market ──
             if (data.startsWith('pred|bet|')) {
-                const [, , predId, option] = data.split('|');
+                const parts = data.split('|');
+                const predId = parts[2] || '';
+                const option = parts[3] || '0';
                 const { getPrediction } = require('../features/predictionMarket');
                 const pred = getPrediction(predId);
                 if (!pred) { await bot.sendMessage(chatId, '❌ Prediction not found'); return; }
-                const result = pred.stake(userId, parseInt(option), 1);
+                const result = pred.stake(userId, parseInt(option, 10), 1);
                 await bot.sendMessage(chatId, result.success ? `✅ Bet placed! Pool: $${result.totalPool}` : `❌ ${result.error}`, { parse_mode: 'HTML' });
                 return;
             }
@@ -1379,7 +1397,7 @@ function registerCoreCommands(deps = {}) {
 
             // ── #23 Gas Optimizer ──
             if (data.startsWith('gas|check|')) {
-                const chainId = parseInt(data.slice('gas|check|'.length)) || 196;
+                const chainId = parseInt(data.slice('gas|check|'.length), 10) || 196;
                 const { gasTracker, suggestGasTiming } = require('../features/gasOptimizer');
                 await bot.sendMessage(chatId, suggestGasTiming(gasTracker, chainId, lang), { parse_mode: 'HTML' });
                 return;
@@ -1388,6 +1406,10 @@ function registerCoreCommands(deps = {}) {
             // ── #4 Meme Radar ──
             if (data === 'radar|start') {
                 const { memeRadar } = require('../features/memeRadar');
+                if (memeRadar._interval) {
+                    await bot.sendMessage(chatId, '⚠️ Meme Radar already running', { parse_mode: 'HTML' });
+                    return;
+                }
                 memeRadar.start(async () => {});
                 await bot.sendMessage(chatId, '🔴 Meme Radar LIVE — scanning every 30s', { parse_mode: 'HTML' });
                 return;
@@ -1445,10 +1467,10 @@ function registerCoreCommands(deps = {}) {
 
             // ── #24 Tax ──
             if (data === 'tax|summary') {
-                const { TaxReporter } = require('../features/taxReporter');
-                const reporter = new TaxReporter(new Date().getFullYear());
-                const summary = reporter.calculateGains();
-                await bot.sendMessage(chatId, `📋 <b>Tax Summary ${summary.taxYear}:</b>\n💰 Net: $${summary.netGain}\n📈 Short-term: $${summary.shortTermGains}\n📊 Long-term: $${summary.longTermGains}\n💸 Fees: $${summary.totalFees}`, { parse_mode: 'HTML' });
+                const msg = lang === 'vi'
+                    ? '📋 <b>Tax Reporter</b>\n\nDùng lệnh AI: <i>"tạo báo cáo thuế năm 2025"</i> để hệ thống tự động lấy dữ liệu giao dịch và tính lãi/lỗ.\n\nPhương pháp: FIFO / LIFO / Average Cost\nXuất: CSV'
+                    : '📋 <b>Tax Reporter</b>\n\nUse AI command: <i>"generate tax report for 2025"</i> to auto-fetch trades and calculate gains/losses.\n\nMethods: FIFO / LIFO / Average Cost\nExport: CSV';
+                await bot.sendMessage(chatId, msg, { parse_mode: 'HTML' });
                 return;
             }
 

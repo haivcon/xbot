@@ -87,7 +87,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'get_gas_price',
-                description: 'Get current gas prices for a blockchain. Vietnamese: "phí gas", "giá gas", "gas bao nhiêu". English: "gas fees", "how much is gas?",',
+                description: 'Get CURRENT gas prices for a blockchain. Returns raw gas data only. For optimal timing and cost advice, use get_optimal_gas instead. Vietnamese: "phí gas hiện tại", "giá gas", "gas bao nhiêu". English: "gas fees", "how much is gas?".',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -421,7 +421,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'schedule_dca',
-                description: 'Schedule a recurring DCA (Dollar-Cost Averaging) swap. Vietnamese: "mua tự động mỗi ngày", "DCA hàng tuần", "đặt lịch swap". Supports create, list, cancel, pause, resume, dashboard actions.',
+                description: 'Schedule a REAL recurring on-chain DCA swap that executes actual transactions via the trading wallet. For paper/simulated DCA strategy management, use manage_dca instead. Vietnamese: "mua tự động mỗi ngày", "DCA hàng tuần", "đặt lịch swap". Supports create, list, cancel, pause, resume, dashboard actions.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -478,7 +478,7 @@ module.exports.ONCHAIN_TOOLS = [
             },
             {
                 name: 'check_approval_safety',
-                description: 'Check if a token approval/allowance is safe or risky. Detects unlimited approvals to suspicious spenders. Vietnamese: "kiểm tra approval", "kiểm tra quyền truy cập token", "approval có an toàn không". English: "check approval safety", "is this approval safe".',
+                description: 'Check if a SPECIFIC token approval/allowance is safe or risky. For a FULL wallet security audit with security scoring, use scan_wallet_security instead. Vietnamese: "kiểm tra approval cụ thể", "approval có an toàn không". English: "check this approval", "is this approval safe".',
                 parameters: {
                     type: 'object',
                     properties: {
