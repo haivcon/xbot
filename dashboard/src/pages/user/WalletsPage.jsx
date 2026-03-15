@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import api from '@/api/client';
+import CustomSelect from '@/components/ui/CustomSelect';
 import {
     Wallet, Plus, Trash2, Star, RefreshCw, Eye, EyeOff, Copy, Check,
     ExternalLink, AlertTriangle, Loader2, ChevronDown, Shield, Download,
@@ -346,9 +347,8 @@ function ImportWalletModal({ onClose, onImported }) {
                         {/* Chain selector */}
                         <div className="mb-3">
                             <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">Chain</label>
-                            <select value={chainIndex} onChange={e => setChainIndex(e.target.value)} className="input-field text-sm !py-1.5">
-                                {CHAIN_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                            </select>
+                            <CustomSelect value={chainIndex} onChange={setChainIndex} size="sm"
+                                options={CHAIN_OPTIONS.map(c => ({ value: c.value, label: c.label }))} />
                         </div>
 
                         {/* File upload zone */}

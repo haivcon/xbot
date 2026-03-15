@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } fro
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
+import CustomSelect from '@/components/ui/CustomSelect';
 import {
     ArrowLeftRight, TrendingUp, Fuel, Search, RefreshCw, Loader2,
     ArrowDown, Clock, ExternalLink, ArrowUpRight, ArrowDownRight, Zap,
@@ -911,17 +912,13 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                 <div className="grid grid-cols-2 gap-2">
                     <div>
                         <label className="text-[9px] text-surface-200/25 mb-0.5 block">FROM</label>
-                        <select value={fromSymbol} onChange={e => setFromSymbol(e.target.value)}
-                            className="styled-select-sm">
-                            {Object.keys(tokens).map(s => <option key={s} value={s}>{tokens[s].icon} {s}</option>)}
-                        </select>
+                        <CustomSelect value={fromSymbol} onChange={setFromSymbol} size="sm"
+                            options={Object.keys(tokens).map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
                     </div>
                     <div>
                         <label className="text-[9px] text-surface-200/25 mb-0.5 block">TO</label>
-                        <select value={toSymbol} onChange={e => setToSymbol(e.target.value)}
-                            className="styled-select-sm">
-                            {Object.keys(tokens).filter(s => s !== fromSymbol).map(s => <option key={s} value={s}>{tokens[s].icon} {s}</option>)}
-                        </select>
+                        <CustomSelect value={toSymbol} onChange={setToSymbol} size="sm"
+                            options={Object.keys(tokens).filter(s => s !== fromSymbol).map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
                     </div>
                 </div>
                 {/* Amount + Slippage */}
@@ -1791,17 +1788,13 @@ function BatchSwapWidget({ chainIndex, wallets = [] }) {
                     <div className="grid grid-cols-2 gap-2">
                         <div>
                             <label className="text-[9px] text-surface-200/25 mb-0.5 block">FROM</label>
-                            <select value={fromSymbol} onChange={e => setFromSymbol(e.target.value)}
-                                className="w-full bg-surface-800/80 border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-surface-100 outline-none">
-                                {tokenList.map(s => <option key={s} value={s}>{tokens[s].icon} {s}</option>)}
-                            </select>
+                            <CustomSelect value={fromSymbol} onChange={setFromSymbol} size="sm"
+                                options={tokenList.map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
                         </div>
                         <div>
                             <label className="text-[9px] text-surface-200/25 mb-0.5 block">TO</label>
-                            <select value={toSymbol} onChange={e => setToSymbol(e.target.value)}
-                                className="w-full bg-surface-800/80 border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-surface-100 outline-none">
-                                {tokenList.filter(s => s !== fromSymbol).map(s => <option key={s} value={s}>{tokens[s].icon} {s}</option>)}
-                            </select>
+                            <CustomSelect value={toSymbol} onChange={setToSymbol} size="sm"
+                                options={tokenList.filter(s => s !== fromSymbol).map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
                         </div>
                     </div>
                     {/* Amount + slippage */}
@@ -1988,10 +1981,9 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
                         <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">TOKEN</label>
                         <div className="bg-surface-900/60 rounded-2xl border border-white/[0.08] p-3">
                             <div className="flex items-center gap-3">
-                                <select value={sToken} onChange={e => setSToken(e.target.value)}
-                                    className="styled-select w-auto min-w-[120px]">
-                                    {tokenList.map(s => <option key={s} value={s}>{tokens[s].icon} {s}</option>)}
-                                </select>
+                                <CustomSelect value={sToken} onChange={setSToken} size="sm"
+                                    className="w-auto min-w-[120px]"
+                                    options={tokenList.map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
                                 <input type="number" value={sAmount} onChange={e => setSAmount(e.target.value)} placeholder="0.0"
                                     className="flex-1 bg-transparent text-right text-xl font-bold text-surface-100 outline-none placeholder:text-surface-200/15 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
@@ -2016,10 +2008,8 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
                     {/* Token for all */}
                     <div>
                         <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">TOKEN</label>
-                        <select value={bToken} onChange={e => setBToken(e.target.value)}
-                            className="styled-select">
-                            {tokenList.map(s => <option key={s} value={s}>{tokens[s].icon} {s}</option>)}
-                        </select>
+                        <CustomSelect value={bToken} onChange={setBToken}
+                            options={tokenList.map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
                     </div>
 
                     {/* CSV paste */}
@@ -2037,11 +2027,10 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
                     <div className="space-y-1.5 max-h-[180px] overflow-y-auto">
                         {bRows.map((row, i) => (
                             <div key={i} className="flex gap-1.5 items-center">
-                                <select value={row.walletId} onChange={e => updateBatchRow(i, 'walletId', e.target.value)}
-                                    className="styled-select-xs w-28">
-                                    <option value="">Wallet...</option>
-                                    {wallets.map(w => <option key={w.id} value={w.id}>{w.name || `W${w.id}`}</option>)}
-                                </select>
+                                <CustomSelect value={row.walletId} onChange={(val) => updateBatchRow(i, 'walletId', val)} size="sm"
+                                    className="w-28"
+                                    placeholder="Wallet..."
+                                    options={wallets.map(w => ({ value: String(w.id), label: w.name || `W${w.id}` }))} />
                                 <input value={row.toAddress} onChange={e => updateBatchRow(i, 'toAddress', e.target.value)} placeholder="0x..."
                                     className="flex-1 min-w-0 bg-surface-900/60 border border-white/[0.08] rounded-lg px-2 py-2 text-[10px] text-surface-100 font-mono outline-none placeholder:text-surface-200/15" />
                                 <input type="number" value={row.amount} onChange={e => updateBatchRow(i, 'amount', e.target.value)} placeholder="Amt"

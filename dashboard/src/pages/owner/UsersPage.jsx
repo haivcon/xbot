@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import api from '@/api/client';
+import CustomSelect from '@/components/ui/CustomSelect';
 import { Users, Search, ShieldX, Shield, Crown, RefreshCw, Download, CheckSquare, Wallet } from 'lucide-react';
 
 export default function UsersPage() {
@@ -236,18 +237,18 @@ export default function UsersPage() {
                                             {tab !== 'banned' && (
                                                 <div className="flex items-center gap-1 justify-end">
                                                     <Wallet size={10} className="text-surface-200/30" />
-                                                    <select
+                                                    <CustomSelect
                                                         value={u.walletLimit || 50}
-                                                        onChange={async (e) => {
+                                                        onChange={async (val) => {
                                                             try {
-                                                                await api.setUserWalletLimit(u.chatId || u.userId, parseInt(e.target.value));
+                                                                await api.setUserWalletLimit(u.chatId || u.userId, parseInt(val, 10));
                                                                 fetchData();
                                                             } catch {}
                                                         }}
-                                                        className="bg-surface-800/60 border border-white/10 rounded px-1 py-0.5 text-[10px] text-surface-200/60 outline-none"
-                                                    >
-                                                        {[50, 100, 200, 300, 500, 1000].map(n => <option key={n} value={n}>{n}</option>)}
-                                                    </select>
+                                                        size="sm"
+                                                        className="w-20"
+                                                        options={[50, 100, 200, 300, 500, 1000].map(n => ({ value: n, label: String(n) }))}
+                                                    />
                                                 </div>
                                             )}
                                         </td>

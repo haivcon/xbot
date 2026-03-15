@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import api from '@/api/client';
+import CustomSelect from '@/components/ui/CustomSelect';
 import useToastStore from '@/stores/toastStore';
 import {
     MessageSquare, Search, Settings, RefreshCw, Users as UsersIcon, X, Send,
@@ -268,12 +269,8 @@ function GroupDetailModal({ group, onClose, onDelete, onRefresh }) {
                                     {subEnabled && (
                                         <div className="p-3 bg-white/[0.02] rounded-xl">
                                             <label className="text-xs text-surface-200/40 block mb-1.5">{t('dashboard.groupDetail.subLang') || 'Language'}</label>
-                                            <select value={subLang} onChange={e => setSubLang(e.target.value)}
-                                                className="bg-surface-800/60 border border-white/5 rounded-lg px-3 py-2 text-sm text-surface-100 w-full">
-                                                {Object.entries(LANG_FLAGS).map(([code, flag]) => (
-                                                    <option key={code} value={code}>{flag} {code.toUpperCase()}</option>
-                                                ))}
-                                            </select>
+                                            <CustomSelect value={subLang} onChange={setSubLang} size="sm"
+                                                options={Object.entries(LANG_FLAGS).map(([code, flag]) => ({ value: code, label: `${flag} ${code.toUpperCase()}` }))} />
                                         </div>
                                     )}
                                 </div>

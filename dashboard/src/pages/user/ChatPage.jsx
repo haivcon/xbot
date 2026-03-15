@@ -9,7 +9,7 @@ import {
     Wallet, TrendingUp, BarChart3, Zap, Shield, Globe, Coins, ArrowLeftRight,
     HelpCircle, BookOpen, Star, Bell, Search, Activity, ArrowUpDown, Eye,
     Download, Pin, PinOff, Keyboard, Mic, MicOff, Paperclip, Image,
-    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home, Columns
+    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home, Columns, Lock
 } from 'lucide-react';
 import { hapticImpact, hapticNotification } from '@/utils/telegram';
 
@@ -378,6 +378,31 @@ const PERSONA_OPTIONS = [
     { value: 'xwizard', icon: '🧙', label: 'Xwizard', desc: 'Magical wizard, mysterious' },
 ];
 
+// U4: Persona preview sample responses
+const PERSONA_PREVIEWS = {
+    default: 'I can help you with that! Let me look into it...',
+    friendly: 'OMG yes!! 🎉 Let me help you right away! This is going to be so fun!! 💖✨',
+    formal: 'Certainly. I shall address your inquiry with due diligence and precision.',
+    anime: 'Sugoi~! ✧(◕‿◕✿) Let me help you, senpai! This is going to be kawaii~',
+    mentor: 'Great question! Let\'s break this down step by step. First, consider...',
+    funny: 'Well, well, well... if it isn\'t another coding puzzle! *cracks knuckles* 😄',
+    crypto: 'WAGMI fren! 🚀 Let me check the charts... looking bullish NGL 💎🙌',
+    gamer: 'GG! Let\'s speedrun this quest! 🎮 Achievement unlocked: asking for help! 🏆',
+    rebel: 'Pfft, the conventional approach? Nah. Let me show you the REAL way.',
+    mafia: 'I\'ll make you an offer you can\'t refuse. This solution... is elegant.',
+    cute: 'Aww~ of course I\'ll help! 🌸 Let me find the sweetest solution for you~',
+    little_girl: 'Ooh ooh! I know this one! *jumps excitedly* Why does it work like that?? 🎀',
+    little_brother: 'Hehe, you need MY help? Fine fine, I\'ll show you... this time 😏',
+    old_uncle: 'Ah, back in my day we did it differently! *sips tea* Let me tell you...',
+    old_grandma: 'Oh sweetie, come here, let grandma help you. Have you eaten yet? 🍲',
+    deity: 'Mortal, I perceive the nature of your query. The cosmic truth reveals...',
+    king: 'By royal decree, I shall bestow upon you the wisdom of the crown. 👑',
+    banana_cat: 'Meow~ 🍌🐱 *knocks your question off the table* Wait, let me actually help... meow~',
+    pretty_sister: 'Ara ara~ Let your big sister handle this elegantly for you 💅✨',
+    seductive_girl: 'Oh? You need help? *leans in* Let me show you something... incredible 🔥',
+    gentleman: 'It would be my pleasure to assist you. Allow me, if you will...',
+};
+
 const PROVIDER_OPTIONS = [
     { value: 'google', label: 'Google (Gemini)', icon: '✨', desc: 'Multimodal, best for complex tasks' },
     { value: 'openai', label: 'OpenAI (GPT)', icon: '🧠', desc: 'Strong reasoning & code' },
@@ -494,6 +519,18 @@ export default function ChatPage() {
     const [loadingConv, setLoadingConv] = useState(false);
     const [inputShake, setInputShake] = useState(false);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    // U3: Model usage tracking
+    const [modelUsageStats, setModelUsageStats] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('xbot_model_usage') || '{}'); } catch { return {}; }
+    });
+    // U5: Custom persona
+    const [customPersonaInput, setCustomPersonaInput] = useState(() => {
+        try { return localStorage.getItem('xbot_custom_persona') || ''; } catch { return ''; }
+    });
+    // U7: Token counter
+    const [sessionTokens, setSessionTokens] = useState({ sent: 0, received: 0 });
+    // U4: Persona preview
+    const [previewPersona, setPreviewPersona] = useState(null);
     const recognitionRef = useRef(null);
     const imageInputRef = useRef(null);
     const messagesEndRef = useRef(null);
@@ -521,7 +558,16 @@ export default function ChatPage() {
             const data = await api.request(`/ai/models?viewMode=${viewMode || ''}`);
             if (data?.models?.length) {
                 setModelOptions(data.models);
-                setModelMeta({ hasPersonalKey: data.hasPersonalKey, hasServerKey: data.hasServerKey, isOwner: data.isOwner });
+                setModelMeta({
+                    hasPersonalKey: data.hasPersonalKey,
+                    hasServerKey: data.hasServerKey,
+                    isOwner: data.isOwner,
+                    hasOpenAiKey: data.hasOpenAiKey,
+                    hasServerOpenAiKey: data.hasServerOpenAiKey,
+                    hasGroqKey: data.hasGroqKey,
+                    hasServerGroqKey: data.hasServerGroqKey,
+                    defaultModel: data.defaultModel,
+                });
                 if (data.defaultModel && !data.models.find(m => m.id === selectedModel)) {
                     setSelectedModel(data.defaultModel);
                 }
@@ -541,10 +587,27 @@ export default function ChatPage() {
         }).catch(() => {});
     }, []);
 
+    // B4 fix: use refs to prevent stale closure in saveAiPrefs
+    const personaRef = useRef(selectedPersona);
+    const providerRef = useRef(selectedProvider);
+    const thinkingRef = useRef(selectedThinking);
+    useEffect(() => { personaRef.current = selectedPersona; }, [selectedPersona]);
+    useEffect(() => { providerRef.current = selectedProvider; }, [selectedProvider]);
+    useEffect(() => { thinkingRef.current = selectedThinking; }, [selectedThinking]);
+
     const saveAiPrefs = useCallback(async (updates) => {
-        const newPrefs = { persona: selectedPersona, provider: selectedProvider, thinkingLevel: selectedThinking, ...updates };
+        const newPrefs = { persona: personaRef.current, provider: providerRef.current, thinkingLevel: thinkingRef.current, ...updates };
         try { await api.updatePreferences(newPrefs); } catch {}
-    }, [selectedPersona, selectedProvider, selectedThinking]);
+    }, []);
+
+    // U3: Track model usage
+    const trackModelUsage = useCallback((modelId) => {
+        setModelUsageStats(prev => {
+            const updated = { ...prev, [modelId]: (prev[modelId] || 0) + 1 };
+            try { localStorage.setItem('xbot_model_usage', JSON.stringify(updated)); } catch {}
+            return updated;
+        });
+    }, []);
 
     // ── API key management — stored locally on device only ──
     const LOCAL_KEYS_STORAGE = 'xbot_ai_api_keys';
@@ -602,6 +665,25 @@ export default function ChatPage() {
             hapticNotification('success');
         } catch { hapticNotification('error'); }
     }, [loadApiKeys]);
+
+    // ── Unified helper: can user change model/thinking for a provider? ──
+    // Combines backend DB key flags + local localStorage keys
+    const canChangeForProvider = useCallback((provider) => {
+        if (modelMeta.isOwner) return true;
+        // Check local keys (stored in localStorage)
+        const hasLocalKey = userApiKeys.some(k => {
+            const p = (k.provider || '').toLowerCase();
+            if (provider === 'google') return ['google', 'gemini'].includes(p);
+            return p === provider;
+        });
+        if (hasLocalKey) return true;
+        // Check backend DB keys
+        if (provider === 'google') return modelMeta.hasPersonalKey;
+        if (provider === 'openai') return modelMeta.hasOpenAiKey;
+        if (provider === 'groq') return modelMeta.hasGroqKey;
+        return false;
+    }, [modelMeta, userApiKeys]);
+
     useEffect(() => { inputRef.current?.focus(); }, []);
 
     // Keyboard shortcuts
@@ -704,6 +786,8 @@ export default function ChatPage() {
         setFollowUpSuggestions([]);
         const currentImage = imagePreview;
         setImagePreview(null);
+        // U7: estimate sent tokens (~4 chars per token)
+        setSessionTokens(prev => ({ ...prev, sent: prev.sent + Math.ceil(msg.length / 4) }));
 
         // ── Compare Mode: side-by-side model comparison ──
         if (compareMode) {
@@ -756,6 +840,9 @@ export default function ChatPage() {
                 signal: controller.signal,
                 image: currentImage,
                 model: selectedModel,
+                persona: selectedPersona,
+                // U5: Pass custom persona text
+                customPersonaText: selectedPersona === 'custom' ? customPersonaInput : undefined,
                 userApiKey: (() => {
                     try {
                         const keys = JSON.parse(localStorage.getItem('xbot_ai_api_keys') || '[]');
@@ -802,6 +889,10 @@ export default function ChatPage() {
                     });
                     setFollowUpSuggestions(buildFollowUps(fullText, data.toolCalls || streamToolCalls));
                     loadConversations();
+                    // U3: Track model usage
+                    trackModelUsage(selectedModel);
+                    // U7: estimate received tokens
+                    setSessionTokens(prev => ({ ...prev, received: prev.received + Math.ceil(fullText.length / 4) }));
                 },
                 onError: (data) => {
                     setMessages(prev => {
@@ -1353,10 +1444,10 @@ export default function ChatPage() {
                                     ? 'bg-purple-500/20 text-purple-400'
                                     : 'hover:bg-white/5 text-surface-200/40 hover:text-purple-400'
                             }`}
-                            title="Compare Models"
+                            title={t('dashboard.chatPage.compareIndicator', 'Compare')}
                         >
                             <Columns size={12} />
-                            <span className="hidden sm:inline text-[10px]">{compareMode ? 'Compare ON' : ''}</span>
+                            <span className="hidden sm:inline text-[10px]">{compareMode ? t('dashboard.chatPage.compareIndicator', 'Compare') : ''}</span>
                         </button>
                         {/* AI Settings Button */}
                         <div className="relative">
@@ -1681,6 +1772,34 @@ export default function ChatPage() {
                             ))}
                         </div>
                     )}
+
+                    {/* U6: Quick-switch chips + U7: Token counter */}
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+                            {/* Model chip */}
+                            <button onClick={() => { setShowSettingsPanel(true); setSettingsTab('model'); }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] bg-surface-800/60 border border-white/5 text-surface-200/50 hover:text-surface-200/80 hover:border-white/10 transition-all">
+                                {(MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || []).find(m => m.id === selectedModel)?.icon || '🤖'}
+                                <span className="truncate max-w-[80px]">{(MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || []).find(m => m.id === selectedModel)?.label || selectedModel}</span>
+                            </button>
+                            {/* Persona chip */}
+                            <button onClick={() => { setShowSettingsPanel(true); setSettingsTab('persona'); }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] bg-surface-800/60 border border-white/5 text-surface-200/50 hover:text-surface-200/80 hover:border-white/10 transition-all">
+                                {selectedPersona === 'custom' ? '✏️' : (PERSONA_OPTIONS.find(p => p.value === selectedPersona)?.icon || '🤖')}
+                                <span className="truncate max-w-[60px]">{selectedPersona === 'custom' ? t('dashboard.chatPage.custom', 'Custom') : (PERSONA_OPTIONS.find(p => p.value === selectedPersona)?.label || 'Default')}</span>
+                            </button>
+                            {/* Compare mode indicator */}
+                            {compareMode && <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-400">{t('dashboard.chatPage.compareIndicator', '⚔️ Compare')}</span>}
+                        </div>
+                        {/* U7: Session token counter */}
+                        {(sessionTokens.sent > 0 || sessionTokens.received > 0) && (
+                            <div className="flex items-center gap-1.5 text-[9px] text-surface-200/25 flex-shrink-0">
+                                <span>↑{sessionTokens.sent.toLocaleString()}</span>
+                                <span>↓{sessionTokens.received.toLocaleString()}</span>
+                                <span className="text-surface-200/15">{t('dashboard.chatPage.tokenUnit', 'tok')}</span>
+                            </div>
+                        )}
+                    </div>
                     {/* Image preview */}
                     {imagePreview && (
                         <div className="mb-2 flex items-center gap-2">
@@ -1824,48 +1943,101 @@ export default function ChatPage() {
                                     <div>
                                         <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">{t('dashboard.chatPage.provider', 'Provider')}</p>
                                         <div className="space-y-1">
-                                            {PROVIDER_OPTIONS.map(p => (
-                                                <button key={p.value} onClick={() => {
-                                                    setSelectedProvider(p.value);
-                                                    // Auto-select first model of this provider
-                                                    const providerModels = MODEL_OPTIONS_BY_PROVIDER[p.value] || [];
-                                                    const firstModel = providerModels.length > 0 ? providerModels[0].id : selectedModel;
-                                                    if (providerModels.length > 0) setSelectedModel(firstModel);
-                                                    saveAiPrefs({ provider: p.value, model: firstModel });
-                                                }}
-                                                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
-                                                        selectedProvider === p.value
-                                                            ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
-                                                            : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
-                                                    }`}>
-                                                    <div>
-                                                        <span className="font-medium">{p.icon} {p.label}</span>
-                                                        <span className="block text-[10px] text-surface-200/40">{p.desc}</span>
-                                                    </div>
-                                                    {selectedProvider === p.value && <Check size={12} className="text-brand-400" />}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                            {PROVIDER_OPTIONS.map(p => {
+                                                // U1: Key status per provider
+                                                const hasLocal = userApiKeys.some(k => {
+                                                    const kp = (k.provider || '').toLowerCase();
+                                                    return p.value === 'google' ? ['google', 'gemini'].includes(kp) : kp === p.value;
+                                                });
+                                                const hasServer = p.value === 'google' ? modelMeta.hasServerKey :
+                                                    p.value === 'openai' ? modelMeta.hasServerOpenAiKey :
+                                                    p.value === 'groq' ? modelMeta.hasServerGroqKey : false;
+                                                const hasDbKey = p.value === 'google' ? modelMeta.hasPersonalKey :
+                                                    p.value === 'openai' ? modelMeta.hasOpenAiKey :
+                                                    p.value === 'groq' ? modelMeta.hasGroqKey : false;
+                                                const keyDot = (hasLocal || hasDbKey) ? 'bg-emerald-400' : hasServer ? 'bg-amber-400' : 'bg-surface-200/20';
+                                                const keyLabel = (hasLocal || hasDbKey) ? t('dashboard.chatPage.yourKey', 'Your key') : hasServer ? t('dashboard.chatPage.serverKey', 'Server') : t('dashboard.chatPage.noKey', 'No key');
+                                                // U3: usage count for this provider
+                                                const providerUsage = (MODEL_OPTIONS_BY_PROVIDER[p.value] || []).reduce((sum, m) => sum + (modelUsageStats[m.id] || 0), 0);
+                                                return (
+                                                    <button key={p.value} onClick={() => {
+                                                        setSelectedProvider(p.value);
+                                                        const providerModels = MODEL_OPTIONS_BY_PROVIDER[p.value] || [];
+                                                        const firstModel = providerModels.length > 0 ? providerModels[0].id : selectedModel;
+                                                        if (providerModels.length > 0) setSelectedModel(firstModel);
+                                                        saveAiPrefs({ provider: p.value, model: firstModel });
+                                                    }}
+                                                        className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
+                                                            selectedProvider === p.value
+                                                                ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                                                                : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
+                                                        }`}>
+                                                        <div>
+                                                            <span className="font-medium">{p.icon} {p.label}</span>
+                                                            <span className="block text-[10px] text-surface-200/40">{p.desc}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {providerUsage > 0 && <span className="text-[9px] text-surface-200/30">{t('dashboard.chatPage.msgCount', '{count} msgs').replace('{count}', providerUsage)}</span>}
+                                                            <div className="flex items-center gap-1">
+                                                                <div className={`w-1.5 h-1.5 rounded-full ${keyDot}`} />
+                                                                <span className="text-[8px] text-surface-200/30">{keyLabel}</span>
+                                                            </div>
+                                                            {selectedProvider === p.value && <Check size={12} className="text-brand-400" />}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>\n                                    </div>
 
                                     {/* Model — filtered by provider */}
+                                    {(() => {
+                                        const canChange = canChangeForProvider(selectedProvider);
+                                        return (
+                                            <>
+                                                {!canChange && (
+                                                    <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl px-3 py-2 mb-3">
+                                                        <p className="text-[10px] text-amber-400/70 flex items-center gap-1.5">
+                                                            <Lock size={10} />
+                                                            {t('dashboard.chatPage.modelLockedHint', 'Model & thinking level are locked when using server API key. Add your own key in the "API Key" tab to unlock all options.')}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                     <div>
                                         <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">{t('dashboard.chatPage.modelLabel', 'Model')}</p>
                                         <div className="space-y-1">
-                                            {(MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || modelOptions).map(m => (
-                                                <button key={m.id} onClick={() => { setSelectedModel(m.id); saveAiPrefs({ model: m.id }); }}
-                                                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
-                                                        selectedModel === m.id
-                                                            ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
-                                                            : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
-                                                    }`}>
-                                                    <div>
-                                                        <span className="font-medium">{m.icon} {m.label}</span>
-                                                        <span className="block text-[10px] text-surface-200/40">{m.desc}</span>
-                                                    </div>
-                                                    {selectedModel === m.id && <Check size={12} className="text-brand-400" />}
-                                                </button>
-                                            ))}
+                                            {(MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || modelOptions).map(m => {
+                                                const canChange = canChangeForProvider(selectedProvider);
+                                                // Default model for each provider (first in list)
+                                                const providerModels = MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || modelOptions;
+                                                const defaultProviderModel = selectedProvider === 'google' ? (modelMeta.defaultModel || providerModels[0]?.id) : providerModels[0]?.id;
+                                                const isDefault = m.id === defaultProviderModel;
+                                                const isLocked = !canChange && !isDefault;
+                                                return (
+                                                    <button key={m.id}
+                                                        onClick={() => { if (!isLocked) { setSelectedModel(m.id); saveAiPrefs({ model: m.id }); } }}
+                                                        disabled={isLocked}
+                                                        className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
+                                                            isLocked ? 'opacity-40 cursor-not-allowed border border-transparent' :
+                                                            selectedModel === m.id
+                                                                ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                                                                : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
+                                                        }`}>
+                                                        <div>
+                                                            <span className="font-medium">{m.icon} {m.label}</span>
+                                                            <span className="block text-[10px] text-surface-200/40">{m.desc}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            {modelUsageStats[m.id] > 0 && <span className="text-[8px] text-surface-200/25 tabular-nums">{modelUsageStats[m.id]}</span>}
+                                                            {isLocked && <Lock size={10} className="text-surface-200/30" />}
+                                                            {isDefault && !isLocked && <span className="text-[8px] bg-brand-500/10 text-brand-400/70 px-1.5 py-0.5 rounded-full font-medium">{t('dashboard.chatPage.defaultBadge', 'DEFAULT')}</span>}
+                                                            {selectedModel === m.id && !isLocked && <Check size={12} className="text-brand-400" />}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
@@ -1882,21 +2054,36 @@ export default function ChatPage() {
                                         if (!allowedLevels.length) return null;
                                         const filtered = THINKING_OPTIONS.filter(th => allowedLevels.includes(th.value));
                                         if (!filtered.length) return null;
+                                        const canChangeThinking = canChangeForProvider(selectedProvider);
+                                        const defaultThinking = 'medium';
                                         return (
                                             <div>
                                                 <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">{t('dashboard.chatPage.thinkingLevel', 'Thinking Level')}</p>
                                                 <div className="grid grid-cols-2 gap-1">
-                                                    {filtered.map(th => (
-                                                        <button key={th.value} onClick={() => { setSelectedThinking(th.value); saveAiPrefs({ thinkingLevel: th.value }); }}
-                                                            className={`px-3 py-2 rounded-xl text-xs transition-all text-left ${
-                                                                selectedThinking === th.value
-                                                                    ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
-                                                                    : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
-                                                            }`}>
-                                                            <span className="font-medium">{th.icon} {t(`dashboard.chatPage.thinking_${th.value}`, th.label)}</span>
-                                                            <span className="block text-[9px] text-surface-200/35 mt-0.5">{t(`dashboard.chatPage.thinkingDesc_${th.value}`, th.desc)}</span>
-                                                        </button>
-                                                    ))}
+                                                    {filtered.map(th => {
+                                                        const isDefaultTh = th.value === defaultThinking;
+                                                        const isLockedTh = !canChangeThinking && !isDefaultTh;
+                                                        return (
+                                                            <button key={th.value}
+                                                                onClick={() => { if (!isLockedTh) { setSelectedThinking(th.value); saveAiPrefs({ thinkingLevel: th.value }); } }}
+                                                                disabled={isLockedTh}
+                                                                className={`px-3 py-2 rounded-xl text-xs transition-all text-left ${
+                                                                    isLockedTh ? 'opacity-40 cursor-not-allowed border border-transparent' :
+                                                                    selectedThinking === th.value
+                                                                        ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                                                                        : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
+                                                                }`}>
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="font-medium">{th.icon} {t(`dashboard.chatPage.thinking_${th.value}`, th.label)}</span>
+                                                                    <div className="flex items-center gap-1">
+                                                                        {isLockedTh && <Lock size={9} className="text-surface-200/30" />}
+                                                                        {isDefaultTh && !isLockedTh && <span className="text-[7px] bg-brand-500/10 text-brand-400/70 px-1 py-0.5 rounded-full font-medium">{t('dashboard.chatPage.defaultBadge', 'DEFAULT')}</span>}
+                                                                    </div>
+                                                                </div>
+                                                                <span className="block text-[9px] text-surface-200/35 mt-0.5">{t(`dashboard.chatPage.thinkingDesc_${th.value}`, th.desc)}</span>
+                                                            </button>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         );
@@ -1922,8 +2109,53 @@ export default function ChatPage() {
                                                     <span className="block text-[9px] text-surface-200/40 leading-tight">{t(`dashboard.chatPage.personaDesc_${p.value}`, p.desc)}</span>
                                                 </button>
                                             ))}
+                                            {/* U5: Custom persona option */}
+                                            <button onClick={() => {
+                                                setSelectedPersona('custom');
+                                                saveAiPrefs({ persona: 'custom' });
+                                            }}
+                                                className={`text-left px-3 py-2.5 rounded-xl transition-all col-span-2 ${
+                                                    selectedPersona === 'custom'
+                                                        ? 'bg-brand-500/10 border border-brand-500/20'
+                                                        : 'hover:bg-white/5 border border-transparent border-dashed'
+                                                }`}>
+                                                <span className="text-lg">✏️</span>
+                                                <span className={`block text-[11px] font-bold mt-0.5 ${selectedPersona === 'custom' ? 'text-brand-400' : 'text-surface-100'}`}>{t('dashboard.chatPage.customPersona', 'Custom Persona')}</span>
+                                                <span className="block text-[9px] text-surface-200/40 leading-tight">{t('dashboard.chatPage.customPersonaDesc', 'Write your own AI personality')}</span>
+                                            </button>
                                         </div>
                                     </div>
+
+                                    {/* U5: Custom persona text input */}
+                                    {selectedPersona === 'custom' && (
+                                        <div className="bg-surface-800/40 border border-white/5 rounded-xl px-3 py-2.5 space-y-2">
+                                            <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold">{t('dashboard.chatPage.customInstructions', 'Custom Instructions')}</p>
+                                            <textarea
+                                                value={customPersonaInput}
+                                                onChange={(e) => {
+                                                    setCustomPersonaInput(e.target.value);
+                                                    try { localStorage.setItem('xbot_custom_persona', e.target.value); } catch {}
+                                                }}
+                                                placeholder={t('dashboard.chatPage.customPersonaPlaceholder', 'Describe how the AI should behave, its personality, tone, and style...')}
+                                                className="w-full bg-surface-900/50 border border-white/5 rounded-lg px-3 py-2 text-[11px] text-surface-100 placeholder-surface-200/25 resize-none focus:outline-none focus:border-brand-500/30 transition-colors"
+                                                rows={4}
+                                            />
+                                            <p className="text-[9px] text-surface-200/30">{customPersonaInput.length}/500 {t('dashboard.chatPage.chars', 'characters')}</p>
+                                        </div>
+                                    )}
+
+                                    {/* U4: Persona preview */}
+                                    {selectedPersona !== 'custom' && (
+                                        <div className="bg-surface-800/40 border border-white/5 rounded-xl px-3 py-2.5 space-y-1.5">
+                                            <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold">{t('dashboard.chatPage.preview', 'Preview')}</p>
+                                            <div className="bg-surface-900/50 rounded-lg px-3 py-2 border border-white/[0.03]">
+                                                <p className="text-[11px] text-surface-100/80 italic leading-relaxed">
+                                                    "{PERSONA_PREVIEWS[selectedPersona] || PERSONA_PREVIEWS.default}"
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="bg-surface-800/40 border border-white/5 rounded-xl px-3 py-2.5">
                                         <p className="text-[10px] text-surface-200/40 leading-relaxed">💡 {t('dashboard.chatPage.personaHint', 'Persona affects the AI\'s language style, personality, and response format. Changes apply to new messages only.')}</p>
                                     </div>
@@ -2014,19 +2246,32 @@ export default function ChatPage() {
                                     </div>
 
                                     {/* Status */}
-                                    <div className={`rounded-xl px-3 py-2.5 flex items-center gap-2 ${
-                                        modelMeta.hasPersonalKey ? 'bg-emerald-500/5 border border-emerald-500/10' :
-                                        modelMeta.isOwner ? 'bg-brand-500/5 border border-brand-500/10' :
-                                        'bg-surface-800/40 border border-white/5'
-                                    }`}>
-                                        {modelMeta.hasPersonalKey ? (
-                                            <><Key size={12} className="text-emerald-400" /><span className="text-[10px] text-emerald-400/80 font-medium">✓ {t('dashboard.chatPage.personalKeyActive', 'Personal API key active — all models unlocked')}</span></>
-                                        ) : modelMeta.isOwner ? (
-                                            <><Settings size={12} className="text-brand-400" /><span className="text-[10px] text-brand-400/80">{t('dashboard.chatPage.ownerKey', 'Owner: all models unlocked via server key')}</span></>
-                                        ) : (
-                                            <><Key size={12} className="text-surface-200/30" /><span className="text-[10px] text-surface-200/40">{t('dashboard.chatPage.noPersonalKey', 'No personal key — using server default')}</span></>
-                                        )}
-                                    </div>
+                                    {(() => {
+                                        const canChange = canChangeForProvider(selectedProvider);
+                                        return (
+                                            <div className={`rounded-xl px-3 py-2.5 ${
+                                                canChange ? 'bg-emerald-500/5 border border-emerald-500/10' :
+                                                'bg-amber-500/5 border border-amber-500/10'
+                                            }`}>
+                                                {canChange ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <Key size={12} className="text-emerald-400 flex-shrink-0" />
+                                                        <span className="text-[10px] text-emerald-400/80 font-medium">✓ {t('dashboard.chatPage.personalKeyActive', 'Your API key is active — all models & thinking levels unlocked')}</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-1.5">
+                                                        <div className="flex items-center gap-2">
+                                                            <Lock size={12} className="text-amber-400/70 flex-shrink-0" />
+                                                            <span className="text-[10px] text-amber-400/70 font-medium">{t('dashboard.chatPage.serverKeyLocked', 'Server key — limited to default model & thinking level')}</span>
+                                                        </div>
+                                                        <p className="text-[9px] text-surface-200/40 leading-relaxed pl-5">
+                                                            {t('dashboard.chatPage.unlockHint', 'Go to the "API Key" tab and add your own key to unlock all models, thinking levels, and get faster responses with higher quotas.')}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </>
                             )}
                         </div>

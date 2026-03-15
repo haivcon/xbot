@@ -607,7 +607,7 @@ function createChatRoutes() {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
 
-        const { message, conversationId, image, model: requestedModel, userApiKey } = req.body;
+        const { message, conversationId, image, model: requestedModel, userApiKey, persona, customPersonaText } = req.body;
         // Validate input BEFORE rate limiting
         if (!message?.trim()) return res.status(400).json({ error: 'Message required' });
         if (message.length > 10000) return res.status(400).json({ error: 'Message too long' });
@@ -623,7 +623,38 @@ function createChatRoutes() {
         const ALLOWED_OPENAI_MODELS = Object.keys(OPENAI_MODEL_FAMILIES);
         const ALLOWED_GROQ_MODELS = Object.keys(GROQ_MODEL_FAMILIES);
         const ALLOWED_MODELS = [...ALLOWED_GEMINI_MODELS, ...ALLOWED_OPENAI_MODELS, ...ALLOWED_GROQ_MODELS];
-        const useModel = ALLOWED_MODELS.includes(requestedModel) ? requestedModel : (GEMINI_MODEL || 'gemini-3-flash-preview');
+        let useModel = ALLOWED_MODELS.includes(requestedModel) ? requestedModel : (GEMINI_MODEL || 'gemini-3-flash-preview');
+
+        // ── Enforce default model for users without personal API key ──
+        // Only owners and users with their own API key can change models
+        if (!userApiKey) {
+            const jwtRole = req.dashboardUser?.role;
+            const viewMode = req.query?.viewMode;
+            const isOwner = jwtRole === 'owner' && viewMode !== 'user';
+            if (!isOwner) {
+                const provider = detectProviderFromModel(useModel);
+                const userKeys = await db.listUserAiKeys(userId);
+                const hasPersonalGoogleKey = userKeys.some(k => ['google', 'gemini'].includes((k.provider || '').toLowerCase()) && k.apiKey);
+                const hasPersonalOpenAiKey = userKeys.some(k => (k.provider || '').toLowerCase() === 'openai' && k.apiKey);
+                const hasPersonalGroqKey = userKeys.some(k => (k.provider || '').toLowerCase() === 'groq' && k.apiKey);
+                const DEFAULT_MODELS = {
+                    google: GEMINI_MODEL || 'gemini-3-flash-preview',
+                    openai: ALLOWED_OPENAI_MODELS[0] || 'gpt-5.4',
+                    groq: ALLOWED_GROQ_MODELS[0] || 'openai/gpt-oss-120b',
+                };
+                if (
+                    (provider === 'google' && !hasPersonalGoogleKey) ||
+                    (provider === 'openai' && !hasPersonalOpenAiKey) ||
+                    (provider === 'groq' && !hasPersonalGroqKey)
+                ) {
+                    const defaultModel = DEFAULT_MODELS[provider] || DEFAULT_MODELS.google;
+                    if (useModel !== defaultModel) {
+                        log.info(`[Stream] User ${userId} has no personal ${provider} key — forcing default model: ${defaultModel} (requested: ${useModel})`);
+                        useModel = defaultModel;
+                    }
+                }
+            }
+        }
 
         // SSE headers
         res.writeHead(200, {
@@ -649,11 +680,51 @@ function createChatRoutes() {
             const aiaPrompt = buildAIAPrompt({ lang: req.dashboardUser?.lang || 'en', isGroup: false, isAdmin: false, botUsername: process.env.BOT_USERNAME || 'xbot', userId });
             let prefsCtx = '';
             try { const prefs = await db.getUserPreferences(userId); prefsCtx = db.formatPreferencesForPrompt(prefs); } catch (e) {}
+            const PERSONA_PROMPTS = {
+                default: '',
+                friendly: '\n\nPERSONA: You are cheerful, energetic, and enthusiastic. Use lots of emoji 🎉 and exclamation marks! Be warm, supportive, and make conversations fun.',
+                formal: '\n\nPERSONA: You are a polished professional. Use formal language, precise terminology, and structured responses. Be courteous and business-like.',
+                anime: '\n\nPERSONA: You are a kawaii anime character! Use expressions like "sugoi!", "kawaii~", "nani?!". Add cute emoticons (◕‿◕✿) and speak in an anime style.',
+                mentor: '\n\nPERSONA: You are a patient, wise mentor. Explain things step-by-step. Use analogies and examples. Encourage learning and ask reflective questions.',
+                funny: '\n\nPERSONA: You are a witty comedian. Include clever jokes, puns, and humorous observations. Keep things light and entertaining while still being helpful.',
+                crypto: '\n\nPERSONA: You are a hardcore DeFi/crypto expert. Use crypto slang (WAGMI, NGMI, diamond hands, ape in, degen). Be bullish and enthusiastic about blockchain.',
+                gamer: '\n\nPERSONA: You are an excited gamer. Use gaming slang (GG, clutch, nerf, buff, OP). Reference game mechanics and treat everything like a quest or achievement.',
+                rebel: '\n\nPERSONA: You are bold, direct, and sassy. Challenge assumptions. Be confident and unapologetic. Use strong language (but stay helpful).',
+                mafia: '\n\nPERSONA: You are a calm, collected mafia boss. Speak with authority and confidence. Use phrases like "I\'ll make you an offer you can\'t refuse." Be decisive and strategic.',
+                cute: '\n\nPERSONA: You are sweet, gentle, and charming. Use soft language, endearing expressions, and cute descriptions. Be adorable and caring.',
+                little_girl: '\n\nPERSONA: You are an innocent, adorable little girl. Be playful, curious, and use simple expressions. Ask lots of "why?" questions. Very enthusiastic about everything!',
+                little_brother: '\n\nPERSONA: You are a cheeky little brother. Be witty, slightly mischievous, and full of youthful energy. Tease playfully but always help.',
+                old_uncle: '\n\nPERSONA: You are a humorous old uncle with lots of life experience. Share wisdom through funny anecdotes and dad jokes. Use Vietnamese proverbs when appropriate.',
+                old_grandma: '\n\nPERSONA: You are a warm, caring grandma. Be nurturing, share stories, and give motherly advice. Use gentle, loving language. Always worried about whether they ate yet.',
+                deity: '\n\nPERSONA: You are an omniscient deity. Speak with calm, divine wisdom. Use philosophical language and profound insights. Be serene and all-knowing.',
+                king: '\n\nPERSONA: You are a noble king. Speak with royal dignity and authority. Use formal, regal language. Be decisive and magnanimous.',
+                banana_cat: '\n\nPERSONA: You are a cat wearing a banana costume 🍌🐱. Be quirky, playful, and cat-like. Make cat puns. Occasionally meow and knock things off tables.',
+                pretty_sister: '\n\nPERSONA: You are an elegant, graceful older sister. Be supportive, fashionable, and confident. Give advice with warmth and sophistication.',
+                seductive_girl: '\n\nPERSONA: You are confident and alluring. Use charismatic, magnetic language. Be witty and captivating while maintaining helpfulness.',
+                gentleman: '\n\nPERSONA: You are a perfect gentleman. Be extremely polite, considerate, and chivalrous. Use refined language and always show respect.',
+                star_xu: '\n\nPERSONA: You are Star Xu, visionary founder of OKX. Speak about crypto with passion and vision. Reference OKX ecosystem, X Layer, and Web3 innovation.',
+                niuma: '\n\nPERSONA: You are NIUMA 🐮, steady and persistent like a bull. Be humble, hardworking, and reliable. Use motivational language about persistence.',
+                xcat: '\n\nPERSONA: You are XCAT 🐈, a free-spirited, curious cat. Be independent, adventurous, and occasionally mysterious. Love exploring new things.',
+                xdog: '\n\nPERSONA: You are XDOG 🐕, a proud, loyal, and brave dog. Be protective, enthusiastic, and fiercely loyal. Always excited to help!',
+                xwawa: '\n\nPERSONA: You are XWAWA 🐸, a carefree, cheerful frog. Be relaxed, optimistic, and go with the flow. Love water and rainy days!',
+                banmao: '\n\nPERSONA: You are Banmao 🐱🍌, a mischievous cat in a banana suit. Be funny, unpredictable, and slightly chaotic. Love bananas and causing harmless trouble.',
+                mia: '\n\nPERSONA: You are Mia 🍚, a tiny grain of rice with BIG confidence. Be surprisingly assertive for your size. Make food puns and be fierce!',
+                jiajia: '\n\nPERSONA: You are 佳佳 OKX 💎, a cute but sharp-minded mascot. Balance cuteness with intelligence. Be helpful and crypto-savvy.',
+                xwizard: '\n\nPERSONA: You are Xwizard 🧙, a magical crypto wizard. Use mystical language, cast "spells" (analyses), and speak of blockchain as magic.',
+            };
+            // U5: Support custom persona from user-defined text
+            let personaPrompt;
+            if (persona === 'custom' && customPersonaText) {
+                const sanitized = String(customPersonaText).slice(0, 500).replace(/[<>]/g, '');
+                personaPrompt = `\n\nPERSONA: ${sanitized}`;
+            } else {
+                personaPrompt = PERSONA_PROMPTS[persona] || PERSONA_PROMPTS.default || '';
+            }
             const fullSystemPrompt = sysInstr + '\n\n' + aiaPrompt +
                 '\n\nIMPORTANT: You are now responding via a WEB DASHBOARD. Use Markdown formatting instead of HTML. ' +
                 'Use **bold**, *italic*, `code` instead. Do NOT mention Telegram-specific features like /commands. ' +
                 'CRITICAL: NEVER truncate or shorten blockchain addresses, token addresses, contract addresses, or transaction hashes. ' +
-                'Always display them in FULL. Keep responses conversational and helpful.' + prefsCtx;
+                'Always display them in FULL. Keep responses conversational and helpful.' + prefsCtx + personaPrompt;
 
             // ══════════ GEMINI ══════════
             if (provider === 'google') {
@@ -971,18 +1042,6 @@ function createChatRoutes() {
             );
             const hasServerOpenAiKey = OPENAI_API_KEYS && OPENAI_API_KEYS.length > 0;
 
-            let models;
-            if (isOwner || hasPersonalKey) {
-                models = geminiModels;
-            } else {
-                models = geminiModels.filter(m => m.id === GEMINI_MODEL);
-            }
-
-            // Add OpenAI models if user has OpenAI key or server has one
-            if (isOwner || hasOpenAiKey || hasServerOpenAiKey) {
-                models = [...models, ...openaiModels];
-            }
-
             // Build Groq models from GROQ_MODEL_FAMILIES
             const groqModels = Object.values(GROQ_MODEL_FAMILIES).map(m => ({
                 id: m.id,
@@ -1000,10 +1059,27 @@ function createChatRoutes() {
             );
             const hasServerGroqKey = GROQ_API_KEYS && GROQ_API_KEYS.length > 0;
 
-            // Add Groq models if user has Groq key or server has one
-            if (isOwner || hasGroqKey || hasServerGroqKey) {
-                models = [...models, ...groqModels];
-            }
+            // ── Always return ALL models with `locked` flag ──
+            // Frontend shows all models but disables locked ones
+            const defaultGemini = GEMINI_MODEL || 'gemini-3-flash-preview';
+            const defaultOpenAi = openaiModels[0]?.id || 'gpt-5.4';
+            const defaultGroq = groqModels[0]?.id;
+
+            const canGoogle = isOwner || hasPersonalKey;
+            const canOpenAi = isOwner || hasOpenAiKey;
+            const canGroq = isOwner || hasGroqKey;
+
+            const tagModels = (list, canChange, defaultId, available) => list.map(m => ({
+                ...m,
+                locked: !available ? true : (!canChange && m.id !== defaultId),
+                isDefault: m.id === defaultId,
+            }));
+
+            const models = [
+                ...tagModels(geminiModels, canGoogle, defaultGemini, hasServerKey || canGoogle),
+                ...tagModels(openaiModels, canOpenAi, defaultOpenAi, hasServerOpenAiKey || canOpenAi),
+                ...tagModels(groqModels, canGroq, defaultGroq, hasServerGroqKey || canGroq),
+            ];
 
             res.json({
                 models,

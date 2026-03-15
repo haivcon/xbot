@@ -10,6 +10,7 @@ import {
     AlertTriangle, Search, Ban, MoreVertical, Pencil, Shield
 } from 'lucide-react';
 import api from '@/api/client';
+import CustomSelect from '@/components/ui/CustomSelect';
 import useAuthStore from '@/stores/authStore';
 
 /* ═══════════════════════════════════════════════════
@@ -754,18 +755,16 @@ function TipModal({ postId, toUserId, toName, onClose, onTipped }) {
                                         {t('dashboard.mySpace.tipNoWallets', 'No wallets found. Create one in Wallets page.')}
                                     </p>
                                 ) : (
-                                    <select
+                                    <CustomSelect
                                         value={selectedWalletId}
-                                        onChange={e => setSelectedWalletId(e.target.value)}
-                                        className="w-full bg-surface-900/60 border border-white/[0.06] rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none focus:border-brand-500/30 transition-colors"
-                                    >
-                                        {wallets.map(w => (
-                                            <option key={w.id} value={w.id}>
-                                                {w.walletName || t('dashboard.mySpace.wallet', 'Wallet')} ({w.address?.slice(0, 6)}…{w.address?.slice(-4)})
-                                                {w.isDefault ? ' ★' : ''}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={(val) => setSelectedWalletId(val)}
+                                        options={wallets.map(w => ({
+                                            value: w.id,
+                                            label: `${w.walletName || t('dashboard.mySpace.wallet', 'Wallet')} (${w.address?.slice(0, 6)}…${w.address?.slice(-4)})`,
+                                            sublabel: w.isDefault ? '★ Default' : '',
+                                        }))}
+                                        placeholder={t('dashboard.mySpace.tipSelectWallet', 'Select wallet')}
+                                    />
                                 )}
                             </div>
 
@@ -778,17 +777,16 @@ function TipModal({ postId, toUserId, toName, onClose, onTipped }) {
                                     ) : tokens.length === 0 ? (
                                         <p className="text-xs text-surface-200/25">{t('dashboard.mySpace.tipNoTokens', 'No tokens with balance in this wallet')}</p>
                                     ) : (
-                                        <select
+                                        <CustomSelect
                                             value={selectedToken?.symbol || ''}
-                                            onChange={e => setSelectedToken(tokens.find(tk => tk.symbol === e.target.value) || null)}
-                                            className="w-full bg-surface-900/60 border border-white/[0.06] rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none focus:border-brand-500/30 transition-colors"
-                                        >
-                                            {tokens.map(tk => (
-                                                <option key={tk.symbol + tk.contractAddress} value={tk.symbol}>
-                                                    {tk.symbol} — {Number(tk.balance).toFixed(4)}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            onChange={(val) => setSelectedToken(tokens.find(tk => tk.symbol === val) || null)}
+                                            options={tokens.map(tk => ({
+                                                value: tk.symbol,
+                                                label: tk.symbol,
+                                                sublabel: `${Number(tk.balance).toFixed(4)}`,
+                                            }))}
+                                            placeholder={t('dashboard.mySpace.tipSelectToken', 'Select token')}
+                                        />
                                     )}
                                 </div>
                             )}

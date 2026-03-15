@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import api from '@/api/client';
+import CustomSelect from '@/components/ui/CustomSelect';
 import {
     Search, Loader2, ExternalLink, Shield, AlertTriangle, CheckCircle,
     Users, Droplets, TrendingUp, TrendingDown, Copy, Check, BarChart3,
@@ -501,11 +502,12 @@ export default function TokenLookupPage() {
                                 {showAlert && (
                                     <div className="mt-3 p-3 rounded-xl bg-surface-800/60 border border-white/5 animate-fadeIn">
                                         <div className="flex gap-2 items-center">
-                                            <select value={alertDir} onChange={e => setAlertDir(e.target.value)}
-                                                className="bg-surface-800 border border-white/10 rounded-lg px-2 py-2 text-xs text-surface-100">
-                                                <option value="above">{t('dashboard.tokenLookup.priceAbove', 'Price above')} ↑</option>
-                                                <option value="below">{t('dashboard.tokenLookup.priceBelow', 'Price below')} ↓</option>
-                                            </select>
+                                            <CustomSelect value={alertDir} onChange={setAlertDir} size="sm"
+                                                className="w-auto min-w-[130px]"
+                                                options={[
+                                                    { value: 'above', label: `${t('dashboard.tokenLookup.priceAbove', 'Price above')} ↑` },
+                                                    { value: 'below', label: `${t('dashboard.tokenLookup.priceBelow', 'Price below')} ↓` },
+                                                ]} />
                                             <input type="number" value={alertPrice} onChange={e => setAlertPrice(e.target.value)}
                                                 step="any" placeholder="Target price (USD)"
                                                 className="flex-1 bg-surface-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-surface-100 placeholder-surface-200/30 font-mono" />

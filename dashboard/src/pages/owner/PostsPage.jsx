@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
+import CustomSelect from '@/components/ui/CustomSelect';
 import { CalendarClock, Plus, Trash2, RefreshCw, Play, Pause, Edit3, X, Check } from 'lucide-react';
 
 export default function PostsPage() {
@@ -87,23 +88,25 @@ export default function PostsPage() {
                         </div>
                         <div>
                             <label className="text-xs text-surface-200/50 mb-1 block">{t('dashboard.postsPage.repeat', 'Repeat')}</label>
-                            <select value={form.repeatType} onChange={e => setForm(p => ({ ...p, repeatType: e.target.value }))} className="input-field !py-2 !text-sm">
-                                <option value="none">{t('dashboard.postsPage.once', 'Once')}</option>
-                                <option value="daily">{t('dashboard.postsPage.daily', 'Daily')}</option>
-                                <option value="weekly">{t('dashboard.postsPage.weekly', 'Weekly')}</option>
-                                <option value="monthly">{t('dashboard.postsPage.monthly', 'Monthly')}</option>
-                            </select>
+                            <CustomSelect value={form.repeatType} onChange={(val) => setForm(p => ({ ...p, repeatType: val }))} size="sm"
+                                options={[
+                                    { value: 'none', label: t('dashboard.postsPage.once', 'Once') },
+                                    { value: 'daily', label: t('dashboard.postsPage.daily', 'Daily') },
+                                    { value: 'weekly', label: t('dashboard.postsPage.weekly', 'Weekly') },
+                                    { value: 'monthly', label: t('dashboard.postsPage.monthly', 'Monthly') },
+                                ]} />
                         </div>
                         <div>
                             <label className="text-xs text-surface-200/50 mb-1 block">{t('dashboard.postsPage.timezone', 'Timezone')}</label>
-                            <select value={form.timezone} onChange={e => setForm(p => ({ ...p, timezone: e.target.value }))} className="input-field !py-2 !text-sm">
-                                <option value="Asia/Ho_Chi_Minh">Vietnam (UTC+7)</option>
-                                <option value="Asia/Shanghai">China (UTC+8)</option>
-                                <option value="Asia/Seoul">Korea (UTC+9)</option>
-                                <option value="Asia/Jakarta">Indonesia (UTC+7)</option>
-                                <option value="Europe/Moscow">Moscow (UTC+3)</option>
-                                <option value="UTC">UTC</option>
-                            </select>
+                            <CustomSelect value={form.timezone} onChange={(val) => setForm(p => ({ ...p, timezone: val }))} size="sm"
+                                options={[
+                                    { value: 'Asia/Ho_Chi_Minh', label: 'Vietnam (UTC+7)' },
+                                    { value: 'Asia/Shanghai', label: 'China (UTC+8)' },
+                                    { value: 'Asia/Seoul', label: 'Korea (UTC+9)' },
+                                    { value: 'Asia/Jakarta', label: 'Indonesia (UTC+7)' },
+                                    { value: 'Europe/Moscow', label: 'Moscow (UTC+3)' },
+                                    { value: 'UTC', label: 'UTC' },
+                                ]} />
                         </div>
                     </div>
                     <div>

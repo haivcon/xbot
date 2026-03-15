@@ -971,15 +971,16 @@ function createDashboardRoutes() {
         try {
             const userId = req.dashboardUser.userId;
             const user = await db.getUser?.(userId);
-            const prefs = await db.getAiPreferences?.(userId);
+            const prefs = await db.getUserAiModelPreferences?.(userId);
             const memory = await db.getAiMemory?.(userId);
             res.json({
                 user: user || {},
                 preferences: {
                     language: user?.lang || 'en',
                     persona: memory?.persona || 'default',
-                    provider: prefs?.provider || 'google',
+                    provider: prefs?.modelFamily ? undefined : (memory?.userPreferences?.provider || 'google'),
                     thinkingLevel: prefs?.thinkingLevel || 'medium',
+                    model: prefs?.modelFamily || undefined,
                 },
             });
         } catch (err) {
@@ -992,11 +993,13 @@ function createDashboardRoutes() {
             const userId = req.dashboardUser.userId;
             const { language, persona, provider, thinkingLevel } = req.body;
             if (language) await db.setUserLanguage?.(userId, language, 'dashboard');
-            if (persona) await db.setAiPersona?.(userId, persona);
-            if (provider || thinkingLevel) {
-                await db.setAiPreferences?.(userId, { provider, thinkingLevel });
+            if (persona) {
+                await db.updateAiMemory(userId, { persona });
             }
-            log.info(`Dashboard: User ${userId} updated preferences`);
+            if (provider || thinkingLevel) {
+                await db.saveUserAiModelPreferences(userId, { thinkingLevel });
+            }
+            log.info(`Dashboard: User ${userId} updated preferences — persona:${persona || '-'}, provider:${provider || '-'}, thinking:${thinkingLevel || '-'}`);
             res.json({ success: true });
         } catch (err) {
             res.status(500).json({ error: err.message });

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
+import CustomSelect from '@/components/ui/CustomSelect';
 import { Bell, Plus, Trash2, ToggleLeft, ToggleRight, RefreshCw, Clock, Hash } from 'lucide-react';
 
 export default function AlertsPage() {
@@ -83,17 +84,14 @@ export default function AlertsPage() {
                         </div>
                         <div>
                             <label className="text-xs text-surface-200/50 mb-1 block">Interval (seconds)</label>
-                            <select
-                                value={newToken.intervalSeconds}
-                                onChange={e => setNewToken(p => ({ ...p, intervalSeconds: Number(e.target.value) }))}
-                                className="input-field !py-2 !text-sm"
-                            >
-                                <option value={60}>1 min</option>
-                                <option value={300}>5 min</option>
-                                <option value={600}>10 min</option>
-                                <option value={1800}>30 min</option>
-                                <option value={3600}>1 hour</option>
-                            </select>
+                            <CustomSelect value={newToken.intervalSeconds} onChange={(val) => setNewToken(p => ({ ...p, intervalSeconds: Number(val) }))} size="sm"
+                                options={[
+                                    { value: 60, label: '1 min' },
+                                    { value: 300, label: '5 min' },
+                                    { value: 600, label: '10 min' },
+                                    { value: 1800, label: '30 min' },
+                                    { value: 3600, label: '1 hour' },
+                                ]} />
                         </div>
                     </div>
                     <div className="flex gap-2">
