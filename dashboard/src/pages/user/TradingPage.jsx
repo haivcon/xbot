@@ -7,9 +7,9 @@ import {
     ArrowLeftRight, TrendingUp, Fuel, Search, RefreshCw, Loader2,
     ArrowDown, Clock, ExternalLink, ArrowUpRight, ArrowDownRight, Zap,
     Star, StarOff, Settings, Bell, ChevronDown, Wallet, BarChart3,
-    Activity, Info, Layers, X, Play, Pause, Trash2, Plus, Repeat,
-    Flame, Trophy, Droplets, Radio, Copy, Check, Shield, Rocket,
-    History, DollarSign, Users, PieChart, AlertTriangle, Eye, Send
+    Activity, Info, X, Play, Pause, Trash2, Plus, Repeat,
+    Copy, Check, Send,
+    History, PieChart, AlertTriangle
 } from 'lucide-react';
 
 const TransferHistorySection = lazy(() => import('./TransferHistoryPage'));
@@ -1542,331 +1542,7 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
 }
 
 
-/* ═══════════════════════════════════════════
-   Hot Tokens Card
-   ═══════════════════════════════════════════ */
-function HotTokensCard({ chainIndex, onSelectToken }) {
-    const [hotTokens, setHotTokens] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        setLoading(true);
-        api.getHotTokens(chainIndex)
-            .then(res => setHotTokens((res.data || []).slice(0, 5)))
-            .catch(() => {})
-            .finally(() => setLoading(false));
-    }, [chainIndex]);
-
-    return (
-        <div className="glass-card relative">
-            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 rounded-t-2xl" />
-            <div className="p-3 border-b border-white/5 flex items-center gap-2">
-                <Flame size={13} className="text-orange-400" />
-                <h4 className="text-[11px] font-bold text-surface-100">Hot Tokens 🔥</h4>
-            </div>
-            {loading ? (
-                <div className="p-4 flex justify-center"><Loader2 size={12} className="animate-spin text-surface-200/30" /></div>
-            ) : hotTokens.length === 0 ? (
-                <div className="p-4 text-[10px] text-surface-200/25 text-center">No data</div>
-            ) : (
-                <div className="divide-y divide-white/[0.03]">
-                    {hotTokens.map((t, i) => {
-                        const change = Number(t.priceChangePercentage24H || t.change24h || 0);
-                        return (
-                            <div key={i} onClick={() => onSelectToken?.(t.tokenSymbol, t.tokenContractAddress)}
-                                className="px-3 py-2 flex items-center gap-2 hover:bg-white/[0.03] transition-colors cursor-pointer">
-                                <span className="text-[9px] text-surface-200/20 w-3 font-bold">{i + 1}</span>
-                                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center text-[8px] font-bold text-orange-300">
-                                    {(t.tokenSymbol || '?').slice(0, 2)}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] font-semibold text-surface-100 truncate">{t.tokenSymbol}</p>
-                                </div>
-                                <span className="text-[10px] text-surface-100 font-medium">{formatPrice(t.price)}</span>
-                                {formatChange(change)}
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-        </div>
-    );
-}
-
-
-/* ═══════════════════════════════════════════
-   Smart Money Signals
-   ═══════════════════════════════════════════ */
-function SmartMoneySignals({ chainIndex }) {
-    const [signals, setSignals] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        setLoading(true);
-        api.getSignals(chainIndex)
-            .then(res => setSignals((res.data || []).slice(0, 6)))
-            .catch(() => {})
-            .finally(() => setLoading(false));
-    }, [chainIndex]);
-
-    const [copiedAddr, setCopiedAddr] = useState(null);
-    const handleCopy = (addr) => {
-        navigator.clipboard.writeText(addr);
-        setCopiedAddr(addr);
-        setTimeout(() => setCopiedAddr(null), 1500);
-    };
-
-    const typeColors = {
-        smart_money: 'bg-emerald-500/15 text-emerald-400',
-        whale: 'bg-blue-500/15 text-blue-400',
-        kol: 'bg-amber-500/15 text-amber-400',
-    };
-    const typeLabels = { smart_money: '🧠 Smart', whale: '🐋 Whale', kol: '⭐ KOL' };
-
-    return (
-        <div className="glass-card relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 rounded-t-2xl" />
-            <div className="p-3 border-b border-white/5 flex items-center gap-2">
-                <Radio size={12} className="text-emerald-400" />
-                <h4 className="text-[11px] font-bold text-surface-100">Smart Money Signals</h4>
-                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            </div>
-            {loading ? (
-                <div className="p-4 flex justify-center"><Loader2 size={12} className="animate-spin text-surface-200/30" /></div>
-            ) : signals.length === 0 ? (
-                <div className="p-4 text-[10px] text-surface-200/25 text-center">No signals available</div>
-            ) : (
-                <div className="divide-y divide-white/[0.03]">
-                    {signals.map((s, i) => {
-                        const walletAddr = s.walletAddress || s.makerAddress || '';
-                        const sigType = (s.walletType || s.type || 'smart_money').toLowerCase().replace(' ', '_');
-                        return (
-                            <div key={i} className="px-3 py-2 hover:bg-white/[0.02] transition-colors">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${typeColors[sigType] || typeColors.smart_money}`}>
-                                        {typeLabels[sigType] || '📡 Signal'}
-                                    </span>
-                                    <span className="text-[10px] font-semibold text-surface-100">{s.tokenSymbol || '?'}</span>
-                                    <span className={`text-[9px] font-bold ml-auto ${s.action === 'buy' ? 'text-emerald-400' : 'text-red-400'}`}>
-                                        {(s.action || s.tradeDirection || 'buy').toUpperCase()}
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    {walletAddr && (
-                                        <>
-                                            <span className="text-[9px] text-surface-200/25 font-mono">{walletAddr.slice(0, 6)}...{walletAddr.slice(-4)}</span>
-                                            <button onClick={() => handleCopy(walletAddr)} className="text-surface-200/20 hover:text-brand-400 transition-colors">
-                                                {copiedAddr === walletAddr ? <Check size={9} className="text-emerald-400" /> : <Copy size={9} />}
-                                            </button>
-                                        </>
-                                    )}
-                                    {s.amountUsd && <span className="text-[9px] text-surface-200/30 ml-auto">${Number(s.amountUsd).toLocaleString()}</span>}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-        </div>
-    );
-}
-
-
-/* ═══════════════════════════════════════════
-   Leaderboard Mini
-   ═══════════════════════════════════════════ */
-function LeaderboardMini({ chainIndex }) {
-    const [traders, setTraders] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        // Use top tokens endpoint as proxy for leaderboard data
-        setLoading(true);
-        api.getTopTokens(chainIndex, '2', '4')
-            .then(res => {
-                const data = (res.data || []).slice(0, 5);
-                const leaderboard = data.map((t, i) => ({
-                    rank: i + 1,
-                    symbol: t.tokenSymbol || '?',
-                    pnl: Number(t.priceChangePercentage24H || 0),
-                    volume: Number(t.volume24H || 0),
-                    price: Number(t.price || 0),
-                }));
-                setTraders(leaderboard);
-            })
-            .catch(() => {})
-            .finally(() => setLoading(false));
-    }, [chainIndex]);
-
-    const badges = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-
-    return (
-        <div className="glass-card relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-amber-500 to-yellow-500 rounded-t-2xl" />
-            <div className="p-3 border-b border-white/5 flex items-center gap-2">
-                <Trophy size={12} className="text-amber-400" />
-                <h4 className="text-[11px] font-bold text-surface-100">Top Performers</h4>
-            </div>
-            {loading ? (
-                <div className="p-4 flex justify-center"><Loader2 size={12} className="animate-spin text-surface-200/30" /></div>
-            ) : traders.length === 0 ? (
-                <div className="p-4 text-[10px] text-surface-200/25 text-center">No data</div>
-            ) : (
-                <div className="divide-y divide-white/[0.03]">
-                    {traders.map((t, i) => (
-                        <div key={i} className="px-3 py-2 flex items-center gap-2">
-                            <span className="text-sm">{badges[i] || ''}</span>
-                            <span className="text-[10px] font-bold text-surface-100 flex-1">{t.symbol}</span>
-                            <span className="text-[10px] font-medium text-surface-100">{formatPrice(t.price)}</span>
-                            {formatChange(t.pnl)}
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-
-/* ═══════════════════════════════════════════
-   Batch Swap Widget — same pair, multi-wallet
-   ═══════════════════════════════════════════ */
-function BatchSwapWidget({ chainIndex, wallets = [] }) {
-    const [expanded, setExpanded] = useState(false);
-    const [selectedWallets, setSelectedWallets] = useState({});
-    const [amount, setAmount] = useState('1');
-    const [sameAmount, setSameAmount] = useState(true);
-    const [amounts, setAmounts] = useState({});
-    const [fromSymbol, setFromSymbol] = useState('OKB');
-    const [toSymbol, setToSymbol] = useState('USDT');
-    const [slippage, setSlippage] = useState('1');
-    const [executing, setExecuting] = useState(false);
-    const [results, setResults] = useState([]);
-    const tokens = KNOWN_TOKENS[chainIndex] || KNOWN_TOKENS['196'];
-    const tokenList = Object.keys(tokens);
-
-    const toggleWallet = (id) => setSelectedWallets(p => ({ ...p, [id]: !p[id] }));
-    const selectAll = () => {
-        const allSelected = wallets.every(w => selectedWallets[w.id]);
-        const next = {};
-        wallets.forEach(w => { next[w.id] = !allSelected; });
-        setSelectedWallets(next);
-    };
-    const selectedCount = wallets.filter(w => selectedWallets[w.id]).length;
-
-    const handleBatchSwap = async () => {
-        if (selectedCount === 0 || !tokens[fromSymbol] || !tokens[toSymbol]) return;
-        setExecuting(true); setResults([]);
-        try {
-            const swaps = wallets.filter(w => selectedWallets[w.id]).map(w => ({
-                walletId: w.id, amount: sameAmount ? amount : (amounts[w.id] || amount),
-            }));
-            const res = await api.batchSwap({
-                swaps, chainIndex, fromTokenAddress: tokens[fromSymbol].addr,
-                toTokenAddress: tokens[toSymbol].addr, slippage
-            });
-            setResults(res.results || []);
-        } catch (err) { setResults([{ error: err.message }]); }
-        setExecuting(false);
-    };
-
-    if (wallets.length < 2) return null;
-
-    return (
-        <div className="glass-card relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-orange-500 to-amber-500 rounded-t-2xl" />
-            <button onClick={() => setExpanded(!expanded)}
-                className="w-full p-3 flex items-center gap-2 text-left hover:bg-white/[0.02] transition-colors">
-                <Layers size={13} className="text-orange-400" />
-                <h4 className="text-[11px] font-bold text-surface-100 flex-1">Batch Swap</h4>
-                <span className="text-[9px] text-surface-200/30 mr-1">{wallets.length} wallets</span>
-                <ChevronDown size={12} className={`text-surface-200/30 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-            </button>
-            {expanded && (
-                <div className="px-3 pb-3 space-y-2.5">
-                    {/* Token pair */}
-                    <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <label className="text-[9px] text-surface-200/25 mb-0.5 block">FROM</label>
-                            <CustomSelect value={fromSymbol} onChange={setFromSymbol} size="sm"
-                                options={tokenList.map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
-                        </div>
-                        <div>
-                            <label className="text-[9px] text-surface-200/25 mb-0.5 block">TO</label>
-                            <CustomSelect value={toSymbol} onChange={setToSymbol} size="sm"
-                                options={tokenList.filter(s => s !== fromSymbol).map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
-                        </div>
-                    </div>
-                    {/* Amount + slippage */}
-                    <div className="flex gap-2 items-end">
-                        <div className="flex-1">
-                            <div className="flex items-center justify-between mb-0.5">
-                                <label className="text-[9px] text-surface-200/25">Amount per wallet</label>
-                                <button onClick={() => setSameAmount(!sameAmount)} className="text-[8px] text-brand-400 hover:text-brand-300">
-                                    {sameAmount ? 'Custom each ↗' : 'Same for all ↗'}
-                                </button>
-                            </div>
-                            {sameAmount && (
-                                <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
-                                    className="w-full bg-surface-800/80 border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-surface-100 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="Amount" />
-                            )}
-                        </div>
-                        <div className="w-16">
-                            <label className="text-[9px] text-surface-200/25 mb-0.5 block">Slip %</label>
-                            <input type="number" value={slippage} onChange={e => setSlippage(e.target.value)}
-                                className="w-full bg-surface-800/80 border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-surface-100 text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                        </div>
-                    </div>
-                    {/* Wallet checkboxes */}
-                    <div>
-                        <div className="flex items-center justify-between mb-1">
-                            <span className="text-[9px] text-surface-200/25">Select wallets ({selectedCount}/{wallets.length})</span>
-                            <button onClick={selectAll} className="text-[8px] text-brand-400 hover:text-brand-300">
-                                {wallets.every(w => selectedWallets[w.id]) ? 'Deselect All' : 'Select All'}
-                            </button>
-                        </div>
-                        <div className="space-y-0.5 max-h-[120px] overflow-y-auto">
-                            {wallets.map(w => (
-                                <label key={w.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer border transition-colors ${selectedWallets[w.id] ? 'bg-orange-500/10 border-orange-500/20 text-surface-100' : 'bg-surface-800/40 border-white/[0.04] text-surface-200/40 hover:border-white/[0.08]'}`}>
-                                    <input type="checkbox" checked={!!selectedWallets[w.id]} onChange={() => toggleWallet(w.id)} className="w-3 h-3 rounded accent-orange-500" />
-                                    <Wallet size={10} className={selectedWallets[w.id] ? 'text-orange-400' : 'text-surface-200/20'} />
-                                    <span className="flex-1 truncate">{w.name || `Wallet ${w.id}`}</span>
-                                    <span className="text-[9px] font-mono text-surface-200/20">{w.address?.slice(0, 6)}...{w.address?.slice(-4)}</span>
-                                    {!sameAmount && selectedWallets[w.id] && (
-                                        <input type="number" value={amounts[w.id] || ''} onChange={e => setAmounts(p => ({ ...p, [w.id]: e.target.value }))}
-                                            placeholder={amount} onClick={e => e.stopPropagation()}
-                                            className="w-16 bg-surface-800/80 border border-white/[0.08] rounded px-1 py-0.5 text-[10px] text-surface-100 text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                                    )}
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-                    {/* Execute */}
-                    <button onClick={handleBatchSwap} disabled={executing || selectedCount === 0}
-                        className="w-full py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-lg hover:shadow-orange-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5">
-                        {executing ? <><Loader2 size={12} className="animate-spin" /> Swapping {selectedCount} wallets...</> : <><Zap size={12} /> Batch Swap ({selectedCount} wallets)</>}
-                    </button>
-                    {/* Results */}
-                    {results.length > 0 && (
-                        <div className="space-y-1 mt-2">
-                            <p className="text-[9px] text-surface-200/30 font-semibold">Results:</p>
-                            {results.map((r, i) => (
-                                <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-[10px] ${r.txHash ? 'bg-emerald-500/10 border border-emerald-500/15' : 'bg-red-500/10 border border-red-500/15'}`}>
-                                    {r.txHash ? <Check size={10} className="text-emerald-400" /> : <AlertTriangle size={10} className="text-red-400" />}
-                                    <span className="flex-1 truncate text-surface-100">{r.walletName || `Wallet ${r.walletId}`}</span>
-                                    {r.txHash ? (
-                                        <a href={`https://www.okx.com/web3/explorer/xlayer/tx/${r.txHash}`} target="_blank" rel="noopener"
-                                            className="text-brand-400 font-mono hover:text-brand-300">{r.txHash.slice(0, 10)}... <ExternalLink size={9} className="inline" /></a>
-                                    ) : <span className="text-red-400 truncate max-w-[150px]">{r.error}</span>}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-}
+/* (HotTokensCard, SmartMoneySignals, LeaderboardMini, BatchSwapWidget removed — use Discovery, Token Lookup, Leaderboard pages) */
 
 
 /* ═══════════════════════════════════════════
@@ -2431,166 +2107,7 @@ function PortfolioCard({ chainIndex, walletAddress }) {
 }
 
 
-/* ═══════════════════════════════════════════
-   Top Traders Card
-   ═══════════════════════════════════════════ */
-function TopTradersCard({ chainIndex, tokenAddress }) {
-    const [traders, setTraders] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [copiedAddr, setCopiedAddr] = useState(null);
-
-    useEffect(() => {
-        if (!tokenAddress || tokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') { setTraders([]); return; }
-        setLoading(true);
-        api.getTopTraders(chainIndex, tokenAddress)
-            .then(res => setTraders((res.data || []).slice(0, 8)))
-            .catch(() => {}).finally(() => setLoading(false));
-    }, [chainIndex, tokenAddress]);
-
-    if (!tokenAddress || tokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') return null;
-
-    const handleCopy = (addr) => { navigator.clipboard.writeText(addr); setCopiedAddr(addr); setTimeout(() => setCopiedAddr(null), 1500); };
-
-    return (
-        <div className="glass-card relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-orange-500 to-amber-500 rounded-t-2xl" />
-            <div className="p-3 border-b border-white/5 flex items-center gap-2">
-                <Users size={12} className="text-orange-400" />
-                <h4 className="text-[11px] font-bold text-surface-100">Top Traders</h4>
-            </div>
-            {loading ? (
-                <div className="p-4 flex justify-center"><Loader2 size={12} className="animate-spin text-surface-200/30" /></div>
-            ) : traders.length === 0 ? (
-                <div className="p-4 text-[10px] text-surface-200/25 text-center">No trader data</div>
-            ) : (
-                <div className="divide-y divide-white/[0.03]">
-                    {traders.map((tr, i) => {
-                        const addr = tr.traderAddress || tr.walletAddress || '';
-                        return (
-                            <div key={i} className="px-3 py-2 flex items-center gap-2 hover:bg-white/[0.02] transition-colors">
-                                <span className={`text-[9px] font-bold w-8 ${tr.tradeDirection === 'buy' ? 'text-emerald-400' : 'text-red-400'}`}>
-                                    {(tr.tradeDirection || 'buy').toUpperCase()}
-                                </span>
-                                <span className="text-[9px] text-surface-200/30 font-mono flex-1 truncate">{addr.slice(0, 8)}...{addr.slice(-4)}</span>
-                                <button onClick={() => handleCopy(addr)} className="text-surface-200/20 hover:text-brand-400 transition-colors">
-                                    {copiedAddr === addr ? <Check size={9} className="text-emerald-400" /> : <Copy size={9} />}
-                                </button>
-                                <span className="text-[9px] text-surface-200/40">${Number(tr.amountUsd || tr.tradeAmountUsd || 0).toLocaleString()}</span>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-        </div>
-    );
-}
-
-
-/* ═══════════════════════════════════════════
-   Top Liquidity Pools Card
-   ═══════════════════════════════════════════ */
-function TopLiquidityCard({ chainIndex, tokenAddress }) {
-    const [pools, setPools] = useState([]);
-    const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        if (!tokenAddress || tokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') { setPools([]); return; }
-        setLoading(true);
-        api.getTopLiquidity(chainIndex, tokenAddress)
-            .then(res => setPools((res.data || []).slice(0, 5)))
-            .catch(() => {}).finally(() => setLoading(false));
-    }, [chainIndex, tokenAddress]);
-
-    if (!tokenAddress || tokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') return null;
-
-    return (
-        <div className="glass-card relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-cyan-500 to-teal-500 rounded-t-2xl" />
-            <div className="p-3 border-b border-white/5 flex items-center gap-2">
-                <Droplets size={12} className="text-cyan-400" />
-                <h4 className="text-[11px] font-bold text-surface-100">Liquidity Pools</h4>
-            </div>
-            {loading ? (
-                <div className="p-4 flex justify-center"><Loader2 size={12} className="animate-spin text-surface-200/30" /></div>
-            ) : pools.length === 0 ? (
-                <div className="p-4 text-[10px] text-surface-200/25 text-center">No pool data</div>
-            ) : (
-                <div className="divide-y divide-white/[0.03]">
-                    {pools.map((p, i) => (
-                        <div key={i} className="px-3 py-2 hover:bg-white/[0.02] transition-colors">
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-surface-100 flex-1">{p.tokenPairSymbol || p.pairSymbol || `Pool ${i + 1}`}</span>
-                                <span className="text-[9px] text-surface-200/40">{p.dexName || ''}</span>
-                            </div>
-                            <div className="flex items-center gap-3 mt-0.5">
-                                <span className="text-[9px] text-surface-200/30">TVL: <b className="text-surface-100">{formatLargeNum(p.liquidity || p.tvl || 0)}</b></span>
-                                {p.volume24h && <span className="text-[9px] text-surface-200/30">Vol: <b className="text-surface-100">{formatLargeNum(p.volume24h)}</b></span>}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-
-/* ═══════════════════════════════════════════
-   Memepump / Token Sniper Card
-   ═══════════════════════════════════════════ */
-function MemepumpCard({ chainIndex, onSelectToken }) {
-    const [tokens, setTokens] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        setLoading(true);
-        api.getMemepumpList(chainIndex)
-            .then(res => setTokens((res.data || []).slice(0, 8)))
-            .catch(() => {}).finally(() => setLoading(false));
-    }, [chainIndex]);
-
-    return (
-        <div className="glass-card relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-pink-500 via-rose-500 to-red-500 rounded-t-2xl" />
-            <div className="p-3 border-b border-white/5 flex items-center gap-2">
-                <Rocket size={12} className="text-pink-400" />
-                <h4 className="text-[11px] font-bold text-surface-100">Token Sniper</h4>
-                <span className="ml-auto text-[8px] text-pink-400/60 font-bold uppercase">Live</span>
-            </div>
-            {loading ? (
-                <div className="p-4 flex justify-center"><Loader2 size={12} className="animate-spin text-surface-200/30" /></div>
-            ) : tokens.length === 0 ? (
-                <div className="p-4 text-[10px] text-surface-200/25 text-center">No new tokens</div>
-            ) : (
-                <div className="divide-y divide-white/[0.03]">
-                    {tokens.map((t, i) => (
-                        <div key={i} className="px-3 py-2 flex items-center gap-2 hover:bg-white/[0.02] transition-colors cursor-pointer"
-                            onClick={() => onSelectToken?.(t.tokenSymbol, t.tokenContractAddress)}>
-                            {t.tokenLogoUrl ? (
-                                <img src={t.tokenLogoUrl} alt="" className="w-5 h-5 rounded-full" />
-                            ) : (
-                                <span className="w-5 h-5 rounded-full bg-pink-500/15 flex items-center justify-center text-[8px]">🚀</span>
-                            )}
-                            <div className="flex-1 min-w-0">
-                                <p className="text-[10px] font-bold text-surface-100 truncate">{t.tokenSymbol || '?'}</p>
-                                <p className="text-[8px] text-surface-200/25 truncate">{t.tokenName || ''}</p>
-                            </div>
-                            {t.progress != null && (
-                                <div className="w-12">
-                                    <div className="h-1 rounded-full bg-surface-800/60 overflow-hidden">
-                                        <div className="h-full rounded-full bg-gradient-to-r from-pink-500 to-rose-500" style={{ width: `${Math.min(Number(t.progress || 0) * 100, 100)}%` }} />
-                                    </div>
-                                    <p className="text-[7px] text-surface-200/20 text-center mt-0.5">{(Number(t.progress || 0) * 100).toFixed(0)}%</p>
-                                </div>
-                            )}
-                            {t.marketCap && <span className="text-[9px] text-surface-200/30">{formatLargeNum(t.marketCap)}</span>}
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
+/* (TopTradersCard, TopLiquidityCard, MemepumpCard removed — use Token Lookup + Meme Scanner pages) */
 
 
 /* ═══════════════════════════════════════════
@@ -2653,7 +2170,17 @@ function DexHistoryCard({ chainIndex, walletAddress }) {
 
 
 /* ═══════════════════════════════════════════
-   Main TradingPage
+   Tab config
+   ═══════════════════════════════════════════ */
+const TABS = [
+    { key: 'trade',   icon: ArrowLeftRight, label: 'dashboard.trading.tabTrade' },
+    { key: 'market',  icon: TrendingUp,     label: 'dashboard.trading.tabMarket' },
+    { key: 'history', icon: History,         label: 'dashboard.trading.tabHistory' },
+];
+
+
+/* ═══════════════════════════════════════════
+   Main TradingPage — 3 Tab Layout
    ═══════════════════════════════════════════ */
 export default function TradingPage() {
     const { t } = useTranslation();
@@ -2661,6 +2188,15 @@ export default function TradingPage() {
     const [selectedToken, setSelectedToken] = useState({ sym: null, addr: null });
     const [wallets, setWallets] = useState([]);
     const [selectedWallet, setSelectedWallet] = useState(null);
+    const [activeTab, setActiveTab] = useState(() => {
+        try { return localStorage.getItem('trading_tab') || 'trade'; }
+        catch { return 'trade'; }
+    });
+
+    const switchTab = (key) => {
+        setActiveTab(key);
+        try { localStorage.setItem('trading_tab', key); } catch {}
+    };
 
     // Shared wallet fetch — single API call for all components
     useEffect(() => {
@@ -2685,77 +2221,84 @@ export default function TradingPage() {
     };
 
     return (
-        <div className="space-y-6 animate-fadeIn">
+        <div className="space-y-5 animate-fadeIn">
+            {/* ═══════ Header ═══════ */}
             <div className="flex items-center justify-between gap-4">
                 <h1 className="text-xl font-bold text-surface-100 flex items-center gap-2">
                     <ArrowLeftRight size={22} className="text-brand-400" />
-                    {t('dashboard.sidebar.trading') || 'Trading'}
+                    {t('dashboard.sidebar.trading') || 'DEX Trading'}
                 </h1>
                 <ChainSelector selected={chainIndex} onChange={setChainIndex} />
             </div>
 
-            {/* ═══════ HERO: Swap + Transfer ═══════ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <SwapQuoteWidget chainIndex={chainIndex} onTokenSelect={handleTokenSelect} wallets={wallets} selectedWallet={selectedWallet} />
-                <TransferWidget chainIndex={chainIndex} wallets={wallets} selectedWallet={selectedWallet} />
+            {/* ═══════ Tab Bar ═══════ */}
+            <div className="flex rounded-xl bg-surface-800/60 p-1 border border-white/[0.06]">
+                {TABS.map(({ key, icon: Icon, label }) => (
+                    <button
+                        key={key}
+                        onClick={() => switchTab(key)}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                            activeTab === key
+                                ? 'bg-brand-500/15 text-brand-400 shadow-sm border border-brand-500/20'
+                                : 'text-surface-200/40 hover:text-surface-200/70 border border-transparent'
+                        }`}
+                    >
+                        <Icon size={14} />
+                        {t(label, key.charAt(0).toUpperCase() + key.slice(1))}
+                    </button>
+                ))}
             </div>
 
-            {/* ═══════ DCA ═══════ */}
-            <DcaWidget chainIndex={chainIndex} wallets={wallets} />
+            {/* ═══════ Tab 1: Trade ═══════ */}
+            {activeTab === 'trade' && (
+                <div className="space-y-4">
+                    {/* Swap + Transfer */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <SwapQuoteWidget chainIndex={chainIndex} onTokenSelect={handleTokenSelect} wallets={wallets} selectedWallet={selectedWallet} />
+                        <TransferWidget chainIndex={chainIndex} wallets={wallets} selectedWallet={selectedWallet} />
+                    </div>
 
-            {/* ═══════ Chart ═══════ */}
-            <CandlestickChart chainIndex={chainIndex} tokenAddress={selectedToken.addr} symbol={selectedToken.sym} />
+                    {/* DCA */}
+                    <DcaWidget chainIndex={chainIndex} wallets={wallets} />
 
-            {/* ═══════ Market Data ═══════ */}
-            <TopTokensList chainIndex={chainIndex} onSelectToken={handleTopTokenClick} />
+                    {/* Chart + Token Info + Gas */}
+                    <CandlestickChart chainIndex={chainIndex} tokenAddress={selectedToken.addr} symbol={selectedToken.sym} />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <SmartMoneySignals chainIndex={chainIndex} />
-                <HotTokensCard chainIndex={chainIndex} onSelectToken={handleTopTokenClick} />
-                <LeaderboardMini chainIndex={chainIndex} />
-            </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <TokenInfoCard chainIndex={chainIndex} tokenAddress={selectedToken.addr} symbol={selectedToken.sym} />
+                        <GasWidget chainIndex={chainIndex} />
+                    </div>
+                </div>
+            )}
 
-            {/* ═══════ Portfolio + Token Info ═══════ */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <PortfolioCard chainIndex={chainIndex} walletAddress={selectedWallet?.address} />
-                <TokenInfoCard chainIndex={chainIndex} tokenAddress={selectedToken.addr} symbol={selectedToken.sym} />
-            </div>
+            {/* ═══════ Tab 2: Market ═══════ */}
+            {activeTab === 'market' && (
+                <div className="space-y-4">
+                    <TopTokensList chainIndex={chainIndex} onSelectToken={handleTopTokenClick} />
 
-            {/* ═══════ Traders + Liquidity ═══════ */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <TopTradersCard chainIndex={chainIndex} tokenAddress={selectedToken.addr} />
-                <TopLiquidityCard chainIndex={chainIndex} tokenAddress={selectedToken.addr} />
-            </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <RecentTrades chainIndex={chainIndex} tokenAddress={selectedToken.addr} />
+                        <PortfolioCard chainIndex={chainIndex} walletAddress={selectedWallet?.address} />
+                    </div>
 
-            {/* ═══════ Memepump + DEX History ═══════ */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <MemepumpCard chainIndex={chainIndex} onSelectToken={handleTopTokenClick} />
-                <DexHistoryCard chainIndex={chainIndex} walletAddress={selectedWallet?.address} />
-            </div>
+                    <MiniPriceChart chainIndex={chainIndex} tokenAddress={selectedToken.addr} symbol={selectedToken.sym} />
+                </div>
+            )}
 
-            {/* ═══════ Trades + TX + Gas ═══════ */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <RecentTrades chainIndex={chainIndex} tokenAddress={selectedToken.addr} />
-                <TxHistory />
-                <GasWidget chainIndex={chainIndex} />
-            </div>
+            {/* ═══════ Tab 3: History ═══════ */}
+            {activeTab === 'history' && (
+                <div className="space-y-4">
+                    <TxHistory />
 
-            {/* ═══════ Transfer History (embedded) ═══════ */}
-            <div className="border-t border-white/5 pt-6 mt-2">
-                <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-brand-400" /></div>}>
-                    <TransferHistorySection />
-                </Suspense>
-            </div>
+                    <DexHistoryCard chainIndex={chainIndex} walletAddress={selectedWallet?.address} />
 
-            {/* Mobile Bottom Sheet Swap */}
-            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-surface-900/95 backdrop-blur-xl border-t border-white/[0.08] px-4 py-3 flex items-center gap-3 safe-area-bottom">
-                <Wallet size={16} className="text-brand-400" />
-                <span className="text-xs text-surface-100 font-semibold flex-1">Quick Trade</span>
-                <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-xs font-bold shadow-lg">
-                    <ArrowUpRight size={14} />
-                </button>
-            </div>
+                    <div className="border-t border-white/5 pt-4">
+                        <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-brand-400" /></div>}>
+                            <TransferHistorySection />
+                        </Suspense>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
