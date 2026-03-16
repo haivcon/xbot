@@ -1300,7 +1300,7 @@ function createChatRoutes() {
     const autoTrading = require('../features/autoTrading');
 
     // POST /ai/agent/enable — Enable AI Trading Agent
-    router.post('/ai/agent/enable', async (req, res) => {
+    router.post('/agent/enable', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1313,7 +1313,7 @@ function createChatRoutes() {
     });
 
     // POST /ai/agent/disable — Disable AI Trading Agent
-    router.post('/ai/agent/disable', async (req, res) => {
+    router.post('/agent/disable', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1326,7 +1326,7 @@ function createChatRoutes() {
     });
 
     // POST /ai/agent/pause — Pause/Resume AI Trading Agent
-    router.post('/ai/agent/pause', async (req, res) => {
+    router.post('/agent/pause', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1340,7 +1340,7 @@ function createChatRoutes() {
     });
 
     // GET /ai/agent/status — Get agent status with PnL
-    router.get('/ai/agent/status', async (req, res) => {
+    router.get('/agent/status', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1353,7 +1353,7 @@ function createChatRoutes() {
     });
 
     // PUT /ai/agent/config — Update agent config
-    router.put('/ai/agent/config', async (req, res) => {
+    router.put('/agent/config', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1366,7 +1366,7 @@ function createChatRoutes() {
     });
 
     // GET /ai/agent/plans — Get trade plans (optional ?status=pending)
-    router.get('/ai/agent/plans', async (req, res) => {
+    router.get('/agent/plans', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1382,7 +1382,7 @@ function createChatRoutes() {
     });
 
     // POST /ai/agent/plans/:id/approve — Approve a trade plan
-    router.post('/ai/agent/plans/:id/approve', async (req, res) => {
+    router.post('/agent/plans/:id/approve', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1399,7 +1399,7 @@ function createChatRoutes() {
     });
 
     // POST /ai/agent/plans/:id/reject — Reject a trade plan
-    router.post('/ai/agent/plans/:id/reject', async (req, res) => {
+    router.post('/agent/plans/:id/reject', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1418,7 +1418,7 @@ function createChatRoutes() {
     const tradeEngine = require('../features/tradeExecutionEngine');
 
     // GET /ai/agent/positions — Get active and closed positions
-    router.get('/ai/agent/positions', async (req, res) => {
+    router.get('/agent/positions', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1431,7 +1431,7 @@ function createChatRoutes() {
     });
 
     // POST /ai/agent/positions/:id/close — Manually close a position
-    router.post('/ai/agent/positions/:id/close', async (req, res) => {
+    router.post('/agent/positions/:id/close', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1446,7 +1446,7 @@ function createChatRoutes() {
     });
 
     // ── Wallet Selection for AI Trader ──
-    router.get('/ai/agent/wallets', async (req, res) => {
+    router.get('/agent/wallets', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1459,7 +1459,7 @@ function createChatRoutes() {
     });
 
     // #11 CSV export endpoint
-    router.get('/ai/agent/export', async (req, res) => {
+    router.get('/agent/export', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1476,7 +1476,7 @@ function createChatRoutes() {
     const smartExecutor = require('../features/smartOrderExecutor');
 
     // POST /ai/agent/execute/vwap — Start VWAP execution
-    router.post('/ai/agent/execute/vwap', async (req, res) => {
+    router.post('/agent/execute/vwap', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1500,7 +1500,7 @@ function createChatRoutes() {
     });
 
     // POST /ai/agent/execute/dca — Start DCA execution
-    router.post('/ai/agent/execute/dca', async (req, res) => {
+    router.post('/agent/execute/dca', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1523,7 +1523,7 @@ function createChatRoutes() {
     });
 
     // GET /ai/agent/executions — List active smart executions
-    router.get('/ai/agent/executions', async (req, res) => {
+    router.get('/agent/executions', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         res.json({ executions: smartExecutor.listActiveExecutions(userId) });
@@ -1531,7 +1531,7 @@ function createChatRoutes() {
 
     // ── Technical Signals Analysis ──
     // GET /ai/agent/signals/:chainIndex/:tokenAddress — Get tech analysis for a token
-    router.get('/ai/agent/signals/:chainIndex/:tokenAddress', async (req, res) => {
+    router.get('/agent/signals/:chainIndex/:tokenAddress', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {

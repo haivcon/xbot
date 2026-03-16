@@ -142,6 +142,7 @@ async function initDB() {
         try { await dbRun('ALTER TABLE auto_trading_plans ADD COLUMN signalSource TEXT'); } catch {}
         try { await dbRun('ALTER TABLE auto_trading_config ADD COLUMN walletId INTEGER'); } catch {}
         try { await dbRun('ALTER TABLE auto_trading_config ADD COLUMN paperMode INTEGER DEFAULT 0'); } catch {}
+        try { await dbRun('ALTER TABLE auto_trading_config ADD COLUMN selectedTokens TEXT'); } catch {}
         _dbInitialized = true;
     } catch (err) {
         log.error('initDB error:', err.message);
@@ -214,6 +215,10 @@ async function enableAgent(userId, config = {}) {
         // Update walletId if provided
         if (config.walletId !== undefined) {
             await dbRun('UPDATE auto_trading_config SET walletId = ? WHERE userId = ?', [config.walletId || null, userId]);
+        }
+        // Save selectedTokens
+        if (config.selectedTokens !== undefined) {
+            await dbRun('UPDATE auto_trading_config SET selectedTokens = ? WHERE userId = ?', [config.selectedTokens || null, userId]);
         }
     } else {
         await dbRun(`INSERT INTO auto_trading_config 
@@ -952,6 +957,160 @@ function startSignalPolling(userId, config, minimalContext) {
             } catch (memeErr) {
                 log.warn(`MemeRadar scan error:`, memeErr.message);
             }
+            // ── Paper Mode: generate demo trade plans with diverse tokens ──
+            if (dbConfig.paperMode) {
+                const { dbAll: dbAllPlans } = require('../../db/core');
+                const recentPlans = await dbAllPlans(
+                    "SELECT id FROM auto_trading_plans WHERE userId = ? AND createdAt > datetime('now', '-2 minutes')",
+                    [userId]
+                ) || [];
+                if (recentPlans.length === 0) {
+                    const userChains = (dbConfig.chains || '196').split(',').map(c => c.trim());
+                    // ── Comprehensive token pool per chain ──
+                    const TOKEN_POOL = {
+                        '196': [ // XLayer
+                            { symbol: 'WOKB', name: 'Wrapped OKB', addr: '0x7c6b91D9Be155A6Db01f749217d76fF02A7227F2', price: 42.5 },
+                            { symbol: 'USDT', name: 'Tether USD', addr: '0x1E4a5963aBFD975d8c9021ce480b42188849D41d', price: 1.00 },
+                            { symbol: 'WETH', name: 'Wrapped ETH', addr: '0xe538905cf8410324e03a5a23c1c177a474d59b2b', price: 3450.0 },
+                            { symbol: 'OKB', name: 'OKB Token', addr: '0xd2637562F0e81cf5Ba4F5D9e1A30BcD0a3FBCeF1', price: 48.3 },
+                            { symbol: 'USDC', name: 'USD Coin', addr: '0xA8CE8aee21bC2A48a5EF670afCc9274C7bbbC035', price: 1.00 },
+                            { symbol: 'DAI', name: 'Dai Stablecoin', addr: '0xc5015b9d9161dca7e18e32f6f25C4aD850731Fd4', price: 1.00 },
+                            { symbol: 'XLAYER', name: 'XLayer Token', addr: '0x5A77f1443D16ee5195CC2485159d4BF1A5F56189', price: 0.085 },
+                            { symbol: 'OKSWAP', name: 'OKSwap Token', addr: '0x3B86a9c2C1A2e8c38C77e8B1F5A9C2D1E0F3a4b5', price: 0.42 },
+                            { symbol: 'xSUSHI', name: 'XLayer Sushi', addr: '0x6B175474E89094C44Da98b954EedeAC495271d0F', price: 1.12 },
+                            { symbol: 'XDAO', name: 'XLayer DAO', addr: '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', price: 3.75 },
+                            { symbol: 'XNFT', name: 'XLayer NFT', addr: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', price: 0.032 },
+                            { symbol: 'xBRIDGE', name: 'XBridge Token', addr: '0xdAC17F958D2ee523a2206206994597C13D831ec7', price: 0.28 },
+                        ],
+                        '1': [ // Ethereum
+                            { symbol: 'WBTC', name: 'Wrapped BTC', addr: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', price: 87200.0 },
+                            { symbol: 'UNI', name: 'Uniswap', addr: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', price: 14.2 },
+                            { symbol: 'LINK', name: 'Chainlink', addr: '0x514910771AF9Ca656af840dff83E8264EcF986CA', price: 18.5 },
+                            { symbol: 'AAVE', name: 'Aave', addr: '0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9', price: 285.0 },
+                            { symbol: 'PEPE', name: 'Pepe', addr: '0x6982508145454Ce325dDbE47a25d4ec3d2311933', price: 0.0000089 },
+                            { symbol: 'SHIB', name: 'Shiba Inu', addr: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE', price: 0.0000245 },
+                        ],
+                        '56': [ // BSC
+                            { symbol: 'CAKE', name: 'PancakeSwap', addr: '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82', price: 2.85 },
+                            { symbol: 'XVS', name: 'Venus', addr: '0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63', price: 8.9 },
+                            { symbol: 'BAKE', name: 'BakeryToken', addr: '0xE02dF9e3e622DeBdD69fb838bB799E3F168902c5', price: 0.28 },
+                        ],
+                        '501': [ // Solana
+                            { symbol: 'JUP', name: 'Jupiter', addr: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN', price: 1.05 },
+                            { symbol: 'RAY', name: 'Raydium', addr: '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R', price: 4.2 },
+                            { symbol: 'BONK', name: 'Bonk', addr: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', price: 0.0000298 },
+                        ],
+                        '137': [ // Polygon
+                            { symbol: 'MATIC', name: 'Polygon', addr: '0x0000000000000000000000000000000000001010', price: 0.52 },
+                            { symbol: 'QUICK', name: 'QuickSwap', addr: '0xB5C064F955D8e7F38fE0460C556a72987494eE17', price: 0.048 },
+                        ],
+                        '42161': [ // Arbitrum
+                            { symbol: 'ARB', name: 'Arbitrum', addr: '0x912CE59144191C1D03E6191e9C48aEcAe7A6cB7d', price: 1.15 },
+                            { symbol: 'GMX', name: 'GMX', addr: '0xfc5A1A6EB076a2C7aD06eD22C90d7E710E35ad0a', price: 28.5 },
+                            { symbol: 'MAGIC', name: 'Magic', addr: '0x539bdE0d7Dbd336b79148AA742883198BBF60342', price: 0.62 },
+                        ],
+                    };
+
+                    // Try to fetch live trending tokens from OKX API
+                    let liveTokens = [];
+                    try {
+                        for (const chain of userChains.slice(0, 2)) {
+                            const topTokens = await onchainos.getTopTokens?.(chain, { sortBy: '2', timeFrame: '4' });
+                            if (Array.isArray(topTokens)) {
+                                for (const t of topTokens.slice(0, 5)) {
+                                    if (t.tokenContractAddress && t.tokenSymbol) {
+                                        liveTokens.push({
+                                            symbol: t.tokenSymbol,
+                                            name: t.tokenName || t.tokenSymbol,
+                                            addr: t.tokenContractAddress,
+                                            price: Number(t.price || t.priceUsd) || 0.01,
+                                            chain,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    } catch { /* API might not be available */ }
+
+                    // Build candidate pool from user's selected chains
+                    let candidates = [];
+                    for (const chain of userChains) {
+                        const pool = TOKEN_POOL[chain] || [];
+                        candidates.push(...pool.map(t => ({ ...t, chain })));
+                    }
+                    // Prepend live tokens (higher priority)
+                    if (liveTokens.length > 0) candidates = [...liveTokens, ...candidates];
+                    if (candidates.length === 0) candidates = TOKEN_POOL['196'].map(t => ({ ...t, chain: '196' }));
+
+                    // Pick 1-2 random tokens (avoid duplicates with recent plans)
+                    const recentAddrs = new Set();
+                    try {
+                        const recent24h = await dbAllPlans(
+                            "SELECT tokenAddress FROM auto_trading_plans WHERE userId = ? AND createdAt > datetime('now', '-1 hour')",
+                            [userId]
+                        ) || [];
+                        recent24h.forEach(r => recentAddrs.add(r.tokenAddress));
+                    } catch {}
+                    const fresh = candidates.filter(c => !recentAddrs.has(c.addr));
+                    // Also filter by selectedTokens if specified
+                    const selectedTokenFilter = dbConfig.selectedTokens ? dbConfig.selectedTokens.split(',').map(s => s.trim()).filter(Boolean) : [];
+                    let filteredPool = fresh.length > 0 ? fresh : candidates;
+                    if (selectedTokenFilter.length > 0) {
+                        const bySelected = filteredPool.filter(c => selectedTokenFilter.includes(c.symbol));
+                        if (bySelected.length > 0) filteredPool = bySelected;
+                    }
+                    const pool = filteredPool;
+
+                    // Shuffle and pick 1-2
+                    const shuffled = pool.sort(() => Math.random() - 0.5);
+                    const planCount = 1 + (Math.random() > 0.5 ? 1 : 0); // 1 or 2 plans
+                    const riskProfile = RISK_PROFILES[dbConfig.riskLevel] || RISK_PROFILES.conservative;
+
+                    const signalTypes = ['whale', 'smart_money', 'bollinger', 'macd_bb', 'supertrend', 'volume_spike'];
+                    const reasonTemplates = [
+                        ['Whale accumulation detected', 'High trading volume', 'Positive momentum'],
+                        ['Smart money inflow', 'Breakout above resistance', 'Strong buy signal'],
+                        ['Bollinger Band squeeze', 'MACD crossover bullish', 'Volume spike +150%'],
+                        ['SuperTrend flipped bullish', 'RSI recovering from oversold', 'Orderbook imbalance'],
+                        ['Whale wallet entry', 'KOL mentions trending', 'Liquidity surge detected'],
+                        ['Price consolidation breakout', 'Moving average golden cross', 'On-chain accumulation'],
+                    ];
+
+                    for (let i = 0; i < Math.min(planCount, shuffled.length); i++) {
+                        const token = shuffled[i];
+                        const score = 55 + Math.floor(Math.random() * 40); // 55-95
+                        const priceVariance = token.price * (0.95 + Math.random() * 0.10);
+                        const isLive = liveTokens.some(l => l.addr === token.addr);
+                        const sigIdx = Math.floor(Math.random() * signalTypes.length);
+                        const sources = [signalTypes[sigIdx]];
+                        if (Math.random() > 0.5) sources.push(signalTypes[(sigIdx + 1) % signalTypes.length]);
+
+                        const reasonSet = reasonTemplates[Math.floor(Math.random() * reasonTemplates.length)];
+                        const reasons = [
+                            isLive ? '🔴 Live signal' : '📝 Paper signal',
+                            ...reasonSet.slice(0, 2 + Math.floor(Math.random() * 2)),
+                            `AI Score: ${score}/100`,
+                        ];
+
+                        await createTradePlan(userId, {
+                            tokenAddress: token.addr,
+                            tokenSymbol: `${isLive ? '🔴' : '📝'}${token.symbol}`,
+                            tokenName: `${isLive ? '' : '[PAPER] '}${token.name}`,
+                            tokenPrice: priceVariance,
+                            chainIndex: token.chain,
+                            action: 'buy',
+                            suggestedAmountUsd: Math.min(riskProfile.maxAmountUsd, dbConfig.maxAmountUsd),
+                            aiScore: score,
+                            aiReason: reasons.join(' • '),
+                            targetPct: dbConfig.takeProfitPct || 30,
+                            stopLossPct: dbConfig.stopLossPct || 15,
+                            signalSource: sources.join(',')
+                        });
+                        log.info(`[Paper] Generated ${isLive ? 'LIVE' : 'demo'} trade plan for user ${userId}: ${token.symbol} ($${priceVariance.toPrecision(4)}) on chain ${CHAIN_LABELS[token.chain] || token.chain}`);
+                    }
+                }
+            }
+
         } catch (err) {
             log.error('Signal polling error:', err.message);
         }
