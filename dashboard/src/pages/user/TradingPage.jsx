@@ -276,7 +276,7 @@ function GasWidget({ chainIndex }) {
     if (loading) return (
         <div className="glass-card p-4 flex items-center gap-3">
             <Loader2 size={14} className="animate-spin text-surface-200/30" />
-            <span className="text-xs text-surface-200/30">Loading gas...</span>
+            <span className="text-xs text-surface-200/30">{t('dashboard.trading.loadingGas', 'Loading gas...')}</span>
         </div>
     );
 
@@ -291,7 +291,7 @@ function GasWidget({ chainIndex }) {
                 <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center">
                     <Fuel size={13} className="text-amber-400" />
                 </div>
-                <h3 className="text-xs font-bold text-surface-100">Gas Price</h3>
+                <h3 className="text-xs font-bold text-surface-100">{t('dashboard.trading.gasPrice', 'Gas Price')}</h3>
                 <span className="text-[9px] text-surface-200/25 ml-auto">{CHAINS[chainIndex]?.name || 'Chain'}</span>
             </div>
             <div className="flex items-end gap-1.5">
@@ -380,7 +380,7 @@ function MiniPriceChart({ chainIndex, tokenAddress, symbol }) {
                     <Sparkline data={candles} width={200} height={40} color={candles[candles.length - 1] >= candles[0] ? '#34d399' : '#f87171'} />
                 </div>
             ) : (
-                <p className="text-[10px] text-surface-200/25 text-center py-2">No chart data</p>
+                <p className="text-[10px] text-surface-200/25 text-center py-2">{t('dashboard.trading.noChartData', 'No chart data')}</p>
             )}
         </div>
     );
@@ -410,12 +410,12 @@ function RecentTrades({ chainIndex, tokenAddress }) {
             <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-emerald-500 to-teal-500 rounded-t-2xl" />
             <div className="p-3 border-b border-white/5 flex items-center gap-2">
                 <Activity size={11} className="text-emerald-400" />
-                <h4 className="text-[10px] font-bold text-surface-100">Recent Trades</h4>
+                <h4 className="text-[10px] font-bold text-surface-100">{t('dashboard.trading.recentTrades', 'Recent Trades')}</h4>
             </div>
             {loading ? (
                 <div className="p-4 flex justify-center"><Loader2 size={12} className="animate-spin text-surface-200/30" /></div>
             ) : trades.length === 0 ? (
-                <div className="p-4 text-[10px] text-surface-200/25 text-center">No trades</div>
+                <div className="p-4 text-[10px] text-surface-200/25 text-center">{t('dashboard.trading.noTrades', 'No trades')}</div>
             ) : (
                 <div className="divide-y divide-white/[0.03]">
                     {trades.map((t, i) => {
@@ -541,7 +541,7 @@ function WalletDropdown({ wallets = [], value, onChange, accentColor = 'violet',
             style={{ top: pos.top, left: pos.left, width: Math.max(pos.width, 280) }}
         >
             <div className="px-3 py-2 border-b border-white/5">
-                <p className="text-[9px] text-surface-200/30 uppercase tracking-widest font-semibold">Select Wallet</p>
+                <p className="text-[9px] text-surface-200/30 uppercase tracking-widest font-semibold">{t('dashboard.trading.selectWallet', 'Select Wallet')}</p>
             </div>
             <div className="max-h-[220px] overflow-y-auto">
                 {wallets.map(w => {
@@ -575,8 +575,8 @@ function WalletDropdown({ wallets = [], value, onChange, accentColor = 'violet',
             </div>
             {wallets.length === 0 && (
                 <div className="px-3 py-4 text-center">
-                    <p className="text-xs text-surface-200/30">No wallets</p>
-                    <a href="#/wallets" className="text-xs text-brand-400 hover:text-brand-300 font-semibold">Create Wallet →</a>
+                    <p className="text-xs text-surface-200/30">{t('dashboard.trading.noWallets', 'No wallets')}</p>
+                    <a href="#/wallets" className="text-xs text-brand-400 hover:text-brand-300 font-semibold">{t('dashboard.trading.createWallet', 'Create Wallet →')}</a>
                 </div>
             )}
         </div>,
@@ -1010,7 +1010,7 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                 {/* Search results */}
                 {searchResults.length > 0 && (
                     <>
-                        <div className="px-3 py-1.5 text-[9px] text-surface-200/20 uppercase border-t border-white/5">Search Results</div>
+                        <div className="px-3 py-1.5 text-[9px] text-surface-200/20 uppercase border-t border-white/5">{t('dashboard.trading.searchResults', 'Search Results')}</div>
                         {searchResults.map((t, i) => (
                             <button
                                 key={i}
@@ -1611,12 +1611,12 @@ function TxHistory({ chainIndex }) {
             <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-blue-500 to-indigo-500 rounded-t-2xl" />
             <div className="p-4 border-b border-white/5 flex items-center gap-2">
                 <Clock size={14} className="text-blue-400" />
-                <h3 className="text-xs font-bold text-surface-100">Recent Transactions</h3>
+                <h3 className="text-xs font-bold text-surface-100">{t('dashboard.trading.recentTransactions', 'Recent Transactions')}</h3>
             </div>
             {loading ? (
                 <div className="p-8 flex justify-center"><Loader2 size={16} className="animate-spin text-surface-200/30" /></div>
             ) : txs.length === 0 ? (
-                <div className="p-8 text-center text-xs text-surface-200/20">No transactions yet</div>
+                <div className="p-8 text-center text-xs text-surface-200/20">{t('dashboard.trading.noTransactions', 'No transactions yet')}</div>
             ) : (
                 <div className="divide-y divide-white/[0.03]">
                     {txs.map((tx, i) => {
@@ -1838,7 +1838,7 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
             className="fixed z-[9999] bg-surface-800/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-fadeIn max-h-[240px] overflow-y-auto"
             style={{ top: walletDdPos.top, left: walletDdPos.left, width: Math.max(walletDdPos.width, 220) }}>
             {wallets.length === 0 ? (
-                <div className="px-3 py-4 text-[10px] text-surface-200/30 text-center">No wallets found</div>
+                <div className="px-3 py-4 text-[10px] text-surface-200/30 text-center">{t('dashboard.trading.noWalletsFound', 'No wallets found')}</div>
             ) : wallets.map(w => {
                 const isSelected = String(w.id) === String(form.walletId);
                 const addrShort = w.address ? `${w.address.slice(0, 6)}...${w.address.slice(-4)}` : '';
@@ -1945,7 +1945,7 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">Amount</label>
+                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.amount', 'Amount')}</label>
                             <input type="number" value={form.amount} placeholder="0.1" onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                                 className="w-full bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] focus:border-violet-500/40 rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                         </div>
@@ -1979,8 +1979,8 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
             ) : tasks.length === 0 ? (
                 <div className="p-6 text-center">
                     <Repeat size={24} className="text-surface-200/10 mx-auto mb-2" />
-                    <p className="text-xs text-surface-200/20">No DCA schedules yet</p>
-                    <p className="text-[10px] text-surface-200/15 mt-1">Click + to create your first auto-swap</p>
+                    <p className="text-xs text-surface-200/20">{t('dashboard.trading.noDcaSchedules', 'No DCA schedules yet')}</p>
+                    <p className="text-[10px] text-surface-200/15 mt-1">{t('dashboard.trading.createFirstDca', 'Click + to create your first auto-swap')}</p>
                 </div>
             ) : (
                 <div className="divide-y divide-white/[0.03]">
@@ -2197,7 +2197,7 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null, showT
                 <div className="w-8 h-8 rounded-xl bg-cyan-500/15 flex items-center justify-center">
                     <Send size={15} className="text-cyan-400" />
                 </div>
-                <h3 className="text-sm font-bold text-surface-100 flex-1">Transfer</h3>
+                <h3 className="text-sm font-bold text-surface-100 flex-1">{t('dashboard.tradingUx.transfer', 'Transfer')}</h3>
             </div>
 
             {/* Single / Batch tab — matches Swap tab */}
@@ -2235,7 +2235,7 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null, showT
 
                     {/* Token selector — wallet tokens with logos (like swap) */}
                     <div>
-                        <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">TOKEN</label>
+                        <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">{t('dashboard.tradingUx.token', 'TOKEN')}</label>
                         <div className="bg-surface-900/60 rounded-2xl border border-white/[0.08] p-3">
                             {/* Token button + amount input */}
                             <div className="flex items-center gap-3">
@@ -2356,7 +2356,7 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null, showT
 
                     {/* Token for all — with wallet logos */}
                     <div>
-                        <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">TOKEN</label>
+                        <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">{t('dashboard.tradingUx.token', 'TOKEN')}</label>
                         <div className="flex flex-wrap gap-1.5">
                             {(walletTokens.length > 0
                                 ? walletTokens.filter(wt => Number(wt.balance || 0) > 0).map(wt => {
@@ -2693,7 +2693,7 @@ function CandlestickChart({ chainIndex, tokenAddress, symbol }) {
                         <span className="text-surface-200/40">V <b className="text-blue-400">{formatLargeNum(hovered.v)}</b></span>
                     </>
                 ) : (
-                    <span className="text-surface-200/15 text-[9px]">Hover over chart for OHLCV data</span>
+                    <span className="text-surface-200/15 text-[9px]">{t('dashboard.trading.hoverChart', 'Hover over chart for OHLCV data')}</span>
                 )}
             </div>
 
@@ -2702,7 +2702,7 @@ function CandlestickChart({ chainIndex, tokenAddress, symbol }) {
                 {loading ? (
                     <div className="h-[260px] flex items-center justify-center"><Loader2 size={16} className="animate-spin text-surface-200/20" /></div>
                 ) : candles.length < 2 ? (
-                    <div className="h-[260px] flex items-center justify-center text-[11px] text-surface-200/20">No chart data available</div>
+                    <div className="h-[260px] flex items-center justify-center text-[11px] text-surface-200/20">{t('dashboard.trading.noChartDataAvailable', 'No chart data available')}</div>
                 ) : (
                     <div className="relative flex">
                         {/* SVG Chart — candles only, no text */}
@@ -2845,12 +2845,12 @@ function PortfolioCard({ chainIndex, walletAddress }) {
             <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-blue-500 to-cyan-500 rounded-t-2xl" />
             <div className="p-3 border-b border-white/5 flex items-center gap-2">
                 <PieChart size={12} className="text-blue-400" />
-                <h4 className="text-[11px] font-bold text-surface-100">Portfolio Overview</h4>
+                <h4 className="text-[11px] font-bold text-surface-100">{t('dashboard.trading.portfolioOverview', 'Portfolio Overview')}</h4>
             </div>
             {loading ? (
                 <div className="p-4 flex justify-center"><Loader2 size={12} className="animate-spin text-surface-200/30" /></div>
             ) : !data ? (
-                <div className="p-4 text-[10px] text-surface-200/25 text-center">Connect wallet to view</div>
+                <div className="p-4 text-[10px] text-surface-200/25 text-center">{t('dashboard.trading.connectWalletToView', 'Connect wallet to view')}</div>
             ) : (
                 <div className="p-3 space-y-2">
                     <div className="flex items-baseline gap-2">
@@ -2910,7 +2910,7 @@ function DexHistoryCard({ chainIndex, walletAddress }) {
             {loading ? (
                 <div className="p-4 flex justify-center"><Loader2 size={12} className="animate-spin text-surface-200/30" /></div>
             ) : history.length === 0 ? (
-                <div className="p-4 text-[10px] text-surface-200/25 text-center">No DEX history</div>
+                <div className="p-4 text-[10px] text-surface-200/25 text-center">{t('dashboard.trading.noDexHistory', 'No DEX history')}</div>
             ) : (
                 <div className="divide-y divide-white/[0.03]">
                     {history.map((tx, i) => {
