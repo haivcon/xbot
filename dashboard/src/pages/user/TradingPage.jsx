@@ -827,8 +827,11 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
         setError(null);
         setQuote(null);
         try {
-            const data = await api.getSwapQuote({ chainIndex, fromTokenAddress: from.addr, toTokenAddress: to.addr, amount, slippage });
-            const q = Array.isArray(data.data) ? data.data[0] : data.data;
+            const res = await api.getSwapQuote({ chainIndex, fromTokenAddress: from.addr, toTokenAddress: to.addr, amount, slippage });
+            // Unwrap: backend returns {data: okxResponse}, OKX returns {code, data: [quote]}
+            const raw = res.data || res;
+            const arr = Array.isArray(raw) ? raw : (Array.isArray(raw.data) ? raw.data : [raw]);
+            const q = arr[0] || raw;
             setQuote(q);
             addRecentPair(fromSymbol, toSymbol); // #2
             // U2: Start auto-refresh countdown
