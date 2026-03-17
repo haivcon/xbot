@@ -744,6 +744,8 @@ function createMarketRoutes() {
                 }
             } catch { /* use original amount */ }
 
+            log.info('swap/quote request:', { chainIndex, fromTokenAddress, toTokenAddress, amount, resolvedAmount });
+
             const data = await onchainos.getSwapQuote({
                 chainIndex,
                 fromTokenAddress: fromTokenAddress.toLowerCase(),
@@ -751,6 +753,7 @@ function createMarketRoutes() {
                 amount: resolvedAmount
             });
 
+            log.info('swap/quote response:', JSON.stringify(data)?.slice(0, 500));
             res.json({ data });
         } catch (err) {
             log.error('swap/quote error:', err.msg || err.message);

@@ -828,10 +828,13 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
         setQuote(null);
         try {
             const res = await api.getSwapQuote({ chainIndex, fromTokenAddress: from.addr, toTokenAddress: to.addr, amount, slippage });
+            console.log('[QUOTE] raw API response:', JSON.stringify(res).slice(0, 500));
             // Unwrap: backend returns {data: okxResponse}, OKX returns {code, data: [quote]}
             const raw = res.data || res;
             const arr = Array.isArray(raw) ? raw : (Array.isArray(raw.data) ? raw.data : [raw]);
             const q = arr[0] || raw;
+            console.log('[QUOTE] parsed quote:', JSON.stringify(q).slice(0, 500));
+            console.log('[QUOTE] routerResult:', q?.routerResult ? 'exists' : 'MISSING', 'toTokenAmount:', q?.routerResult?.toTokenAmount);
             setQuote(q);
             addRecentPair(fromSymbol, toSymbol); // #2
             // U2: Start auto-refresh countdown
@@ -881,11 +884,12 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
         setAmount(String(n));
     };
 
-    const routerResult = quote?.routerResult;
-    const toAmount = routerResult ? (Number(routerResult.toTokenAmount || 0) / Math.pow(10, Number(routerResult.toToken?.decimal || 18))) : null;
-    const priceImpact = routerResult?.priceImpactPercentage;
+    // OKX v6 returns flat structure (no routerResult wrapper), v5 had routerResult nesting
+    const routerResult = quote?.routerResult || quote;
+    const toAmount = quote ? (Number(routerResult?.toTokenAmount || 0) / Math.pow(10, Number(routerResult?.toToken?.decimal || 18))) : null;
+    const priceImpact = routerResult?.priceImpactPercentage || routerResult?.priceImpactPercent;
     const gasEstimate = routerResult?.estimateGasFee || quote?.estimateGasFee;
-    const dexRoutes = routerResult?.quoteCompareList || quote?.quoteCompareList || [];
+    const dexRoutes = routerResult?.quoteCompareList || quote?.quoteCompareList || routerResult?.dexRouterList || [];
 
     // Token list for dropdown — wallet tokens first (with balance + logo), then remaining known tokens
     const getTokenList = (exclude) => {
