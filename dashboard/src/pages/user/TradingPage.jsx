@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+
 import api from '@/api/client';
 import CustomSelect from '@/components/ui/CustomSelect';
 import {
@@ -8,7 +9,7 @@ import {
     ArrowDown, Clock, ExternalLink, ArrowUpRight, ArrowDownRight, Zap,
     Star, StarOff, Settings, Bell, ChevronDown, Wallet, BarChart3,
     Activity, Info, X, Play, Pause, Trash2, Plus, Repeat,
-    Copy, Check, Send,
+    Copy, Check, Send, Download,
     History, PieChart, AlertTriangle
 } from 'lucide-react';
 
@@ -25,6 +26,106 @@ const CHAINS = {
     '42161': { name: 'Arbitrum', icon: '⬡', explorer: 'arbitrum' },
     '8453': { name: 'Base', icon: '⬡', explorer: 'base' },
 };
+
+const EXPLORERS = {
+    '196': 'https://www.okx.com/web3/explorer/xlayer',
+    '1': 'https://etherscan.io',
+    '56': 'https://bscscan.com',
+    '137': 'https://polygonscan.com',
+    '42161': 'https://arbiscan.io',
+    '8453': 'https://basescan.org',
+};
+const getExplorerTxUrl = (chainIndex, txHash) => `${EXPLORERS[chainIndex] || EXPLORERS['196']}/tx/${txHash}`;
+
+/* #5: Skeleton shimmer loader */
+function Skeleton({ className = '', count = 1 }) {
+    return (<>{Array.from({ length: count }).map((_, i) => (
+        <div key={i} className={`animate-pulse rounded-lg bg-white/[0.06] ${className}`} />
+    ))}</>);
+}
+
+/* #6: Global toast notification system */
+function ToastNotification({ toast, onDismiss }) {
+    if (!toast) return null;
+    return createPortal(
+        <div className={`fixed top-5 right-5 z-[9999] max-w-sm px-4 py-3 rounded-2xl border shadow-2xl backdrop-blur-xl text-sm font-medium flex items-center gap-2.5 animate-slideInRight ${toast.ok ? 'bg-emerald-500/15 border-emerald-500/20 text-emerald-300' : 'bg-red-500/15 border-red-500/20 text-red-300'}`}>
+            {toast.ok ? <Check size={16} className="text-emerald-400" /> : <AlertTriangle size={16} className="text-red-400" />}
+            <span className="flex-1">{toast.msg}</span>
+            {toast.txHash && <a href={toast.txUrl} target="_blank" rel="noopener" className="text-brand-400 hover:underline text-xs flex items-center gap-0.5"><ExternalLink size={10} /> Tx</a>}
+            <button onClick={onDismiss} className="text-surface-200/30 hover:text-surface-100"><X size={14} /></button>
+        </div>,
+        document.body
+    );
+}
+function useToast() {
+    const [toast, setToast] = useState(null);
+    const timerRef = useRef(null);
+    const show = useCallback((msg, ok = true, txHash = null, txUrl = '') => {
+        clearTimeout(timerRef.current);
+        setToast({ msg, ok, txHash, txUrl });
+        timerRef.current = setTimeout(() => setToast(null), 5000);
+    }, []);
+    const dismiss = useCallback(() => { clearTimeout(timerRef.current); setToast(null); }, []);
+    return { toast, show, dismiss };
+}
+
+/* #10: Swap success confetti burst */
+const CONFETTI_COLORS = ['#34d399', '#818cf8', '#f59e0b', '#f472b6', '#22d3ee'];
+const CONFETTI_PARTICLES = Array.from({ length: 20 }).map((_, i) => ({
+    left: `${30 + Math.random() * 40}%`,
+    bg: CONFETTI_COLORS[i % 5],
+    dur: `${0.6 + Math.random() * 0.5}s`,
+    delay: `${i * 30}ms`,
+    tx: `${(Math.random() > 0.5 ? 1 : -1) * (30 + Math.random() * 60)}px`,
+    ty: `-${60 + Math.random() * 80}px`,
+}));
+function SwapSuccessAnim({ active }) {
+    if (!active) return null;
+    return (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-50">
+            {CONFETTI_PARTICLES.map((p, i) => (
+                <div key={i} className="absolute w-2 h-2 rounded-full" style={{
+                    left: p.left, top: '40%', background: p.bg,
+                    animation: `confetti-${i} ${p.dur} ease-out forwards`,
+                    animationDelay: p.delay,
+                }} />
+            ))}
+            <style>{CONFETTI_PARTICLES.map((p, i) => `
+                @keyframes confetti-${i} {
+                    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+                    100% { transform: translate(${p.tx}, ${p.ty}) scale(0); opacity: 0; }
+                }
+            `).join('') + `
+                @keyframes slideInRight {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                .animate-slideInRight { animation: slideInRight 0.3s ease-out; }
+            `}</style>
+        </div>
+    );
+}
+
+/* #2: Recent pairs helper (stored in localStorage) */
+const RECENT_PAIRS_KEY = 'xbot_recent_swap_pairs';
+function getRecentPairs() {
+    try { return JSON.parse(localStorage.getItem(RECENT_PAIRS_KEY) || '[]').slice(0, 5); } catch { return []; }
+}
+function addRecentPair(from, to) {
+    const key = `${from}→${to}`;
+    const pairs = getRecentPairs().filter(p => p !== key);
+    pairs.unshift(key);
+    localStorage.setItem(RECENT_PAIRS_KEY, JSON.stringify(pairs.slice(0, 5)));
+}
+
+/* #12: CSV template download for batch transfer */
+function downloadCsvTemplate() {
+    const csv = 'walletId,toAddress,amount\n1,0x0000000000000000000000000000000000000000,0.01\n2,0x0000000000000000000000000000000000000001,0.02';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'batch_transfer_template.csv'; a.click();
+    URL.revokeObjectURL(url);
+}
 
 const KNOWN_TOKENS = {
     '196': {
@@ -45,6 +146,15 @@ const KNOWN_TOKENS = {
         'USDT': { addr: '0x55d398326f99059ff775485246999027b3197955', icon: '₮', decimals: 18 },
     },
 };
+
+/* Reusable token icon — renders <img> if logoUrl available, emoji fallback */
+function TokenIcon({ token, size = 20, className = '' }) {
+    const [imgErr, setImgErr] = useState(false);
+    if (token?.logoUrl && !imgErr) {
+        return <img src={token.logoUrl} alt="" width={size} height={size} className={`rounded-full object-cover ${className}`} onError={() => setImgErr(true)} />;
+    }
+    return <span className={className} style={{ fontSize: size * 0.7 }}>{token?.icon || '🪙'}</span>;
+}
 
 function formatPrice(p) {
     const n = Number(p || 0);
@@ -86,20 +196,22 @@ function Sparkline({ data, color = '#818cf8', width = 80, height = 28 }) {
 /* ─── Animated count-up ─── */
 function CountUp({ value, decimals = 4, duration = 600 }) {
     const [display, setDisplay] = useState(0);
-    const ref = useRef(null);
+    const rafRef = useRef(null);
+    const displayRef = useRef(0);
+    displayRef.current = display;
     useEffect(() => {
         const target = Number(value || 0);
-        const start = display;
+        const start = displayRef.current;
         const startTime = Date.now();
         const animate = () => {
             const elapsed = Date.now() - startTime;
             const progress = Math.min(elapsed / duration, 1);
             const eased = 1 - Math.pow(1 - progress, 3);
             setDisplay(start + (target - start) * eased);
-            if (progress < 1) ref.current = requestAnimationFrame(animate);
+            if (progress < 1) rafRef.current = requestAnimationFrame(animate);
         };
-        ref.current = requestAnimationFrame(animate);
-        return () => cancelAnimationFrame(ref.current);
+        rafRef.current = requestAnimationFrame(animate);
+        return () => cancelAnimationFrame(rafRef.current);
     }, [value]);
     return <span>{display < 0.01 && display > 0 ? display.toFixed(8) : display.toFixed(decimals)}</span>;
 }
@@ -329,6 +441,7 @@ function RecentTrades({ chainIndex, tokenAddress }) {
    Wallet Dropdown — Premium custom select with balances
    ═══════════════════════════════════════════ */
 function WalletDropdown({ wallets = [], value, onChange, accentColor = 'violet', chainIndex = '196' }) {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [balances, setBalances] = useState({}); // { [walletId]: { totalValue, tokens } }
     const [loadingBal, setLoadingBal] = useState({});
@@ -501,7 +614,7 @@ function WalletDropdown({ wallets = [], value, onChange, accentColor = 'violet',
                 <div className="mt-1.5">
                     <button onClick={() => setShowTokens(!showTokens)} className="text-[9px] text-surface-200/25 hover:text-surface-200/50 transition-colors flex items-center gap-1">
                         <ChevronDown size={9} className={`transition-transform ${showTokens ? 'rotate-180' : ''}`} />
-                        {showTokens ? 'Hide' : 'Show'} balances ({selectedBal.tokens.filter(t => Number(t.balance) > 0).length} tokens)
+                        {showTokens ? t('dashboard.tradingUx.hideBalances', 'Hide balances') : t('dashboard.tradingUx.showBalances', 'Show balances')} ({selectedBal.tokens.filter(t => Number(t.balance) > 0).length} {t('dashboard.tradingUx.tokens', 'tokens')})
                     </button>
                     {showTokens && (
                         <div className="mt-1 rounded-lg bg-surface-900/40 border border-white/[0.04] max-h-[120px] overflow-y-auto">
@@ -526,9 +639,12 @@ function WalletDropdown({ wallets = [], value, onChange, accentColor = 'violet',
 /* ═══════════════════════════════════════════
    Swap Quote Widget — Premium v3 (All features)
    ═══════════════════════════════════════════ */
-function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWallet = null }) {
+function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWallet = null, onSwapToken }) {
+    const { t } = useTranslation();
     const [searchParams] = useState(() => new URLSearchParams(window.location.search));
-    const tokens = KNOWN_TOKENS[chainIndex] || KNOWN_TOKENS['196'];
+    const knownTokens = KNOWN_TOKENS[chainIndex] || KNOWN_TOKENS['196'];
+    const [customTokens, setCustomTokens] = useState({});
+    const tokens = useMemo(() => ({ ...knownTokens, ...customTokens }), [knownTokens, customTokens]);
 
     const resolveToParam = () => {
         const toParam = searchParams.get('to')?.toLowerCase();
@@ -565,6 +681,20 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
     const [batchAmounts, setBatchAmounts] = useState({});
     const [batchExecuting, setBatchExecuting] = useState(false);
     const [batchResults, setBatchResults] = useState([]);
+    const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
+    const [batchShowConfirm, setBatchShowConfirm] = useState(false);
+    const [batchWalletBalances, setBatchWalletBalances] = useState({}); // {walletId: {balance, logoUrl}}
+    // U1: Wallet balance for selected token
+    const [walletBalance, setWalletBalance] = useState(null);
+    const [balanceLoading, setBalanceLoading] = useState(false);
+    const [walletTokens, setWalletTokens] = useState([]); // all tokens from selected wallet
+    const showToast = onSwapToken; // onSwapToken is actually the main page's showToast
+    // U2: Auto-refresh quote
+    const [quoteCountdown, setQuoteCountdown] = useState(0);
+    const quoteTimerRef = useRef(null);
+    const countdownRef = useRef(null);
+    // U5: AbortController for search
+    const searchAbortRef = useRef(null);
     const batchSelectedCount = wallets.filter(w => batchSelectedWallets[w.id]).length;
     const batchSelectAll = () => {
         const allSel = wallets.every(w => batchSelectedWallets[w.id]);
@@ -572,33 +702,122 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
     };
     const handleBatchSwap = async () => {
         if (batchSelectedCount === 0) return;
-        setBatchExecuting(true); setBatchResults([]);
-        try {
-            const swaps = wallets.filter(w => batchSelectedWallets[w.id]).map(w => ({ walletId: w.id, amount: batchSameAmount ? batchAmount : (batchAmounts[w.id] || batchAmount) }));
-            const res = await api.batchSwap({ swaps, chainIndex, fromTokenAddress: tokens[fromSymbol].addr, toTokenAddress: tokens[toSymbol].addr, slippage });
-            setBatchResults(res.results || []);
-        } catch (err) { setBatchResults([{ error: err.message }]); }
+        setBatchExecuting(true); setBatchResults([]); setBatchProgress({ done: 0, total: batchSelectedCount });
+        const selectedList = wallets.filter(w => batchSelectedWallets[w.id]);
+        const results = [];
+        for (let i = 0; i < selectedList.length; i++) {
+            const w = selectedList[i];
+            const amt = batchSameAmount ? batchAmount : (batchAmounts[w.id] || batchAmount);
+            try {
+                const res = await api.executeSwap({
+                    walletId: w.id, chainIndex,
+                    fromTokenAddress: tokens[fromSymbol].addr,
+                    toTokenAddress: tokens[toSymbol].addr,
+                    amount: amt, slippage
+                });
+                results.push({ walletId: w.id, walletName: w.name || `Wallet ${w.id}`, txHash: res.txHash, amount: amt });
+            } catch (err) {
+                results.push({ walletId: w.id, walletName: w.name || `Wallet ${w.id}`, error: err.message, amount: amt });
+            }
+            setBatchProgress({ done: i + 1, total: selectedList.length });
+            setBatchResults([...results]);
+        }
         setBatchExecuting(false);
+        setBatchShowConfirm(false);
+        // Toast summary
+        const ok = results.filter(r => r.txHash).length;
+        const fail = results.length - ok;
+        if (showToast) showToast(ok > 0 && fail === 0 ? 'success' : ok > 0 ? 'warning' : 'error',
+            `Batch Swap: ${ok}/${results.length} ${t('dashboard.tradingUx.success', 'success')}${fail > 0 ? `, ${fail} ${t('dashboard.tradingUx.failed', 'failed')}` : ''}`);
     };
+
+    // Fetch balance for each selected wallet (for batch display)
+    useEffect(() => {
+        const selected = wallets.filter(w => batchSelectedWallets[w.id]);
+        if (selected.length === 0 || swapMode !== 'batch') return;
+        selected.forEach(w => {
+            if (batchWalletBalances[w.id]) return; // already fetched
+            api.getWalletBalance(w.id).then(res => {
+                const balances = res.tokens || [];
+                const sym = fromSymbol.toUpperCase();
+                const match = balances.find(b => (b.symbol || b.tokenSymbol || '').toUpperCase() === sym);
+                setBatchWalletBalances(prev => ({ ...prev, [w.id]: { balance: match ? Number(match.balance || 0) : 0, logoUrl: match?.logoUrl || '' } }));
+            }).catch(() => {});
+        });
+    }, [batchSelectedWallets, fromSymbol, swapMode]);
+    // Clear batch balances when FROM changes
+    useEffect(() => { setBatchWalletBalances({}); }, [fromSymbol]);
 
     // Notify parent of selected TO token
     useEffect(() => { onTokenSelect?.(toSymbol, tokens[toSymbol]?.addr); }, [toSymbol]);
 
-    // Token search (#1)
+    // U5: Token search with AbortController
     useEffect(() => {
         if (searchQuery.length < 2) { setSearchResults([]); return; }
         const timer = setTimeout(async () => {
+            // Cancel previous request
+            if (searchAbortRef.current) searchAbortRef.current.abort();
+            const controller = new AbortController();
+            searchAbortRef.current = controller;
             setSearching(true);
             try {
                 const res = await api.searchToken(searchQuery, chainIndex);
-                setSearchResults((res.data || []).slice(0, 8));
-            } catch { setSearchResults([]); }
-            setSearching(false);
+                if (!controller.signal.aborted) {
+                    setSearchResults((res.data || []).slice(0, 8));
+                }
+            } catch {
+                if (!controller.signal.aborted) setSearchResults([]);
+            }
+            if (!controller.signal.aborted) setSearching(false);
         }, 300);
-        return () => clearTimeout(timer);
+        return () => { clearTimeout(timer); if (searchAbortRef.current) searchAbortRef.current.abort(); };
     }, [searchQuery, chainIndex]);
 
-    const getQuote = async () => {
+    // U1: Fetch wallet balance when wallet or fromSymbol changes
+    useEffect(() => {
+        const wId = swapWalletId;
+        if (!wId) { setWalletBalance(null); return; }
+        setBalanceLoading(true);
+        api.getWalletBalance(wId)
+            .then(res => {
+                const balances = res.tokens || res.balances || res.tokenAssets || [];
+                setWalletTokens(balances); // store all tokens for chips
+
+                // Sync logos from API into customTokens so dropdown shows real icons
+                const logoUpdates = {};
+                balances.forEach(b => {
+                    const sym = (b.symbol || b.tokenSymbol || '').toUpperCase();
+                    const logo = b.tokenLogoUrl || b.logoUrl || b.logo || '';
+                    const addr = (b.tokenContractAddress || b.address || '').toLowerCase();
+                    if (sym && logo) {
+                        // Update existing known token or create new entry
+                        const knownEntry = knownTokens[sym];
+                        logoUpdates[sym] = {
+                            addr: knownEntry?.addr || addr,
+                            icon: knownEntry?.icon || '🪙',
+                            decimals: knownEntry?.decimals || Number(b.decimals || 18),
+                            logoUrl: logo,
+                        };
+                    }
+                });
+                if (Object.keys(logoUpdates).length > 0) {
+                    setCustomTokens(prev => ({ ...logoUpdates, ...prev, ...logoUpdates }));
+                }
+
+                const tokenAddr = tokens[fromSymbol]?.addr?.toLowerCase();
+                const isNative = tokenAddr === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+                const match = balances.find(b => {
+                    const bAddr = (b.tokenContractAddress || b.address || '').toLowerCase();
+                    if (isNative) return bAddr === '' || bAddr === tokenAddr || b.tokenSymbol?.toUpperCase() === fromSymbol.toUpperCase() || b.symbol?.toUpperCase() === fromSymbol.toUpperCase();
+                    return bAddr === tokenAddr || b.tokenSymbol?.toUpperCase() === fromSymbol.toUpperCase() || b.symbol?.toUpperCase() === fromSymbol.toUpperCase();
+                });
+                setWalletBalance(match ? Number(match.balance || match.holdingAmount || 0) : 0);
+            })
+            .catch(() => setWalletBalance(null))
+            .finally(() => setBalanceLoading(false));
+    }, [swapWalletId, fromSymbol, chainIndex]);
+
+    const getQuote = useCallback(async () => {
         if (!amount || Number(amount) <= 0) return;
         const from = tokens[fromSymbol];
         const to = tokens[toSymbol];
@@ -611,11 +830,48 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
             const data = await api.getSwapQuote({ chainIndex, fromTokenAddress: from.addr, toTokenAddress: to.addr, amount, slippage });
             const q = Array.isArray(data.data) ? data.data[0] : data.data;
             setQuote(q);
-            setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 1000);
+            addRecentPair(fromSymbol, toSymbol); // #2
+            // U2: Start auto-refresh countdown
+            startQuoteRefresh();
         } catch (err) { setError(err.message || 'Quote failed'); }
         setLoading(false);
-    };
+    }, [amount, fromSymbol, toSymbol, chainIndex, slippage, tokens]);
+
+    // #7: Keyboard shortcuts (only when not focused on inputs)
+    useEffect(() => {
+        const handleKey = (e) => {
+            const tag = e.target.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+            if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                getQuote();
+            }
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [getQuote]);
+
+    // U2: Auto-refresh quote every 15s
+    const QUOTE_REFRESH_INTERVAL = 15;
+    const startQuoteRefresh = useCallback(() => {
+        clearInterval(quoteTimerRef.current);
+        clearInterval(countdownRef.current);
+        setQuoteCountdown(QUOTE_REFRESH_INTERVAL);
+        countdownRef.current = setInterval(() => {
+            setQuoteCountdown(prev => {
+                if (prev <= 1) { clearInterval(countdownRef.current); return 0; }
+                return prev - 1;
+            });
+        }, 1000);
+        quoteTimerRef.current = setTimeout(() => {
+            // Auto-refresh
+            getQuote();
+        }, QUOTE_REFRESH_INTERVAL * 1000);
+    }, []);
+    // Clear timers on unmount or when switching tokens
+    useEffect(() => {
+        return () => { clearTimeout(quoteTimerRef.current); clearInterval(countdownRef.current); };
+    }, [fromSymbol, toSymbol, amount]);
 
     const adjustAmount = (delta) => {
         const n = Math.max(0, Number(amount || 0) + delta);
@@ -628,12 +884,46 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
     const gasEstimate = routerResult?.estimateGasFee || quote?.estimateGasFee;
     const dexRoutes = routerResult?.quoteCompareList || quote?.quoteCompareList || [];
 
-    // Token list for dropdown - favorites first, then known, then search results
+    // Token list for dropdown — wallet tokens first (with balance + logo), then remaining known tokens
     const getTokenList = (exclude) => {
         const list = [];
+        const added = new Set();
+
+        // 1. Favorites first (from wallet tokens if available)
         const favTokens = favs.filter(f => tokens[f] && f !== exclude);
-        favTokens.forEach(sym => list.push({ sym, ...tokens[sym], isFav: true }));
-        Object.entries(tokens).filter(([k]) => k !== exclude && !favs.includes(k)).forEach(([sym, info]) => list.push({ sym, ...info, isFav: false }));
+        favTokens.forEach(sym => {
+            const wt = walletTokens.find(t => (t.symbol || t.tokenSymbol || '').toUpperCase() === sym.toUpperCase());
+            list.push({ sym, ...tokens[sym], isFav: true, walletBalance: wt ? Number(wt.balance || 0) : null, walletLogoUrl: wt?.logoUrl || '' });
+            added.add(sym.toUpperCase());
+        });
+
+        // 2. Wallet tokens (non-favorites, non-zero balance) — these are the PRIMARY items
+        if (walletTokens.length > 0) {
+            walletTokens
+                .filter(wt => Number(wt.balance || 0) > 0)
+                .forEach(wt => {
+                    const sym = (wt.symbol || wt.tokenSymbol || '?').toUpperCase();
+                    if (sym === exclude?.toUpperCase() || added.has(sym)) return;
+                    const knownEntry = tokens[sym];
+                    list.push({
+                        sym,
+                        addr: knownEntry?.addr || (wt.tokenContractAddress || wt.address || '').toLowerCase(),
+                        icon: knownEntry?.icon || '🪙',
+                        decimals: knownEntry?.decimals || Number(wt.decimals || 18),
+                        logoUrl: wt.logoUrl || knownEntry?.logoUrl || '',
+                        isFav: false,
+                        walletBalance: Number(wt.balance || 0),
+                        walletLogoUrl: wt.logoUrl || '',
+                    });
+                    added.add(sym);
+                });
+        }
+
+        // 3. Remaining known tokens not yet added (for TO selector or tokens with 0 balance)
+        Object.entries(tokens).filter(([k]) => k !== exclude && !added.has(k.toUpperCase())).forEach(([sym, info]) => {
+            list.push({ sym, ...info, isFav: false, walletBalance: null, walletLogoUrl: '' });
+        });
+
         return list;
     };
 
@@ -685,8 +975,10 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                         {searching && <Loader2 size={10} className="animate-spin text-surface-200/30" />}
                     </div>
                 </div>
-                {/* Known tokens */}
-                {list.map(({ sym, icon, isFav: f }) => (
+                {/* Token list — wallet tokens with balance + logo */}
+                {list.map(({ sym, icon, isFav: f, walletBalance, walletLogoUrl, logoUrl: entryLogo }) => {
+                    const logo = walletLogoUrl || entryLogo || tokens[sym]?.logoUrl || '';
+                    return (
                     <button
                         key={sym}
                         onClick={() => { onChange(sym); setOpen(false); setSearchQuery(''); }}
@@ -695,13 +987,19 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                         }`}
                     >
                         {f && <Star size={10} className="text-amber-400 fill-amber-400" />}
-                        <span className="text-base">{icon}</span>
+                        <span className="text-base">
+                            {logo ? <img src={logo} alt="" width={18} height={18} className="rounded-full object-cover inline" onError={e => { e.target.style.display = 'none'; }} /> : <TokenIcon token={tokens[sym]} size={18} />}
+                        </span>
                         <span className="font-medium flex-1 text-left">{sym}</span>
+                        {walletBalance != null && walletBalance > 0 && (
+                            <span className="text-[9px] text-surface-200/30 font-mono">{parseFloat(Number(walletBalance).toFixed(4))}</span>
+                        )}
                         <button onClick={e => { e.stopPropagation(); toggleFav(sym); }} className="p-0.5 hover:text-amber-400 transition-colors">
                             {isFav(sym) ? <Star size={10} className="text-amber-400 fill-amber-400" /> : <StarOff size={10} className="text-surface-200/20" />}
                         </button>
                     </button>
-                ))}
+                    );
+                })}
                 {/* Search results */}
                 {searchResults.length > 0 && (
                     <>
@@ -712,7 +1010,7 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                                 onClick={() => {
                                     const sym = t.tokenSymbol || '?';
                                     if (!tokens[sym]) {
-                                        tokens[sym] = { addr: t.tokenContractAddress, icon: '🪙', decimals: Number(t.decimals || 18) };
+                                        setCustomTokens(prev => ({ ...prev, [sym]: { addr: t.tokenContractAddress, icon: '🪙', decimals: Number(t.decimals || 18), logoUrl: t.tokenLogoUrl || t.logoUrl || '' } }));
                                     }
                                     onChange(sym);
                                     setOpen(false);
@@ -721,7 +1019,7 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                                 }}
                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200/60 hover:bg-white/[0.05] hover:text-surface-100 transition-all"
                             >
-                                <span>🪙</span>
+                                <span>{t.tokenLogoUrl ? <img src={t.tokenLogoUrl} alt="" width={16} height={16} className="rounded-full inline" /> : '🪙'}</span>
                                 <div className="flex-1 text-left">
                                     <span className="font-medium">{t.tokenSymbol || '?'}</span>
                                     <span className="text-[9px] text-surface-200/20 ml-1.5">{t.tokenFullName}</span>
@@ -743,7 +1041,7 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                     onClick={() => setOpen(!open)}
                     className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] text-surface-100 text-sm font-semibold transition-all w-full"
                 >
-                    <span className="text-lg">{tokens[value]?.icon || '?'}</span>
+                    <span className="text-lg"><TokenIcon token={tokens[value]} size={22} /></span>
                     <span className="flex-1 text-left font-bold">{value}</span>
                     <ChevronDown size={14} className={`text-surface-200/30 transition-transform ${open ? 'rotate-180' : ''}`} />
                 </button>
@@ -761,21 +1059,15 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                 <div className="w-8 h-8 rounded-xl bg-brand-500/15 flex items-center justify-center">
                     <ArrowLeftRight size={15} className="text-brand-400" />
                 </div>
-                <h3 className="text-sm font-bold text-surface-100 flex-1">Swap</h3>
+                <h3 className="text-sm font-bold text-surface-100 flex-1">{t('dashboard.tradingUx.swap', 'Swap')}</h3>
                 <button onClick={() => setShowSlippage(!showSlippage)} className={`p-1.5 rounded-lg transition-all ${showSlippage ? 'bg-brand-500/15 text-brand-400' : 'text-surface-200/30 hover:text-surface-200/60'}`}>
                     <Settings size={14} />
-                </button>
-                <button onClick={() => {
-                    const price = prompt('Set alert price (USD):');
-                    if (price && !isNaN(price)) alert(`✅ Price alert set at $${price} for ${toSymbol}`);
-                }} className="p-1.5 rounded-lg text-surface-200/30 hover:text-amber-400 transition-all" title="Set Price Alert">
-                    <Bell size={14} />
                 </button>
             </div>
 
             {/* Single / Batch tab */}
             <div className="flex rounded-lg bg-surface-800/60 p-0.5 mb-4">
-                {[['single', '🔄 Single'], ['batch', '🔶 Batch (' + wallets.length + ')']].map(([key, label]) => (
+                {[['single', `🔄 ${t('dashboard.tradingUx.single', 'Single')}`], ['batch', `🔶 ${t('dashboard.tradingUx.batch', 'Batch')} (${wallets.length})`]].map(([key, label]) => (
                     <button key={key} onClick={() => setSwapMode(key)}
                         className={`flex-1 py-1.5 text-[10px] font-semibold rounded-md transition-all ${swapMode === key ? 'bg-surface-700 text-surface-100 shadow-sm' : 'text-surface-200/30 hover:text-surface-200/50'}`}>
                         {label}
@@ -787,7 +1079,7 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
             {/* Slippage panel (#5) */}
             {showSlippage && (
                 <div className="mb-4 p-3 rounded-xl bg-surface-900/60 border border-white/[0.06] animate-fadeIn">
-                    <p className="text-[9px] text-surface-200/30 uppercase tracking-widest mb-2 font-semibold">Slippage Tolerance</p>
+                    <p className="text-[9px] text-surface-200/30 uppercase tracking-widest mb-2 font-semibold">{t('dashboard.tradingUx.slippageTolerance', 'Slippage Tolerance')}</p>
                     <div className="flex gap-1.5">
                         {['0.5', '1', '3'].map(v => (
                             <button key={v} onClick={() => setSlippage(v)}
@@ -797,8 +1089,11 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                         ))}
                         <input type="number" value={!['0.5', '1', '3'].includes(slippage) ? slippage : ''} onChange={e => setSlippage(e.target.value || '1')}
                             className="flex-1 bg-surface-800/60 border border-white/[0.06] rounded-lg px-2 py-1.5 text-xs text-surface-100 text-center outline-none placeholder:text-surface-200/20 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            placeholder="Custom %" />
+                            placeholder={t('dashboard.tradingUx.customPct', 'Custom %')} />
                     </div>
+                    {/* #4: Slippage warning */}
+                    {Number(slippage) < 0.1 && <p className="text-[9px] text-amber-400 mt-1 flex items-center gap-1"><AlertTriangle size={9} /> {t('dashboard.tradingUx.slippageLow', 'Slippage too low — transaction may fail')}</p>}
+                    {Number(slippage) > 5 && <p className="text-[9px] text-red-400 mt-1 flex items-center gap-1"><AlertTriangle size={9} /> {t('dashboard.tradingUx.slippageHigh', 'High slippage — risk of front-running')}</p>}
                 </div>
             )}
 
@@ -818,15 +1113,70 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                             <button onClick={() => adjustAmount(1)} className="px-3 py-3 text-surface-200/30 hover:text-surface-100 hover:bg-white/[0.06] transition-colors text-lg font-bold border-l border-white/[0.04]">+</button>
                         </div>
                     </div>
-                    {/* Quick presets (#3) */}
+                    {/* Quick presets \u2014 U1: use wallet balance */}
                     <div className="flex gap-1 mt-1.5">
                         {[{ label: '25%', val: 0.25 }, { label: '50%', val: 0.5 }, { label: '75%', val: 0.75 }, { label: 'MAX', val: 1 }].map(p => (
-                            <button key={p.label} onClick={() => setAmount(String(Number(amount || 1) * p.val || p.val))}
+                            <button key={p.label} onClick={() => {
+                                if (walletBalance != null && walletBalance > 0) {
+                                    setAmount(String(+(walletBalance * p.val).toFixed(8)));
+                                } else {
+                                    const current = Number(amount || 0);
+                                    if (current > 0) setAmount(String(+(current * p.val).toFixed(8)));
+                                }
+                            }}
                                 className="flex-1 py-1 rounded-lg text-[9px] font-bold text-surface-200/30 bg-surface-800/40 border border-white/[0.04] hover:text-brand-400 hover:border-brand-500/20 transition-all">
                                 {p.label}
                             </button>
                         ))}
                     </div>
+                    {/* U1: Show wallet balance + token chips */}
+                    {swapWalletId && (
+                        <>
+                        <div className="flex items-center justify-end mt-1 text-[9px]">
+                            {balanceLoading ? (
+                                <span className="text-surface-200/20">{t('dashboard.tradingUx.loadingBalance', 'Loading balance...')}</span>
+                            ) : walletBalance != null ? (
+                                <span className="text-surface-200/30">{t('dashboard.tradingUx.available', 'Available')}: <b className="text-surface-200/60">{walletBalance > 0 ? parseFloat(Number(walletBalance).toFixed(4)) : '0'}</b> {fromSymbol}</span>
+                            ) : null}
+                        </div>
+                        {/* Wallet token chips: show all tokens in wallet for quick select */}
+                        {(() => {
+                            const wBal = walletTokens;
+                            if (!wBal || wBal.length === 0) return null;
+                            return (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {wBal.filter(tk => Number(tk.balance || 0) > 0).map((tk, i) => {
+                                        const sym = (tk.symbol || tk.tokenSymbol || '?').toUpperCase();
+                                        const isActive = sym === fromSymbol.toUpperCase();
+                                        const logo = tk.tokenLogoUrl || tk.logoUrl || tk.logo || null;
+                                        const bal = parseFloat(Number(tk.balance || 0).toFixed(4));
+                                        return (
+                                            <button key={i} onClick={() => {
+                                                // Auto-register token if not in known/custom tokens
+                                                let match = Object.entries(tokens).find(([k]) => k.toUpperCase() === sym);
+                                                if (!match) {
+                                                    const addr = (tk.tokenContractAddress || tk.address || '').toLowerCase();
+                                                    setCustomTokens(prev => ({ ...prev, [sym]: { addr, icon: '🪙', decimals: Number(tk.decimals || 18), logoUrl: logo || '' } }));
+                                                    setFromSymbol(sym);
+                                                } else {
+                                                    setFromSymbol(match[0]);
+                                                }
+                                            }}
+                                                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] border transition-all ${isActive
+                                                    ? 'bg-brand-500/15 border-brand-500/25 text-brand-400 font-bold'
+                                                    : 'bg-surface-800/40 border-white/[0.04] text-surface-200/40 hover:text-brand-400 hover:border-brand-500/15'}`}
+                                            >
+                                                {logo ? <img src={logo} alt="" className="w-3 h-3 rounded-full" /> : null}
+                                                <span>{sym}</span>
+                                                <span className="text-surface-200/20 font-mono">{bal}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
+                        </>
+                    )}
                 </div>
 
                 <div className="flex justify-center">
@@ -839,11 +1189,24 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                 {/* TO */}
                 <TokenDropdown value={toSymbol} onChange={setToSymbol} open={openTo} setOpen={(v) => { setOpenTo(v); setOpenFrom(false); }} exclude={fromSymbol} label="To" />
 
+                {/* #2: Recent pairs */}
+                {getRecentPairs().length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[8px] text-surface-200/20 uppercase tracking-wider">{t('dashboard.tradingUx.recentPairs', 'Recent')}:</span>
+                        {getRecentPairs().map(pair => {
+                            const [f, to] = pair.split('→');
+                            return (<button key={pair} onClick={() => { setFromSymbol(f); setToSymbol(to); }} className="px-2 py-0.5 rounded-md text-[9px] bg-surface-800/50 border border-white/[0.05] text-surface-200/40 hover:text-brand-400 hover:border-brand-500/20 transition-all">{pair}</button>);
+                        })}
+                    </div>
+                )}
+
                 <button onClick={getQuote} disabled={loading}
                     className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 hover:scale-[1.02] active:scale-95 transition-all duration-200 disabled:opacity-50">
                     {loading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-                    Get Quote
+                    {t('dashboard.tradingUx.getQuote', 'Get Quote')}
                 </button>
+                {/* #7: Keyboard shortcut hint */}
+                <p className="text-[8px] text-surface-200/15 text-center">{t('dashboard.tradingUx.kbdQuote', 'Press Enter to Get Quote')}</p>
 
                 {error && <p className="text-xs text-red-400 text-center bg-red-500/10 rounded-lg py-2 border border-red-500/20">{error}</p>}
 
@@ -851,33 +1214,47 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                 {toAmount !== null && (
                     <div className="bg-surface-900/60 rounded-xl p-4 border border-white/[0.06] space-y-2.5 animate-fadeIn">
                         <div className="flex justify-between text-xs">
-                            <span className="text-surface-200/40 font-medium">You Get</span>
-                            <span className="text-surface-100 font-bold text-sm">
-                                <CountUp value={toAmount} decimals={6} /> {routerResult?.toTokenSymbol || toSymbol}
-                            </span>
+                            <span className="text-surface-200/40 font-medium">{t('dashboard.tradingUx.youGet', 'You Get')}</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-surface-100 font-bold text-sm">
+                                    <CountUp value={toAmount} decimals={6} /> {routerResult?.toTokenSymbol || toSymbol}
+                                </span>
+                                {/* U2: Auto-refresh countdown */}
+                                {quoteCountdown > 0 && (
+                                    <span className="text-[9px] text-surface-200/25 flex items-center gap-1" title="Auto-refresh">
+                                        <RefreshCw size={9} className="animate-spin" style={{ animationDuration: '3s' }} />
+                                        {quoteCountdown}s
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         {priceImpact && (
                             <div className="flex justify-between text-xs">
-                                <span className="text-surface-200/40 font-medium">Price Impact</span>
-                                <span className={`font-semibold ${Number(priceImpact) > 5 ? 'text-red-400' : 'text-emerald-400'}`}>{Number(priceImpact).toFixed(2)}%</span>
+                                <span className="text-surface-200/40 font-medium">{t('dashboard.tradingUx.priceImpact', 'Price Impact')}</span>
+                                <div className="flex items-center gap-1.5">
+                                    <span className={`font-semibold ${Number(priceImpact) <= 1 ? 'text-emerald-400' : Number(priceImpact) <= 3 ? 'text-amber-400' : 'text-red-400'}`}>{Number(priceImpact).toFixed(2)}%</span>
+                                    <span className={`text-[8px] ${Number(priceImpact) <= 1 ? 'text-emerald-400/50' : Number(priceImpact) <= 3 ? 'text-amber-400/50' : 'text-red-400/50'}`}>
+                                        {Number(priceImpact) <= 1 ? t('dashboard.tradingUx.priceImpactLow', 'Low') : Number(priceImpact) <= 3 ? t('dashboard.tradingUx.priceImpactMed', 'Moderate') : t('dashboard.tradingUx.priceImpactHigh', 'High!')}
+                                    </span>
+                                </div>
                             </div>
                         )}
                         {/* Gas estimate (#10) */}
                         {gasEstimate && (
                             <div className="flex justify-between text-xs">
-                                <span className="text-surface-200/40 font-medium">Est. Gas</span>
+                                <span className="text-surface-200/40 font-medium">{t('dashboard.tradingUx.estGas', 'Est. Gas')}</span>
                                 <span className="text-surface-200/50">{Number(gasEstimate) > 1e6 ? `${(Number(gasEstimate) * 1e-9).toFixed(4)} Gwei` : gasEstimate}</span>
                             </div>
                         )}
                         <div className="flex justify-between text-xs">
-                            <span className="text-surface-200/40 font-medium">Slippage</span>
+                            <span className="text-surface-200/40 font-medium">{t('dashboard.tradingUx.slippage', 'Slippage')}</span>
                             <span className="text-surface-200/50">{slippage}%</span>
                         </div>
 
                         {/* Route comparison (#6) */}
                         {dexRoutes.length > 0 && (
                             <div className="mt-2 pt-2 border-t border-white/[0.04]">
-                                <p className="text-[9px] text-surface-200/25 uppercase tracking-widest mb-1.5 font-semibold">DEX Routes</p>
+                                <p className="text-[9px] text-surface-200/25 uppercase tracking-widest mb-1.5 font-semibold">{t('dashboard.tradingUx.dexRoutes', 'DEX Routes')}</p>
                                 {dexRoutes.slice(0, 4).map((r, i) => {
                                     const receiveAmt = Number(r.receiveAmount || 0) / Math.pow(10, Number(routerResult?.toToken?.decimal || 18));
                                     return (
@@ -901,6 +1278,10 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                             slippage={slippage}
                             wallets={wallets}
                             selectedWallet={wallets.find(w => String(w.id) === String(swapWalletId)) || null}
+                            showToast={showToast}
+                            fromSymbol={fromSymbol}
+                            toSymbol={routerResult?.toTokenSymbol || toSymbol}
+                            expectedOutput={toAmount}
                         />
                     </div>
                 )}
@@ -908,53 +1289,101 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
             </>) : (
             /* ═══ Batch Swap Mode ═══ */
             <div className="space-y-3">
-                {/* Token pair — reuses same fromSymbol/toSymbol */}
+                {/* Token pair — with logos (P1) */}
                 <div className="grid grid-cols-2 gap-2">
                     <div>
-                        <label className="text-[9px] text-surface-200/25 mb-0.5 block">FROM</label>
-                        <CustomSelect value={fromSymbol} onChange={setFromSymbol} size="sm"
-                            options={Object.keys(tokens).map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
+                        <label className="text-[9px] text-surface-200/25 mb-0.5 block">{t('dashboard.tradingUx.from', 'FROM')}</label>
+                        <div className="flex flex-wrap gap-1">
+                            {(walletTokens.length > 0
+                                ? walletTokens.filter(wt => Number(wt.balance || 0) > 0).map(wt => {
+                                    const sym = (wt.symbol || wt.tokenSymbol || '?').toUpperCase();
+                                    const logo = wt.logoUrl || tokens[sym]?.logoUrl || '';
+                                    return (
+                                        <button key={sym} onClick={() => setFromSymbol(sym)}
+                                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-all ${fromSymbol === sym ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-surface-800/60 text-surface-200/50 border border-white/[0.06] hover:border-white/[0.12]'}`}>
+                                            {logo ? <img src={logo} alt="" width={12} height={12} className="rounded-full" onError={e => { e.target.style.display = 'none'; }} /> : <span>{tokens[sym]?.icon || '🪙'}</span>}
+                                            {sym}
+                                        </button>
+                                    );
+                                })
+                                : Object.keys(tokens).map(s => (
+                                    <button key={s} onClick={() => setFromSymbol(s)}
+                                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-all ${fromSymbol === s ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-surface-800/60 text-surface-200/50 border border-white/[0.06] hover:border-white/[0.12]'}`}>
+                                        {tokens[s]?.logoUrl ? <img src={tokens[s].logoUrl} alt="" width={12} height={12} className="rounded-full" onError={e => { e.target.style.display = 'none'; }} /> : <span>{tokens[s]?.icon || '🪙'}</span>}
+                                        {s}
+                                    </button>
+                                ))
+                            )}
+                        </div>
                     </div>
                     <div>
-                        <label className="text-[9px] text-surface-200/25 mb-0.5 block">TO</label>
-                        <CustomSelect value={toSymbol} onChange={setToSymbol} size="sm"
-                            options={Object.keys(tokens).filter(s => s !== fromSymbol).map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
+                        <label className="text-[9px] text-surface-200/25 mb-0.5 block">{t('dashboard.tradingUx.to', 'TO')}</label>
+                        <div className="flex flex-wrap gap-1">
+                            {(walletTokens.length > 0
+                                ? [...walletTokens.filter(wt => Number(wt.balance || 0) > 0), ...Object.entries(tokens).filter(([sym]) => !walletTokens.some(wt => (wt.symbol || '').toUpperCase() === sym)).map(([sym, info]) => ({ symbol: sym, logoUrl: info.logoUrl }))]
+                                    .filter(wt => (wt.symbol || wt.tokenSymbol || '?').toUpperCase() !== fromSymbol)
+                                    .map((wt, i) => {
+                                        const sym = (wt.symbol || wt.tokenSymbol || '?').toUpperCase();
+                                        const logo = wt.logoUrl || tokens[sym]?.logoUrl || '';
+                                        return (
+                                            <button key={`${sym}-${i}`} onClick={() => setToSymbol(sym)}
+                                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-all ${toSymbol === sym ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-surface-800/60 text-surface-200/50 border border-white/[0.06] hover:border-white/[0.12]'}`}>
+                                                {logo ? <img src={logo} alt="" width={12} height={12} className="rounded-full" onError={e => { e.target.style.display = 'none'; }} /> : <span>{tokens[sym]?.icon || '🪙'}</span>}
+                                                {sym}
+                                            </button>
+                                        );
+                                    })
+                                : Object.keys(tokens).filter(s => s !== fromSymbol).map(s => (
+                                    <button key={s} onClick={() => setToSymbol(s)}
+                                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-all ${toSymbol === s ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-surface-800/60 text-surface-200/50 border border-white/[0.06] hover:border-white/[0.12]'}`}>
+                                        {tokens[s]?.logoUrl ? <img src={tokens[s].logoUrl} alt="" width={12} height={12} className="rounded-full" onError={e => { e.target.style.display = 'none'; }} /> : <span>{tokens[s]?.icon || '🪙'}</span>}
+                                        {s}
+                                    </button>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
-                {/* Amount + Slippage */}
+                {/* Amount + Slippage (P7 i18n) */}
                 <div className="flex gap-2 items-end">
                     <div className="flex-1">
                         <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-surface-200/25">Amount per wallet</label>
+                            <label className="text-[9px] text-surface-200/25">{t('dashboard.tradingUx.amountPerWallet', 'Amount per wallet')}</label>
                             <button onClick={() => setBatchSameAmount(!batchSameAmount)} className="text-[8px] text-brand-400 hover:text-brand-300">
-                                {batchSameAmount ? 'Custom each ↗' : 'Same for all ↗'}
+                                {batchSameAmount ? t('dashboard.tradingUx.customEach', 'Custom each ↗') : t('dashboard.tradingUx.sameForAll', 'Same for all ↗')}
                             </button>
                         </div>
                         {batchSameAmount && (
                             <input type="number" value={batchAmount} onChange={e => setBatchAmount(e.target.value)}
-                                className="w-full bg-surface-800/80 border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-surface-100 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="Amount" />
+                                className="w-full bg-surface-800/80 border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-surface-100 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder={t('dashboard.tradingUx.amount', 'Amount')} />
                         )}
                     </div>
                     <div className="w-16">
-                        <label className="text-[9px] text-surface-200/25 mb-0.5 block">Slip %</label>
+                        <label className="text-[9px] text-surface-200/25 mb-0.5 block">{t('dashboard.tradingUx.slipPct', 'Slip %')}</label>
                         <input type="number" value={slippage} onChange={e => setSlippage(e.target.value)}
                             className="w-full bg-surface-800/80 border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-surface-100 text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                     </div>
                 </div>
-                {/* Wallet checkboxes */}
+                {/* Wallet checkboxes with balance (P2) */}
                 <div>
                     <div className="flex items-center justify-between mb-1">
-                        <span className="text-[9px] text-surface-200/25">Select wallets ({batchSelectedCount}/{wallets.length})</span>
+                        <span className="text-[9px] text-surface-200/25">{t('dashboard.tradingUx.selectWallets', 'Select wallets')} ({batchSelectedCount}/{wallets.length})</span>
                         <button onClick={batchSelectAll} className="text-[8px] text-brand-400 hover:text-brand-300">
-                            {wallets.every(w => batchSelectedWallets[w.id]) ? 'Deselect All' : 'Select All'}
+                            {wallets.every(w => batchSelectedWallets[w.id]) ? t('dashboard.tradingUx.deselectAll', 'Deselect All') : t('dashboard.tradingUx.selectAll', 'Select All')}
                         </button>
                     </div>
                     <div className="space-y-0.5 max-h-[140px] overflow-y-auto">
-                        {wallets.map(w => (
+                        {wallets.map(w => {
+                            const wb = batchWalletBalances[w.id];
+                            return (
                             <label key={w.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer border transition-colors ${batchSelectedWallets[w.id] ? 'bg-orange-500/10 border-orange-500/20 text-surface-100' : 'bg-surface-800/40 border-white/[0.04] text-surface-200/40 hover:border-white/[0.08]'}`}>
                                 <input type="checkbox" checked={!!batchSelectedWallets[w.id]} onChange={() => setBatchSelectedWallets(p => ({ ...p, [w.id]: !p[w.id] }))} className="w-3 h-3 rounded accent-orange-500" />
                                 <Wallet size={10} className={batchSelectedWallets[w.id] ? 'text-orange-400' : 'text-surface-200/20'} />
                                 <span className="flex-1 truncate">{w.name || `Wallet ${w.id}`}</span>
+                                {/* Per-wallet balance */}
+                                {batchSelectedWallets[w.id] && wb && (
+                                    <span className="text-[8px] font-mono text-surface-200/30">{parseFloat(Number(wb.balance).toFixed(4))} {fromSymbol}</span>
+                                )}
                                 <span className="text-[9px] font-mono text-surface-200/20">{w.address?.slice(0, 6)}...{w.address?.slice(-4)}</span>
                                 {!batchSameAmount && batchSelectedWallets[w.id] && (
                                     <input type="number" value={batchAmounts[w.id] || ''} onChange={e => setBatchAmounts(p => ({ ...p, [w.id]: e.target.value }))}
@@ -962,24 +1391,61 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                                         className="w-16 bg-surface-800/80 border border-white/[0.08] rounded px-1 py-0.5 text-[10px] text-surface-100 text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                 )}
                             </label>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
-                {/* Execute */}
-                <button onClick={handleBatchSwap} disabled={batchExecuting || batchSelectedCount === 0}
-                    className="w-full py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-lg hover:shadow-orange-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5">
-                    {batchExecuting ? <><Loader2 size={12} className="animate-spin" /> Swapping {batchSelectedCount} wallets...</> : <><Zap size={12} /> Batch Swap ({batchSelectedCount} wallets)</>}
-                </button>
+
+                {/* Confirmation dialog (P3) */}
+                {batchShowConfirm ? (
+                    <div className="space-y-2 animate-fadeIn bg-surface-900/60 rounded-xl p-3 border border-white/[0.06]">
+                        <p className="text-[10px] text-amber-400 flex items-center gap-1 font-semibold"><AlertTriangle size={11} /> {t('dashboard.tradingUx.confirmBatchSwap', 'Confirm batch swap:')}</p>
+                        <div className="space-y-1 text-[10px]">
+                            <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.pair', 'Pair')}</span><span className="text-surface-100 font-bold">{fromSymbol} → {toSymbol}</span></div>
+                            <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.wallets', 'Wallets')}</span><span className="text-surface-100">{batchSelectedCount}</span></div>
+                            <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.amountEach', 'Amount each')}</span><span className="text-surface-100">{batchSameAmount ? `${batchAmount} ${fromSymbol}` : t('dashboard.tradingUx.custom', 'Custom')}</span></div>
+                            <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.totalAmount', 'Total')}</span><span className="text-surface-100 font-bold">{batchSameAmount ? `${(Number(batchAmount) * batchSelectedCount).toFixed(4)} ${fromSymbol}` : t('dashboard.tradingUx.varies', 'Varies')}</span></div>
+                            <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.slipPct', 'Slippage')}</span><span className="text-surface-100">{slippage}%</span></div>
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                            <button onClick={() => setBatchShowConfirm(false)} className="flex-1 py-2 rounded-lg bg-surface-800/60 border border-white/[0.08] text-xs text-surface-200/50 hover:text-surface-100 transition-colors">{t('dashboard.common.cancel', 'Cancel')}</button>
+                            <button onClick={handleBatchSwap} disabled={batchExecuting}
+                                className="flex-1 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-bold hover:shadow-orange-500/25 transition-all disabled:opacity-40">
+                                {batchExecuting ? <Loader2 size={12} className="animate-spin mx-auto" /> : `✅ ${t('dashboard.tradingUx.confirmExecute', 'Confirm Execute')}`}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <button onClick={() => setBatchShowConfirm(true)} disabled={batchExecuting || batchSelectedCount === 0 || !batchAmount}
+                        className="w-full py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-lg hover:shadow-orange-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5">
+                        <Zap size={12} /> {t('dashboard.tradingUx.batchSwap', 'Batch Swap')} ({batchSelectedCount} {t('dashboard.tradingUx.wallets', 'wallets')})
+                    </button>
+                )}
+
+                {/* Progress bar (P4) */}
+                {batchExecuting && batchProgress.total > 0 && (
+                    <div>
+                        <div className="flex justify-between text-[9px] text-surface-200/30 mb-0.5">
+                            <span>{t('dashboard.tradingUx.swapping', 'Swapping')}...</span>
+                            <span>{batchProgress.done}/{batchProgress.total}</span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-surface-800/60 overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-orange-500 to-amber-500 rounded-full transition-all duration-300" style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }} />
+                        </div>
+                    </div>
+                )}
+
                 {/* Results */}
                 {batchResults.length > 0 && (
                     <div className="space-y-1">
-                        <p className="text-[9px] text-surface-200/30 font-semibold">Results:</p>
+                        <p className="text-[9px] text-surface-200/30 font-semibold">{t('dashboard.tradingUx.results', 'Results')}: {batchResults.filter(r => r.txHash).length}/{batchResults.length} ✓</p>
                         {batchResults.map((r, i) => (
                             <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-[10px] ${r.txHash ? 'bg-emerald-500/10 border border-emerald-500/15' : 'bg-red-500/10 border border-red-500/15'}`}>
                                 {r.txHash ? <Check size={10} className="text-emerald-400" /> : <AlertTriangle size={10} className="text-red-400" />}
                                 <span className="flex-1 truncate text-surface-100">{r.walletName || `Wallet ${r.walletId}`}</span>
+                                {r.amount && <span className="text-[8px] text-surface-200/30 font-mono">{r.amount} {fromSymbol}</span>}
                                 {r.txHash ? (
-                                    <a href={`https://www.okx.com/web3/explorer/xlayer/tx/${r.txHash}`} target="_blank" rel="noopener"
+                                    <a href={getExplorerTxUrl(chainIndex, r.txHash)} target="_blank" rel="noopener"
                                         className="text-brand-400 font-mono hover:text-brand-300">{r.txHash.slice(0, 10)}... <ExternalLink size={9} className="inline" /></a>
                                 ) : <span className="text-red-400 truncate max-w-[150px]">{r.error}</span>}
                             </div>
@@ -1118,7 +1584,7 @@ function TopTokensList({ chainIndex, onSelectToken }) {
 /* ═══════════════════════════════════════════
    TX History Widget
    ═══════════════════════════════════════════ */
-function TxHistory() {
+function TxHistory({ chainIndex }) {
     const [txs, setTxs] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -1149,21 +1615,30 @@ function TxHistory() {
                     {txs.map((tx, i) => {
                         const isSwap = tx.type?.includes('swap');
                         const date = tx.createdAt ? new Date(tx.createdAt * 1000).toLocaleString() : '—';
+                        const fromAmt = tx.fromAmount != null ? String(tx.fromAmount) : '—';
+                        const toAmt = tx.toAmount != null ? String(tx.toAmount) : '';
+                        const rate = tx.fromAmount && tx.toAmount && Number(tx.fromAmount) > 0
+                            ? String(Number(tx.toAmount) / Number(tx.fromAmount))
+                            : null;
                         return (
                             <div key={i} className="px-4 py-2.5 flex items-center gap-3 hover:bg-white/[0.02] transition-colors">
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center ${isSwap ? 'bg-brand-500/15' : 'bg-emerald-500/15'}`}>
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${isSwap ? 'bg-brand-500/15' : 'bg-emerald-500/15'}`}>
                                     {isSwap ? <ArrowLeftRight size={12} className="text-brand-400" /> : <ArrowUpRight size={12} className="text-emerald-400" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs text-surface-100 capitalize">{tx.type?.replace(/_/g, ' ') || 'Transaction'}</p>
+                                    {isSwap && tx.fromSymbol && tx.toSymbol && (
+                                        <p className="text-[10px] text-brand-400/60 font-semibold">{tx.fromSymbol} → {tx.toSymbol}</p>
+                                    )}
                                     <p className="text-[10px] text-surface-200/20">{date}</p>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-xs text-surface-100">{tx.fromAmount || '—'} {tx.fromSymbol || ''}</p>
-                                    {tx.toAmount && <p className="text-[10px] text-surface-200/30">→ {tx.toAmount} {tx.toSymbol || ''}</p>}
+                                <div className="text-right flex-shrink-0">
+                                    <p className="text-xs text-surface-100 font-mono">{fromAmt} <span className="text-surface-200/40">{tx.fromSymbol || ''}</span></p>
+                                    {toAmt && <p className="text-[10px] text-emerald-400 font-mono">→ {toAmt} <span className="text-emerald-400/50">{tx.toSymbol || ''}</span></p>}
+                                    {rate && <p className="text-[8px] text-surface-200/20 font-mono">1 {tx.fromSymbol} = {rate} {tx.toSymbol}</p>}
                                 </div>
                                 {tx.txHash && (
-                                    <a href={`https://www.okx.com/web3/explorer/xlayer/tx/${tx.txHash}`} target="_blank" rel="noopener"
+                                    <a href={getExplorerTxUrl(chainIndex, tx.txHash)} target="_blank" rel="noopener"
                                         className="text-surface-200/15 hover:text-brand-400 transition-colors">
                                         <ExternalLink size={10} />
                                     </a>
@@ -1243,10 +1718,12 @@ function ChainSelector({ selected, onChange }) {
    DCA Widget — Auto Buy/Sell on Schedule
    ═══════════════════════════════════════════ */
 function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
+    const { t } = useTranslation();
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState(null);
     const [wallets, setWallets] = useState(sharedWallets);
     const [openWalletDd, setOpenWalletDd] = useState(false);
     const [openIntervalDd, setOpenIntervalDd] = useState(false);
@@ -1318,8 +1795,9 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
             });
             setShowForm(false);
             setForm(f => ({ ...f, amount: '', toTokenAddress: '', toSymbol: '' }));
+            setCreateError(null);
             loadTasks();
-        } catch (err) { alert(err.message); }
+        } catch (err) { setCreateError(err.message); }
         setCreating(false);
     };
 
@@ -1409,7 +1887,7 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                 <div className="w-7 h-7 rounded-lg bg-violet-500/15 flex items-center justify-center">
                     <Repeat size={13} className="text-violet-400" />
                 </div>
-                <h3 className="text-sm font-bold text-surface-100 flex-1">DCA — Auto Swap</h3>
+                <h3 className="text-sm font-bold text-surface-100 flex-1">{t('dashboard.tradingUx.dcaAutoSwap', 'DCA — Auto Swap')}</h3>
                 <button onClick={() => setShowForm(!showForm)}
                     className={`p-1.5 rounded-lg transition-all ${showForm ? 'bg-violet-500/15 text-violet-400' : 'text-surface-200/30 hover:text-violet-400'}`}>
                     {showForm ? <X size={14} /> : <Plus size={14} />}
@@ -1422,7 +1900,7 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                     <div className="grid grid-cols-2 gap-2">
                         {/* Custom Wallet Dropdown */}
                         <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">Wallet</label>
+                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.wallet', 'Wallet')}</label>
                             <button ref={walletTriggerRef}
                                 onClick={() => { setOpenWalletDd(!openWalletDd); setOpenIntervalDd(false); }}
                                 className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-800/80 border transition-all text-left ${openWalletDd
@@ -1439,7 +1917,7 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                         </div>
                         {/* Custom Interval Dropdown */}
                         <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">Interval</label>
+                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.interval', 'Interval')}</label>
                             <button ref={intervalTriggerRef}
                                 onClick={() => { setOpenIntervalDd(!openIntervalDd); setOpenWalletDd(false); }}
                                 className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-800/80 border transition-all text-left ${openIntervalDd
@@ -1454,7 +1932,7 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                         </div>
                     </div>
                     <div>
-                        <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">To Token (Contract Address)</label>
+                        <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.toTokenAddr', 'To Token (Contract Address)')}</label>
                         <input type="text" value={form.toTokenAddress} placeholder="0x..." onChange={e => setForm(f => ({ ...f, toTokenAddress: e.target.value }))}
                             className="w-full bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] focus:border-violet-500/40 rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none font-mono transition-colors" />
                     </div>
@@ -1465,12 +1943,12 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                                 className="w-full bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] focus:border-violet-500/40 rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                         </div>
                         <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">Stop Loss %</label>
+                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.stopLoss', 'Stop Loss %')}</label>
                             <input type="number" value={form.stopLossPct} placeholder="10" onChange={e => setForm(f => ({ ...f, stopLossPct: e.target.value }))}
                                 className="w-full bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] focus:border-violet-500/40 rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                         </div>
                         <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">Take Profit %</label>
+                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.takeProfit', 'Take Profit %')}</label>
                             <input type="number" value={form.takeProfitPct} placeholder="50" onChange={e => setForm(f => ({ ...f, takeProfitPct: e.target.value }))}
                                 className="w-full bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] focus:border-violet-500/40 rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                         </div>
@@ -1479,6 +1957,12 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                         className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-bold shadow-lg hover:shadow-violet-500/25 hover:scale-[1.01] active:scale-95 transition-all disabled:opacity-40">
                         {creating ? <Loader2 size={14} className="animate-spin mx-auto" /> : '🔄 Create DCA Schedule'}
                     </button>
+                    {createError && (
+                        <div className="px-3 py-2 rounded-xl text-xs bg-red-500/10 border border-red-500/15 text-red-400 flex items-center gap-1.5">
+                            <AlertTriangle size={11} /> {createError}
+                            <button onClick={() => setCreateError(null)} className="ml-auto text-red-300 hover:text-red-200"><X size={10} /></button>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1509,6 +1993,14 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                                         {task.amount} per swap • Chain {CHAINS[task.chainIndex]?.name || task.chainIndex}
                                         {isActive && <span className="text-emerald-400/60 ml-1">• Next: {nextRun}</span>}
                                     </p>
+                                    {/* U4: Execution history */}
+                                    {(task.executionCount > 0 || task.totalVolume) && (
+                                        <p className="text-[9px] text-surface-200/25 flex items-center gap-2">
+                                            <span>🔄 {task.executionCount || 0} executions</span>
+                                            {task.totalVolume && <span>• Vol: {Number(task.totalVolume).toFixed(4)} {task.fromSymbol}</span>}
+                                            {task.lastExecutedAt && <span>• Last: {new Date(task.lastExecutedAt).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
+                                        </p>
+                                    )}
                                     {(task.stopLossPct || task.takeProfitPct) && (
                                         <p className="text-[9px] text-surface-200/20">
                                             {task.stopLossPct && <span className="text-red-400/60">SL: -{task.stopLossPct}%</span>}
@@ -1548,9 +2040,12 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
 /* ═══════════════════════════════════════════
    Transfer Widget — Single & Batch
    ═══════════════════════════════════════════ */
-function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
+function TransferWidget({ chainIndex, wallets = [], selectedWallet = null, showToast = null }) {
+    const { t } = useTranslation();
     const [tab, setTab] = useState('single');
-    const tokens = KNOWN_TOKENS[chainIndex] || KNOWN_TOKENS['196'];
+    const knownTokens = KNOWN_TOKENS[chainIndex] || KNOWN_TOKENS['196'];
+    const [customTokens, setCustomTokens] = useState({});
+    const tokens = useMemo(() => ({ ...knownTokens, ...customTokens }), [knownTokens, customTokens]);
     const tokenList = Object.keys(tokens);
     const [sWalletId, setSWalletId] = useState(selectedWallet?.id ? String(selectedWallet.id) : '');
     const [sTo, setSTo] = useState('');
@@ -1558,16 +2053,72 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
     const [sAmount, setSAmount] = useState('');
     const [sExecuting, setSExecuting] = useState(false);
     const [sResult, setSResult] = useState(null);
+    const [sShowConfirm, setSShowConfirm] = useState(false);
     const [bRows, setBRows] = useState([{ walletId: '', toAddress: '', amount: '' }]);
     const [bToken, setBToken] = useState(tokenList[0] || 'OKB');
     const [bExecuting, setBExecuting] = useState(false);
     const [bResults, setBResults] = useState([]);
+    const [bProgress, setBProgress] = useState({ done: 0, total: 0 });
     const [csvInput, setCsvInput] = useState('');
+    const [bShowConfirm, setBShowConfirm] = useState(false);
+    const [bSameAmount, setBSameAmount] = useState(true);
+    const [bGlobalAmount, setBGlobalAmount] = useState('');
+    // Wallet balance + tokens (like swap)
+    const [walletTokens, setWalletTokens] = useState([]);
+    const [walletBalance, setWalletBalance] = useState(null);
+    const [balanceLoading, setBalanceLoading] = useState(false);
+    const [openTokenSelect, setOpenTokenSelect] = useState(false);
 
     useEffect(() => { if (selectedWallet) setSWalletId(String(selectedWallet.id)); }, [selectedWallet]);
 
+    // Fetch wallet balance & tokens when wallet changes
+    useEffect(() => {
+        const wId = sWalletId;
+        if (!wId) { setWalletBalance(null); setWalletTokens([]); return; }
+        setBalanceLoading(true);
+        api.getWalletBalance(wId)
+            .then(res => {
+                const balances = res.tokens || res.balances || res.tokenAssets || [];
+                setWalletTokens(balances);
+                // Sync logos into customTokens
+                const logoUpdates = {};
+                balances.forEach(b => {
+                    const sym = (b.symbol || b.tokenSymbol || '').toUpperCase();
+                    const logo = b.logoUrl || b.tokenLogoUrl || '';
+                    const addr = (b.tokenContractAddress || b.address || '').toLowerCase();
+                    if (sym && logo) {
+                        const known = knownTokens[sym];
+                        logoUpdates[sym] = {
+                            addr: known?.addr || addr,
+                            icon: known?.icon || '🪙',
+                            decimals: known?.decimals || Number(b.decimals || 18),
+                            logoUrl: logo,
+                        };
+                    }
+                });
+                if (Object.keys(logoUpdates).length > 0) {
+                    setCustomTokens(prev => ({ ...logoUpdates, ...prev, ...logoUpdates }));
+                }
+                // Find balance for selected token
+                const tokenAddr = tokens[sToken]?.addr?.toLowerCase();
+                const isNative = tokenAddr === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+                const match = balances.find(b => {
+                    const bAddr = (b.tokenContractAddress || b.address || '').toLowerCase();
+                    if (isNative) return bAddr === '' || bAddr === tokenAddr || (b.symbol || b.tokenSymbol || '').toUpperCase() === sToken.toUpperCase();
+                    return bAddr === tokenAddr || (b.symbol || b.tokenSymbol || '').toUpperCase() === sToken.toUpperCase();
+                });
+                setWalletBalance(match ? Number(match.balance || match.holdingAmount || 0) : 0);
+            })
+            .catch(() => setWalletBalance(null))
+            .finally(() => setBalanceLoading(false));
+    }, [sWalletId, sToken, chainIndex]);
+
+    // Address validation
+    const isValidAddress = (addr) => /^0x[a-fA-F0-9]{40}$/.test(addr);
+    const addressError = sTo && !isValidAddress(sTo);
+
     const handleSingleTransfer = async () => {
-        if (!sWalletId || !sTo || !sAmount) return;
+        if (!sWalletId || !sTo || !sAmount || !isValidAddress(sTo)) return;
         setSExecuting(true); setSResult(null);
         try {
             const tokenInfo = tokens[sToken];
@@ -1579,6 +2130,7 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
             setSResult({ success: true, txHash: res.txHash });
         } catch (err) { setSResult({ success: false, error: err.message }); }
         setSExecuting(false);
+        setSShowConfirm(false);
     };
 
     const addBatchRow = () => setBRows(r => [...r, { walletId: selectedWallet?.id || '', toAddress: '', amount: '' }]);
@@ -1586,29 +2138,48 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
     const updateBatchRow = (i, field, val) => setBRows(r => r.map((row, idx) => idx === i ? { ...row, [field]: val } : row));
 
     const parseCsv = () => {
+        if (!sWalletId) return;
         const lines = csvInput.trim().split('\n').filter(l => l.trim());
         const rows = lines.map(l => {
             const parts = l.split(/[,;\t]+/).map(s => s.trim());
-            return { walletId: selectedWallet?.id || '', toAddress: parts[0] || '', amount: parts[1] || '' };
+            return { toAddress: parts[0] || '', amount: bSameAmount ? bGlobalAmount : (parts[1] || '') };
         }).filter(r => r.toAddress);
         if (rows.length) { setBRows(rows); setCsvInput(''); }
     };
 
     const handleBatchTransfer = async () => {
-        const validRows = bRows.filter(r => r.walletId && r.toAddress && r.amount);
+        if (!sWalletId) return;
+        const validRows = bRows.filter(r => r.toAddress && (bSameAmount ? bGlobalAmount : r.amount));
         if (validRows.length === 0) return;
-        setBExecuting(true); setBResults([]);
-        try {
-            const tokenInfo = tokens[bToken];
-            const isNative = tokenInfo?.addr?.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
-            const res = await api.batchTransfer({
-                transfers: validRows, chainIndex,
-                tokenAddress: isNative ? undefined : tokenInfo?.addr
-            });
-            setBResults(res.results || []);
-        } catch (err) { setBResults([{ error: err.message }]); }
+        setBExecuting(true); setBResults([]); setBProgress({ done: 0, total: validRows.length });
+        const tokenInfo = tokens[bToken];
+        const isNative = tokenInfo?.addr?.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+        const results = [];
+        for (let i = 0; i < validRows.length; i++) {
+            const row = validRows[i];
+            const amt = bSameAmount ? bGlobalAmount : row.amount;
+            try {
+                const res = await api.executeTransfer({
+                    walletId: sWalletId, chainIndex, toAddress: row.toAddress,
+                    tokenAddress: isNative ? undefined : tokenInfo?.addr, amount: amt
+                });
+                results.push({ txHash: res.txHash, toAddress: row.toAddress, walletName: senderWallet?.name || `W${sWalletId}`, amount: amt });
+            } catch (err) {
+                results.push({ error: err.message, toAddress: row.toAddress });
+            }
+            setBProgress({ done: i + 1, total: validRows.length });
+            setBResults([...results]);
+        }
         setBExecuting(false);
+        setBShowConfirm(false);
+        // Toast summary
+        const ok = results.filter(r => r.txHash).length;
+        const fail = results.length - ok;
+        if (showToast) showToast(ok > 0 && fail === 0 ? 'success' : ok > 0 ? 'warning' : 'error',
+            `Batch Transfer: ${ok}/${results.length} ${t('dashboard.tradingUx.success', 'success')}${fail > 0 ? `, ${fail} ${t('dashboard.tradingUx.failed', 'failed')}` : ''}`);
     };
+
+    const senderWallet = wallets.find(w => String(w.id) === String(sWalletId));
 
     return (
         <div className="glass-card p-5 relative">
@@ -1624,7 +2195,7 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
 
             {/* Single / Batch tab — matches Swap tab */}
             <div className="flex rounded-lg bg-surface-800/60 p-0.5 mb-4">
-                {[['single', '📤 Single'], ['batch', '📦 Batch']].map(([key, label]) => (
+                {[['single', `📤 ${t('dashboard.trading.single', 'Single')}`], ['batch', `📦 ${t('dashboard.trading.batch', 'Batch')}`]].map(([key, label]) => (
                     <button key={key} onClick={() => setTab(key)}
                         className={`flex-1 py-1.5 text-[10px] font-semibold rounded-md transition-all ${tab === key ? 'bg-surface-700 text-surface-100 shadow-sm' : 'text-surface-200/30 hover:text-surface-200/50'}`}>
                         {label}
@@ -1635,8 +2206,8 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
             {wallets.length === 0 ? (
                 <div className="text-center py-6">
                     <Wallet size={24} className="text-surface-200/15 mx-auto mb-2" />
-                    <p className="text-xs text-surface-200/30 mb-2">No wallets connected</p>
-                    <a href="#wallets" className="text-xs text-brand-400 hover:text-brand-300 font-semibold">Create Wallet →</a>
+                    <p className="text-xs text-surface-200/30 mb-2">{t('dashboard.trading.noWallets', 'No wallets connected')}</p>
+                    <a href="#wallets" className="text-xs text-brand-400 hover:text-brand-300 font-semibold">{t('dashboard.trading.createWallet', 'Create Wallet')} →</a>
                 </div>
             ) : tab === 'single' ? (
                 <div className="space-y-3">
@@ -1646,54 +2217,204 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
                     {/* TO address */}
                     <div>
                         <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">TO</label>
-                        <div className="bg-surface-900/60 rounded-2xl border border-white/[0.08] p-3">
+                        <div className={`bg-surface-900/60 rounded-2xl border p-3 transition-colors ${addressError ? 'border-red-500/40' : 'border-white/[0.08]'}`}>
                             <input value={sTo} onChange={e => setSTo(e.target.value)} placeholder="0x..."
                                 className="w-full bg-transparent text-sm text-surface-100 font-mono outline-none placeholder:text-surface-200/15" />
                         </div>
+                        {addressError && (
+                            <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1"><AlertTriangle size={10} /> {t('dashboard.trading.invalidAddress', 'Invalid address format (must be 0x + 40 hex chars)')}</p>
+                        )}
                     </div>
 
-                    {/* Token selector — matches Swap style */}
+                    {/* Token selector — wallet tokens with logos (like swap) */}
                     <div>
                         <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">TOKEN</label>
                         <div className="bg-surface-900/60 rounded-2xl border border-white/[0.08] p-3">
+                            {/* Token button + amount input */}
                             <div className="flex items-center gap-3">
-                                <CustomSelect value={sToken} onChange={setSToken} size="sm"
-                                    className="w-auto min-w-[120px]"
-                                    options={tokenList.map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
+                                <button onClick={() => setOpenTokenSelect(!openTokenSelect)}
+                                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] text-surface-100 text-sm font-semibold transition-all min-w-[120px]">
+                                    {(() => { const wt = walletTokens.find(t => (t.symbol || '').toUpperCase() === sToken.toUpperCase()); const logo = wt?.logoUrl || tokens[sToken]?.logoUrl || ''; return logo ? <img src={logo} alt="" width={18} height={18} className="rounded-full object-cover" onError={e => { e.target.style.display = 'none'; }} /> : <span style={{ fontSize: 14 }}>{tokens[sToken]?.icon || '🪙'}</span>; })()}
+                                    <span>{sToken}</span>
+                                    <ChevronDown size={12} className="text-surface-200/30 ml-auto" />
+                                </button>
                                 <input type="number" value={sAmount} onChange={e => setSAmount(e.target.value)} placeholder="0.0"
                                     className="flex-1 bg-transparent text-right text-xl font-bold text-surface-100 outline-none placeholder:text-surface-200/15 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
+                            {/* Available balance + MAX */}
+                            {sWalletId && walletBalance != null && (
+                                <div className="flex items-center justify-end gap-2 mt-2">
+                                    <span className="text-[9px] text-surface-200/30">
+                                        {t('dashboard.tradingUx.available', 'Available')}: {balanceLoading ? '...' : parseFloat(Number(walletBalance).toFixed(4))} {sToken}
+                                    </span>
+                                    {walletBalance > 0 && (
+                                        <button onClick={() => setSAmount(String(walletBalance))} className="text-[9px] text-brand-400 font-bold hover:text-brand-300 transition-colors">MAX</button>
+                                    )}
+                                </div>
+                            )}
+                            {/* Token dropdown */}
+                            {openTokenSelect && (
+                                <div className="mt-2 bg-surface-800/95 border border-white/[0.1] rounded-xl overflow-hidden max-h-[220px] overflow-y-auto animate-fadeIn">
+                                    {/* Wallet tokens first */}
+                                    {walletTokens.filter(wt => Number(wt.balance || 0) > 0).map((wt, i) => {
+                                        const sym = (wt.symbol || wt.tokenSymbol || '?').toUpperCase();
+                                        const logo = wt.logoUrl || tokens[sym]?.logoUrl || '';
+                                        const bal = Number(wt.balance || 0);
+                                        return (
+                                            <button key={`w-${i}`} onClick={() => {
+                                                // Auto-register if unknown
+                                                if (!tokens[sym]) {
+                                                    setCustomTokens(prev => ({ ...prev, [sym]: { addr: (wt.tokenContractAddress || wt.address || '').toLowerCase(), icon: '🪙', decimals: Number(wt.decimals || 18), logoUrl: logo } }));
+                                                }
+                                                setSToken(sym); setOpenTokenSelect(false);
+                                            }} className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm transition-all ${sym === sToken ? 'bg-brand-500/15 text-brand-400 font-bold' : 'text-surface-200/70 hover:bg-white/[0.05]'}`}>
+                                                {logo ? <img src={logo} alt="" width={18} height={18} className="rounded-full object-cover" onError={e => { e.target.style.display = 'none'; }} /> : <span style={{ fontSize: 14 }}>{tokens[sym]?.icon || '🪙'}</span>}
+                                                <span className="font-medium flex-1 text-left">{sym}</span>
+                                                <span className="text-[9px] text-surface-200/30 font-mono">{parseFloat(bal.toFixed(4))}</span>
+                                            </button>
+                                        );
+                                    })}
+                                    {/* Known tokens not in wallet */}
+                                    {Object.entries(tokens).filter(([sym]) => !walletTokens.some(wt => (wt.symbol || wt.tokenSymbol || '').toUpperCase() === sym.toUpperCase())).map(([sym, info]) => (
+                                        <button key={sym} onClick={() => { setSToken(sym); setOpenTokenSelect(false); }}
+                                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm transition-all ${sym === sToken ? 'bg-brand-500/15 text-brand-400 font-bold' : 'text-surface-200/40 hover:bg-white/[0.05]'}`}>
+                                            {info.logoUrl ? <img src={info.logoUrl} alt="" width={18} height={18} className="rounded-full object-cover" onError={e => { e.target.style.display = 'none'; }} /> : <span style={{ fontSize: 14 }}>{info.icon || '🪙'}</span>}
+                                            <span className="font-medium flex-1 text-left">{sym}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
+                        {/* Wallet token chips */}
+                        {walletTokens.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                                {walletTokens.filter(t => Number(t.balance || 0) > 0).map((tk, i) => {
+                                    const sym = (tk.symbol || tk.tokenSymbol || '?').toUpperCase();
+                                    const logo = tk.logoUrl || tokens[sym]?.logoUrl || '';
+                                    const isActive = sToken === sym;
+                                    return (
+                                        <button key={i} onClick={() => {
+                                            if (!tokens[sym]) {
+                                                setCustomTokens(prev => ({ ...prev, [sym]: { addr: (tk.tokenContractAddress || tk.address || '').toLowerCase(), icon: '🪙', decimals: Number(tk.decimals || 18), logoUrl: logo } }));
+                                            }
+                                            setSToken(sym);
+                                        }} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-medium transition-all ${
+                                            isActive ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-surface-800/40 text-surface-200/40 border border-white/[0.06] hover:border-white/[0.12]'
+                                        }`}>
+                                            {logo ? <img src={logo} alt="" width={12} height={12} className="rounded-full" onError={e => { e.target.style.display = 'none'; }} /> : <span>{tokens[sym]?.icon || '🪙'}</span>}
+                                            <span>{sym}</span>
+                                            <span className="text-surface-200/20">{parseFloat(Number(tk.balance || 0).toFixed(4))}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
-                    {/* Execute */}
-                    <button onClick={handleSingleTransfer} disabled={sExecuting || !sWalletId || !sTo || !sAmount}
-                        className="w-full py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
-                        {sExecuting ? <><Loader2 size={14} className="animate-spin" /> Sending...</> : <><Send size={14} /> Transfer</>}
-                    </button>
+                    {/* Confirmation step */}
+                    {sShowConfirm ? (
+                        <div className="space-y-2 animate-fadeIn bg-surface-900/60 rounded-xl p-3 border border-white/[0.06]">
+                            <p className="text-[10px] text-amber-400 flex items-center gap-1 font-semibold"><AlertTriangle size={11} /> {t('dashboard.trading.confirmTransfer', 'Confirm transfer details:')}</p>
+                            <div className="space-y-1.5 text-[10px]">
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.trading.from', 'From')}</span><span className="text-surface-100 font-mono">{senderWallet?.name || `Wallet ${sWalletId}`}</span></div>
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.to', 'To')}</span><span className="text-surface-100 font-mono">{sTo.slice(0, 10)}...{sTo.slice(-6)}</span></div>
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.trading.amount', 'Amount')}</span><span className="text-surface-100 font-bold">{sAmount} {sToken}</span></div>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                                <button onClick={() => setSShowConfirm(false)} className="flex-1 py-2 rounded-lg bg-surface-800/60 border border-white/[0.08] text-xs text-surface-200/50 hover:text-surface-100 transition-colors">{t('dashboard.common.cancel', 'Cancel')}</button>
+                                <button onClick={handleSingleTransfer} disabled={sExecuting}
+                                    className="flex-1 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs font-bold hover:shadow-cyan-500/25 transition-all disabled:opacity-40">
+                                    {sExecuting ? <Loader2 size={12} className="animate-spin mx-auto" /> : `✅ ${t('dashboard.trading.confirmSend', 'Confirm Send')}`}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button onClick={() => setSShowConfirm(true)} disabled={!sWalletId || !sTo || !sAmount || addressError}
+                            className="w-full py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
+                            <Send size={14} /> {t('dashboard.tradingUx.transfer', 'Transfer')}
+                        </button>
+                    )}
 
                     {/* Result */}
                     {sResult && (
                         <div className={`px-3 py-2 rounded-xl text-xs ${sResult.success ? 'bg-emerald-500/10 border border-emerald-500/15 text-emerald-400' : 'bg-red-500/10 border border-red-500/15 text-red-400'}`}>
-                            {sResult.success ? (<>✓ <a href={`https://www.okx.com/web3/explorer/xlayer/tx/${sResult.txHash}`} target="_blank" rel="noopener" className="text-brand-400 font-mono">{sResult.txHash.slice(0, 20)}... <ExternalLink size={9} className="inline" /></a></>) : `✗ ${sResult.error}`}
+                            {sResult.success ? (<>✓ <a href={getExplorerTxUrl(chainIndex, sResult.txHash)} target="_blank" rel="noopener" className="text-brand-400 font-mono">{sResult.txHash.slice(0, 20)}... <ExternalLink size={9} className="inline" /></a></>) : `✗ ${sResult.error}`}
                         </div>
                     )}
                 </div>
             ) : (
                 <div className="space-y-3">
-                    {/* Token for all */}
+                    {/* Wallet selector for batch (same as single) */}
+                    <WalletDropdown wallets={wallets} value={sWalletId} onChange={setSWalletId} accentColor="cyan" chainIndex={chainIndex} />
+
+                    {/* Token for all — with wallet logos */}
                     <div>
                         <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">TOKEN</label>
-                        <CustomSelect value={bToken} onChange={setBToken}
-                            options={tokenList.map(s => ({ value: s, label: `${tokens[s].icon} ${s}` }))} />
+                        <div className="flex flex-wrap gap-1.5">
+                            {(walletTokens.length > 0
+                                ? walletTokens.filter(wt => Number(wt.balance || 0) > 0).map(wt => {
+                                    const sym = (wt.symbol || wt.tokenSymbol || '?').toUpperCase();
+                                    const logo = wt.logoUrl || tokens[sym]?.logoUrl || '';
+                                    const isActive = bToken === sym;
+                                    return (
+                                        <button key={sym} onClick={() => {
+                                            if (!tokens[sym]) {
+                                                setCustomTokens(prev => ({ ...prev, [sym]: { addr: (wt.tokenContractAddress || wt.address || '').toLowerCase(), icon: '🪙', decimals: Number(wt.decimals || 18), logoUrl: logo } }));
+                                            }
+                                            setBToken(sym);
+                                        }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                            isActive ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-surface-800/60 text-surface-200/50 border border-white/[0.08] hover:border-white/[0.15]'
+                                        }`}>
+                                            {logo ? <img src={logo} alt="" width={14} height={14} className="rounded-full" onError={e => { e.target.style.display = 'none'; }} /> : <span>{tokens[sym]?.icon || '🪙'}</span>}
+                                            {sym}
+                                        </button>
+                                    );
+                                })
+                                : tokenList.map(sym => (
+                                    <button key={sym} onClick={() => setBToken(sym)}
+                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                            bToken === sym ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-surface-800/60 text-surface-200/50 border border-white/[0.08] hover:border-white/[0.15]'
+                                        }`}>
+                                        <span>{tokens[sym]?.icon || '🪙'}</span> {sym}
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Amount for all (like batch swap) */}
+                    <div>
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] text-surface-200/30 uppercase tracking-wider font-semibold">{t('dashboard.tradingUx.amount', 'Amount')}</label>
+                            <button onClick={() => setBSameAmount(!bSameAmount)} className="text-[8px] text-brand-400 hover:text-brand-300">
+                                {bSameAmount ? t('dashboard.tradingUx.customEach', 'Custom each ↗') : t('dashboard.tradingUx.sameForAll', 'Same for all ↗')}
+                            </button>
+                        </div>
+                        {bSameAmount && (
+                            <input type="number" value={bGlobalAmount} onChange={e => {
+                                setBGlobalAmount(e.target.value);
+                                // Auto-fill all rows
+                                setBRows(prev => prev.map(r => ({ ...r, amount: e.target.value })));
+                            }}
+                                className="w-full bg-surface-900/60 border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-surface-100 outline-none placeholder:text-surface-200/15 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                placeholder={`${t('dashboard.tradingUx.amountPerRecipient', 'Amount per recipient')} (${bToken})`} />
+                        )}
                     </div>
 
                     {/* CSV paste */}
                     <div>
                         <div className="flex items-center justify-between mb-1">
-                            <label className="text-[10px] text-surface-200/30 uppercase tracking-wider font-semibold">Paste CSV (address, amount)</label>
-                            <button onClick={parseCsv} disabled={!csvInput.trim()} className="text-[9px] text-brand-400 hover:text-brand-300 disabled:opacity-30 font-semibold">Parse ↗</button>
+                            <label className="text-[10px] text-surface-200/30 uppercase tracking-wider font-semibold">{t('dashboard.trading.pasteCsv', 'Paste CSV (address, amount)')}</label>
+                            <div className="flex items-center gap-2">
+                                <button onClick={downloadCsvTemplate} className="text-[9px] text-surface-200/25 hover:text-brand-400 transition-colors flex items-center gap-0.5" title={t('dashboard.tradingUx.csvTemplate', 'Download CSV Template')}>
+                                    <Download size={9} /> {t('dashboard.tradingUx.csvTemplate', 'Template')}
+                                </button>
+                                <button onClick={parseCsv} disabled={!csvInput.trim() || !sWalletId} className="text-[9px] text-brand-400 hover:text-brand-300 disabled:opacity-30 font-semibold">{t('dashboard.trading.parse', 'Parse')} ↗</button>
+                            </div>
                         </div>
+                        {!sWalletId && csvInput.trim() && (
+                            <p className="text-[9px] text-amber-400 mb-1 flex items-center gap-1"><AlertTriangle size={9} /> {t('dashboard.trading.selectWalletFirst', 'Select a wallet first')}</p>
+                        )}
                         <textarea value={csvInput} onChange={e => setCsvInput(e.target.value)} rows={2}
                             className="w-full bg-surface-900/60 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-surface-100 font-mono outline-none resize-none placeholder:text-surface-200/15"
                             placeholder={"0x1234...,1.5\n0x5678...,2.0"} />
@@ -1703,14 +2424,12 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
                     <div className="space-y-1.5 max-h-[180px] overflow-y-auto">
                         {bRows.map((row, i) => (
                             <div key={i} className="flex gap-1.5 items-center">
-                                <CustomSelect value={row.walletId} onChange={(val) => updateBatchRow(i, 'walletId', val)} size="sm"
-                                    className="w-28"
-                                    placeholder="Wallet..."
-                                    options={wallets.map(w => ({ value: String(w.id), label: w.name || `W${w.id}` }))} />
                                 <input value={row.toAddress} onChange={e => updateBatchRow(i, 'toAddress', e.target.value)} placeholder="0x..."
-                                    className="flex-1 min-w-0 bg-surface-900/60 border border-white/[0.08] rounded-lg px-2 py-2 text-[10px] text-surface-100 font-mono outline-none placeholder:text-surface-200/15" />
-                                <input type="number" value={row.amount} onChange={e => updateBatchRow(i, 'amount', e.target.value)} placeholder="Amt"
-                                    className="w-20 bg-surface-900/60 border border-white/[0.08] rounded-lg px-2 py-2 text-[10px] text-surface-100 text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                    className={`flex-1 min-w-0 bg-surface-900/60 border rounded-lg px-2 py-2 text-[10px] text-surface-100 font-mono outline-none placeholder:text-surface-200/15 ${row.toAddress && !isValidAddress(row.toAddress) ? 'border-red-500/40' : 'border-white/[0.08]'}`} />
+                                {!bSameAmount && (
+                                    <input type="number" value={row.amount} onChange={e => updateBatchRow(i, 'amount', e.target.value)} placeholder="Amt"
+                                        className="w-20 bg-surface-900/60 border border-white/[0.08] rounded-lg px-2 py-2 text-[10px] text-surface-100 text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                )}
                                 <button onClick={() => removeBatchRow(i)} className="text-surface-200/20 hover:text-red-400 transition-colors p-1"><X size={12} /></button>
                             </div>
                         ))}
@@ -1719,22 +2438,47 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
                         <Plus size={10} /> {t('dashboard.trading.addRow', 'Add Row')}
                     </button>
 
-                    {/* Execute batch */}
-                    <button onClick={handleBatchTransfer} disabled={bExecuting || bRows.filter(r => r.walletId && r.toAddress && r.amount).length === 0}
-                        className="w-full py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
-                        {bExecuting ? <><Loader2 size={14} className="animate-spin" /> Transferring...</> : <><Send size={14} /> Batch Transfer ({bRows.filter(r => r.walletId && r.toAddress && r.amount).length} txns)</>}
-                    </button>
+                    {/* Execute batch — with confirmation (P3) */}
+                    {bShowConfirm ? (
+                        <div className="space-y-2 animate-fadeIn bg-surface-900/60 rounded-xl p-3 border border-white/[0.06]">
+                            <p className="text-[10px] text-amber-400 flex items-center gap-1 font-semibold"><AlertTriangle size={11} /> {t('dashboard.tradingUx.confirmBatchTransfer', 'Confirm batch transfer:')}</p>
+                            <div className="space-y-1 text-[10px]">
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.fromWallet', 'From Wallet')}</span><span className="text-surface-100 font-bold">{senderWallet?.name || `W${sWalletId}`}</span></div>
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.token', 'Token')}</span><span className="text-surface-100 font-bold">{bToken}</span></div>
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.recipients', 'Recipients')}</span><span className="text-surface-100">{bRows.filter(r => r.toAddress && (bSameAmount ? bGlobalAmount : r.amount)).length}</span></div>
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.totalAmount', 'Total')}</span><span className="text-surface-100 font-bold">{bSameAmount ? (Number(bGlobalAmount || 0) * bRows.filter(r => r.toAddress).length).toFixed(4) : bRows.filter(r => r.amount).reduce((s, r) => s + Number(r.amount || 0), 0).toFixed(4)} {bToken}</span></div>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                                <button onClick={() => setBShowConfirm(false)} className="flex-1 py-2 rounded-lg bg-surface-800/60 border border-white/[0.08] text-xs text-surface-200/50 hover:text-surface-100 transition-colors">{t('dashboard.common.cancel', 'Cancel')}</button>
+                                <button onClick={handleBatchTransfer} disabled={bExecuting}
+                                    className="flex-1 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs font-bold hover:shadow-cyan-500/25 transition-all disabled:opacity-40">
+                                    {bExecuting ? <Loader2 size={12} className="animate-spin mx-auto" /> : `✅ ${t('dashboard.tradingUx.confirmExecute', 'Confirm Execute')}`}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button onClick={() => setBShowConfirm(true)} disabled={bExecuting || !sWalletId || bRows.filter(r => r.toAddress && (bSameAmount ? bGlobalAmount : r.amount)).length === 0}
+                            className="w-full py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
+                            <Send size={14} /> {t('dashboard.trading.batchTransfer', 'Batch Transfer')} ({bRows.filter(r => r.toAddress && (bSameAmount ? bGlobalAmount : r.amount)).length} txns)
+                        </button>
+                    )}
+                    {/* U3: Progress bar */}
+                    {bExecuting && bProgress.total > 0 && (
+                        <div className="w-full h-1.5 rounded-full bg-surface-800/60 overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-300" style={{ width: `${(bProgress.done / bProgress.total) * 100}%` }} />
+                        </div>
+                    )}
 
                     {/* Results */}
                     {bResults.length > 0 && (
                         <div className="space-y-1.5 mt-1">
-                            <p className="text-[10px] text-surface-200/30 font-semibold">Results:</p>
+                            <p className="text-[10px] text-surface-200/30 font-semibold">{t('dashboard.trading.results', 'Results')}:</p>
                             {bResults.map((r, i) => (
                                 <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${r.txHash ? 'bg-emerald-500/10 border border-emerald-500/15' : 'bg-red-500/10 border border-red-500/15'}`}>
                                     {r.txHash ? <Check size={11} className="text-emerald-400" /> : <AlertTriangle size={11} className="text-red-400" />}
                                     <span className="truncate flex-1 text-surface-100">{r.walletName || r.toAddress?.slice(0, 10)}</span>
                                     {r.txHash ? (
-                                        <a href={`https://www.okx.com/web3/explorer/xlayer/tx/${r.txHash}`} target="_blank" rel="noopener"
+                                        <a href={getExplorerTxUrl(chainIndex, r.txHash)} target="_blank" rel="noopener"
                                             className="text-brand-400 font-mono hover:text-brand-300">{r.txHash.slice(0, 10)}... <ExternalLink size={9} className="inline" /></a>
                                     ) : <span className="text-red-400 truncate max-w-[150px]">{r.error}</span>}
                                 </div>
@@ -1751,7 +2495,8 @@ function TransferWidget({ chainIndex, wallets = [], selectedWallet = null }) {
 /* ═══════════════════════════════════════════
    Execute Swap Button
    ═══════════════════════════════════════════ */
-function ExecuteSwapButton({ chainIndex, fromTokenAddress, toTokenAddress, amount, slippage, wallets: sharedWallets = [], selectedWallet: sharedSelectedWallet = null }) {
+function ExecuteSwapButton({ chainIndex, fromTokenAddress, toTokenAddress, amount, slippage, wallets: sharedWallets = [], selectedWallet: sharedSelectedWallet = null, showToast, fromSymbol = '', toSymbol = '', expectedOutput = null }) {
+    const { t } = useTranslation();
     const [executing, setExecuting] = useState(false);
     const [result, setResult] = useState(null);
     const [showConfirm, setShowConfirm] = useState(false);
@@ -1766,8 +2511,10 @@ function ExecuteSwapButton({ chainIndex, fromTokenAddress, toTokenAddress, amoun
                 walletId: selectedWallet.id, chainIndex, fromTokenAddress, toTokenAddress, amount, slippage
             });
             setResult({ success: true, txHash: res.txHash });
+            if (showToast) showToast(t('dashboard.tradingUx.toastSwapOk', 'Swap Successful!') + ` ${amount} ${fromSymbol} → ${toSymbol}`, true, res.txHash, getExplorerTxUrl(chainIndex, res.txHash));
         } catch (err) {
             setResult({ success: false, error: err.message });
+            if (showToast) showToast(t('dashboard.tradingUx.toastSwapFail', 'Swap Failed') + `: ${err.message}`, false);
         }
         setExecuting(false);
         setShowConfirm(false);
@@ -1784,22 +2531,43 @@ function ExecuteSwapButton({ chainIndex, fromTokenAddress, toTokenAddress, amoun
             {result && (
                 <div className={`mb-2 px-3 py-2 rounded-lg text-xs ${result.success ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                     {result.success ? (
-                        <span>✅ TX: <a href={`https://www.okx.com/web3/explorer/xlayer/tx/${result.txHash}`} target="_blank" rel="noopener" className="underline">{result.txHash?.slice(0, 12)}...</a></span>
+                        <span>✅ TX: <a href={getExplorerTxUrl(chainIndex, result.txHash)} target="_blank" rel="noopener" className="underline">{result.txHash?.slice(0, 12)}...</a></span>
                     ) : <span>❌ {result.error}</span>}
                 </div>
             )}
             {showConfirm ? (
                 <div className="space-y-2 animate-fadeIn">
-                    <p className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle size={11} /> Confirm swap from wallet:</p>
+                    <p className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle size={11} /> {t('dashboard.tradingUx.confirmSwapDetails', 'Confirm swap details')}</p>
+                    {/* Swap summary: FROM → TO with full precision */}
+                    <div className="bg-surface-800/60 rounded-lg border border-white/[0.06] p-2.5 space-y-1.5">
+                        <div className="flex justify-between text-[10px]">
+                            <span className="text-surface-200/40">{t('dashboard.tradingUx.from', 'From')}</span>
+                            <span className="text-surface-100 font-mono font-bold">{amount} {fromSymbol}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                            <span className="text-surface-200/40">{t('dashboard.tradingUx.to', 'To')}</span>
+                            <span className="text-emerald-400 font-mono font-bold">{expectedOutput != null ? String(expectedOutput) : '—'} {toSymbol}</span>
+                        </div>
+                        {expectedOutput > 0 && Number(amount) > 0 && (
+                            <div className="flex justify-between text-[10px]">
+                                <span className="text-surface-200/40">{t('dashboard.tradingUx.rate', 'Rate')}</span>
+                                <span className="text-surface-200/50 font-mono">1 {fromSymbol} = {String(expectedOutput / Number(amount))} {toSymbol}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between text-[10px]">
+                            <span className="text-surface-200/40">{t('dashboard.tradingUx.slippage', 'Slippage')}</span>
+                            <span className="text-surface-200/50">{slippage}%</span>
+                        </div>
+                    </div>
                     <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-surface-800/60 border border-white/[0.06]">
                         <Wallet size={11} className="text-violet-400" />
-                        <span className="text-[10px] text-surface-100 font-mono flex-1">{selectedWallet?.address?.slice(0, 10)}...{selectedWallet?.address?.slice(-6)}</span>
+                        <span className="text-[10px] text-surface-100 font-mono flex-1">{selectedWallet?.name || selectedWallet?.address?.slice(0, 10) + '...' + selectedWallet?.address?.slice(-6)}</span>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => setShowConfirm(false)} className="flex-1 py-2 rounded-lg bg-surface-800/60 border border-white/[0.08] text-xs text-surface-200/50 hover:text-surface-100 transition-colors">{t('dashboard.common.cancel', 'Cancel')}</button>
                         <button onClick={handleExecute} disabled={executing}
                             className="flex-1 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold hover:shadow-emerald-500/25 transition-all disabled:opacity-40">
-                            {executing ? <Loader2 size={12} className="animate-spin mx-auto" /> : '✅ Confirm Swap'}
+                            {executing ? <Loader2 size={12} className="animate-spin mx-auto" /> : `✅ ${t('dashboard.tradingUx.confirmSwap', 'Confirm Swap')}`}
                         </button>
                     </div>
                 </div>
@@ -2154,7 +2922,7 @@ function DexHistoryCard({ chainIndex, walletAddress }) {
                                 </div>
                                 <span className="text-[9px] text-surface-200/40">${Number(tx.amountUsd || tx.totalValueUsd || 0).toLocaleString()}</span>
                                 {tx.txHash && (
-                                    <a href={`https://www.okx.com/web3/explorer/xlayer/tx/${tx.txHash}`} target="_blank" rel="noopener"
+                                    <a href={getExplorerTxUrl(chainIndex, tx.txHash)} target="_blank" rel="noopener"
                                         className="text-surface-200/15 hover:text-brand-400 transition-colors">
                                         <ExternalLink size={9} />
                                     </a>
@@ -2192,6 +2960,8 @@ export default function TradingPage() {
         try { return localStorage.getItem('trading_tab') || 'trade'; }
         catch { return 'trade'; }
     });
+    // #6: Toast notification
+    const { toast, show: showToast, dismiss: dismissToast } = useToast();
 
     const switchTab = (key) => {
         setActiveTab(key);
@@ -2213,11 +2983,9 @@ export default function TradingPage() {
     };
 
     const handleTopTokenClick = (sym, addr) => {
-        const tokens = KNOWN_TOKENS[chainIndex] || {};
-        if (sym && addr && !tokens[sym]) {
-            tokens[sym] = { addr, icon: '🪙', decimals: 18 };
-        }
+        // #1: 1-click swap — switch to trade tab + set token
         setSelectedToken({ sym, addr });
+        setActiveTab('trade');
     };
 
     return (
@@ -2252,10 +3020,27 @@ export default function TradingPage() {
             {/* ═══════ Tab 1: Trade ═══════ */}
             {activeTab === 'trade' && (
                 <div className="space-y-4">
+                    {/* #8: Onboarding card when no wallets */}
+                    {wallets.length === 0 && (
+                        <div className="glass-card p-6 text-center space-y-4">
+                            <div className="text-3xl">🚀</div>
+                            <h3 className="text-lg font-bold text-surface-100">{t('dashboard.tradingUx.onboardTitle', 'Get Started')}</h3>
+                            <p className="text-xs text-surface-200/40">{t('dashboard.tradingUx.onboardDesc', 'Follow these steps to make your first swap')}</p>
+                            <div className="flex justify-center gap-6">
+                                {[{ n: 1, k: 'onboardStep1', d: 'Create a wallet', icon: '💼' }, { n: 2, k: 'onboardStep2', d: 'Select a token pair', icon: '🔄' }, { n: 3, k: 'onboardStep3', d: 'Enter amount & swap!', icon: '⚡' }].map(s => (
+                                    <div key={s.n} className="flex flex-col items-center gap-1.5">
+                                        <div className="w-10 h-10 rounded-full bg-brand-500/15 flex items-center justify-center text-lg">{s.icon}</div>
+                                        <span className="text-[10px] text-surface-200/40">{t(`dashboard.tradingUx.${s.k}`, s.d)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Swap + Transfer */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <SwapQuoteWidget chainIndex={chainIndex} onTokenSelect={handleTokenSelect} wallets={wallets} selectedWallet={selectedWallet} />
-                        <TransferWidget chainIndex={chainIndex} wallets={wallets} selectedWallet={selectedWallet} />
+                        <SwapQuoteWidget chainIndex={chainIndex} onTokenSelect={handleTokenSelect} wallets={wallets} selectedWallet={selectedWallet} onSwapToken={showToast} />
+                        <TransferWidget chainIndex={chainIndex} wallets={wallets} selectedWallet={selectedWallet} showToast={showToast} />
                     </div>
 
                     {/* DCA */}
@@ -2288,7 +3073,7 @@ export default function TradingPage() {
             {/* ═══════ Tab 3: History ═══════ */}
             {activeTab === 'history' && (
                 <div className="space-y-4">
-                    <TxHistory />
+                    <TxHistory chainIndex={chainIndex} />
 
                     <DexHistoryCard chainIndex={chainIndex} walletAddress={selectedWallet?.address} />
 
@@ -2299,6 +3084,9 @@ export default function TradingPage() {
                     </div>
                 </div>
             )}
+
+            {/* #6: Global toast */}
+            <ToastNotification toast={toast} onDismiss={dismissToast} />
         </div>
     );
 }

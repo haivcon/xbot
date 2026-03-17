@@ -294,14 +294,22 @@ function createMarketRoutes() {
                         chainIndex: b.chainIndex || chainIdx,
                         tokenContractAddress: b.tokenContractAddress || b.tokenAddress
                     }));
-                    const priceInfos = await onchainos.getTokenPriceInfo(tokenReqs).catch(() => []);
-                    if (Array.isArray(priceInfos) && priceInfos.length > 0) {
-                        for (const b of tokenList) {
-                            const addr = b.tokenContractAddress || b.tokenAddress;
-                            const rtPrice = priceInfos.find(p => p.tokenContractAddress?.toLowerCase() === addr?.toLowerCase());
-                            if (rtPrice && Number(rtPrice.price) > 0) {
-                                b.tokenPrice = String(rtPrice.price);
-                            }
+                    // Fetch real-time prices AND basic info (for logos) in parallel
+                    const [priceInfos, basicInfos] = await Promise.all([
+                        onchainos.getTokenPriceInfo(tokenReqs).catch(() => []),
+                        onchainos.getTokenBasicInfo(tokenReqs).catch(() => [])
+                    ]);
+                    for (const b of tokenList) {
+                        const addr = (b.tokenContractAddress || b.tokenAddress || '').toLowerCase();
+                        // Merge price
+                        const rtPrice = Array.isArray(priceInfos) && priceInfos.find(p => p.tokenContractAddress?.toLowerCase() === addr);
+                        if (rtPrice && Number(rtPrice.price) > 0) {
+                            b.tokenPrice = String(rtPrice.price);
+                        }
+                        // Merge logo from basicInfo
+                        const basic = Array.isArray(basicInfos) && basicInfos.find(p => p.tokenContractAddress?.toLowerCase() === addr);
+                        if (basic?.tokenLogoUrl || basic?.logoUrl) {
+                            b.tokenLogoUrl = basic.tokenLogoUrl || basic.logoUrl;
                         }
                     }
                 } catch { /* ignore */ }
@@ -326,6 +334,7 @@ function createMarketRoutes() {
                     address: b.tokenContractAddress || b.tokenAddress || '',
                     balance: b.holdingAmount || b.balance || '0',
                     price: b.tokenPrice || b.price || '0',
+                    logoUrl: b.tokenLogoUrl || b.logoUrl || b.logo || '',
                     chainIndex: b.chainIndex || chainIdx,
                     isRisk: !!b.isRiskToken
                 }))
