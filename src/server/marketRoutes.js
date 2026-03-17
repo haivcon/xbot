@@ -929,7 +929,7 @@ function createMarketRoutes() {
             const ethers = require('ethers');
             const cryptoNode = require('crypto');
             const { dbGet, dbRun } = require('../../db/core');
-            const { _getEncryptKey, _getRpcUrl } = require('../features/ai/onchain/helpers');
+            const { _getEncryptKey, _getChainRpc } = require('../features/ai/onchain/helpers');
 
             // 1. Resolve wallet + decrypt key
             const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
@@ -957,7 +957,7 @@ function createMarketRoutes() {
                 try {
                     const approveData = await onchainos.getApproveTransaction(chainIndex, fromTokenAddress, resolvedAmount);
                     if (approveData?.data) {
-                        const rpcUrl = _getRpcUrl(chainIndex);
+                        const rpcUrl = _getChainRpc(chainIndex);
                         const provider = new ethers.JsonRpcProvider(rpcUrl);
                         const wallet = new ethers.Wallet(privateKey, provider);
                         const approveTx = await wallet.sendTransaction({
@@ -986,7 +986,7 @@ function createMarketRoutes() {
             if (!txInfo?.tx) return res.status(400).json({ error: 'Failed to get swap transaction data' });
 
             // 5. Sign and broadcast
-            const rpcUrl = _getRpcUrl(chainIndex);
+            const rpcUrl = _getChainRpc(chainIndex);
             const provider = new ethers.JsonRpcProvider(rpcUrl);
             const wallet = new ethers.Wallet(privateKey, provider);
 
