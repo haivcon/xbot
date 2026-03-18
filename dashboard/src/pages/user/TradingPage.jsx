@@ -1728,7 +1728,7 @@ function ChainSelector({ selected, onChange }) {
 
 
 /* ═══════════════════════════════════════════
-   DCA Widget — Auto Buy/Sell on Schedule
+   DCA Widget — Auto Buy/Sell on Schedule (Premium)
    ═══════════════════════════════════════════ */
 function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
     const { t } = useTranslation();
@@ -1738,50 +1738,28 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
     const [creating, setCreating] = useState(false);
     const [createError, setCreateError] = useState(null);
     const [wallets, setWallets] = useState(sharedWallets);
-    const [openWalletDd, setOpenWalletDd] = useState(false);
-    const [openIntervalDd, setOpenIntervalDd] = useState(false);
-    const walletTriggerRef = useRef(null);
-    const walletDropRef = useRef(null);
-    const intervalTriggerRef = useRef(null);
-    const intervalDropRef = useRef(null);
-    const [walletDdPos, setWalletDdPos] = useState({ top: 0, left: 0, width: 0 });
-    const [intervalDdPos, setIntervalDdPos] = useState({ top: 0, left: 0, width: 0 });
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [expandedTask, setExpandedTask] = useState(null);
+    const knownTokens = KNOWN_TOKENS[chainIndex] || KNOWN_TOKENS['196'];
+    const [walletTokens, setWalletTokens] = useState([]);
+    const [walletBalance, setWalletBalance] = useState(null);
+    const [balanceLoading, setBalanceLoading] = useState(false);
+
     const [form, setForm] = useState({
         walletId: '', fromTokenAddress: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', toTokenAddress: '',
         fromSymbol: 'OKB', toSymbol: '', amount: '', interval: '86400000',
         stopLossPct: '', takeProfitPct: ''
     });
+
     const INTERVALS = [
-        { label: '5 min', ms: 300000 }, { label: '15 min', ms: 900000 },
-        { label: '1 hour', ms: 3600000 }, { label: '4 hours', ms: 14400000 },
-        { label: '24 hours', ms: 86400000 }, { label: '7 days', ms: 604800000 }
+        { label: t('dashboard.dca.5min', '5 min'), ms: 300000, short: '5m' },
+        { label: t('dashboard.dca.15min', '15 min'), ms: 900000, short: '15m' },
+        { label: t('dashboard.dca.1hour', '1 hour'), ms: 3600000, short: '1h' },
+        { label: t('dashboard.dca.4hours', '4 hours'), ms: 14400000, short: '4h' },
+        { label: t('dashboard.dca.24hours', '24 hours'), ms: 86400000, short: '24h' },
+        { label: t('dashboard.dca.7days', '7 days'), ms: 604800000, short: '7d' },
     ];
     const INTERVALS_SHORT = { 300000: '5m', 900000: '15m', 3600000: '1h', 14400000: '4h', 86400000: '24h', 604800000: '7d' };
-
-    // Position calculation for dropdown portals
-    useEffect(() => {
-        if (openWalletDd && walletTriggerRef.current) {
-            const r = walletTriggerRef.current.getBoundingClientRect();
-            setWalletDdPos({ top: r.bottom + 4, left: r.left, width: r.width });
-        }
-    }, [openWalletDd]);
-    useEffect(() => {
-        if (openIntervalDd && intervalTriggerRef.current) {
-            const r = intervalTriggerRef.current.getBoundingClientRect();
-            setIntervalDdPos({ top: r.bottom + 4, left: r.left, width: r.width });
-        }
-    }, [openIntervalDd]);
-
-    // Close on outside click
-    useEffect(() => {
-        if (!openWalletDd && !openIntervalDd) return;
-        const handler = (e) => {
-            if (openWalletDd && !walletTriggerRef.current?.contains(e.target) && !walletDropRef.current?.contains(e.target)) setOpenWalletDd(false);
-            if (openIntervalDd && !intervalTriggerRef.current?.contains(e.target) && !intervalDropRef.current?.contains(e.target)) setOpenIntervalDd(false);
-        };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, [openWalletDd, openIntervalDd]);
 
     const loadTasks = async () => {
         try {
@@ -1793,6 +1771,23 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
 
     useEffect(() => { loadTasks(); }, []);
     useEffect(() => { setWallets(sharedWallets); }, [sharedWallets]);
+
+    // Fetch wallet balance when wallet changes
+    useEffect(() => {
+        const wId = form.walletId;
+        if (!wId) { setWalletBalance(null); setWalletTokens([]); return; }
+        setBalanceLoading(true);
+        api.getWalletBalance(wId)
+            .then(res => {
+                const balances = res.tokens || res.balances || res.tokenAssets || [];
+                setWalletTokens(balances);
+                const sym = form.fromSymbol.toUpperCase();
+                const match = balances.find(b => (b.symbol || b.tokenSymbol || '').toUpperCase() === sym);
+                setWalletBalance(match ? Number(match.balance || match.holdingAmount || 0) : 0);
+            })
+            .catch(() => setWalletBalance(null))
+            .finally(() => setBalanceLoading(false));
+    }, [form.walletId, form.fromSymbol, chainIndex]);
 
     const handleCreate = async () => {
         if (!form.walletId || !form.toTokenAddress || !form.amount) return;
@@ -1807,10 +1802,11 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                 takeProfitPct: form.takeProfitPct || undefined,
             });
             setShowForm(false);
+            setShowConfirm(false);
             setForm(f => ({ ...f, amount: '', toTokenAddress: '', toSymbol: '' }));
             setCreateError(null);
             loadTasks();
-        } catch (err) { setCreateError(err.message); }
+        } catch (err) { setCreateError(err.message); setShowConfirm(false); }
         setCreating(false);
     };
 
@@ -1828,148 +1824,167 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
         return h >= 24 ? `${(h / 24).toFixed(0)}d` : `${h.toFixed(0)}h`;
     };
 
-    // Selected wallet display text
     const selectedWallet = wallets.find(w => String(w.id) === String(form.walletId));
-    const walletDisplayText = selectedWallet
-        ? `#${selectedWallet.id} ${selectedWallet.name || selectedWallet.address?.slice(0, 6) + '...' + selectedWallet.address?.slice(-4)}`
-        : 'Select wallet...';
-
-    // Selected interval display
     const selectedInterval = INTERVALS.find(i => String(i.ms) === String(form.interval));
-    const intervalDisplayText = selectedInterval ? selectedInterval.label : '24 hours';
-
-    // Wallet dropdown portal
-    const walletDropdown = openWalletDd ? createPortal(
-        <div ref={walletDropRef}
-            className="fixed z-[9999] bg-surface-800/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-fadeIn max-h-[240px] overflow-y-auto"
-            style={{ top: walletDdPos.top, left: walletDdPos.left, width: Math.max(walletDdPos.width, 220) }}>
-            {wallets.length === 0 ? (
-                <div className="px-3 py-4 text-[10px] text-surface-200/30 text-center">{t('dashboard.trading.noWalletsFound', 'No wallets found')}</div>
-            ) : wallets.map(w => {
-                const isSelected = String(w.id) === String(form.walletId);
-                const addrShort = w.address ? `${w.address.slice(0, 6)}...${w.address.slice(-4)}` : '';
-                return (
-                    <button key={w.id}
-                        onClick={() => { setForm(f => ({ ...f, walletId: String(w.id) })); setOpenWalletDd(false); }}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs transition-all ${isSelected
-                            ? 'bg-violet-500/15 text-violet-400 font-bold'
-                            : 'text-surface-200/60 hover:bg-white/[0.05] hover:text-surface-100'
-                        }`}>
-                        <Wallet size={12} className={isSelected ? 'text-violet-400' : 'text-surface-200/25'} />
-                        <div className="flex-1 text-left min-w-0">
-                            <span className="font-semibold">#{w.id}</span>
-                            {w.name && <span className="ml-1 text-surface-200/40">{w.name}</span>}
-                            <p className="text-[9px] text-surface-200/20 font-mono truncate">{addrShort}</p>
-                        </div>
-                        {isSelected && <span className="text-violet-400 text-sm">✓</span>}
-                    </button>
-                );
-            })}
-        </div>,
-        document.body
-    ) : null;
-
-    // Interval dropdown portal
-    const intervalDropdown = openIntervalDd ? createPortal(
-        <div ref={intervalDropRef}
-            className="fixed z-[9999] bg-surface-800/95 backdrop-blur-xl border border-white/[0.1] rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-fadeIn"
-            style={{ top: intervalDdPos.top, left: intervalDdPos.left, width: Math.max(intervalDdPos.width, 160) }}>
-            {INTERVALS.map(i => {
-                const isSelected = String(i.ms) === String(form.interval);
-                return (
-                    <button key={i.ms}
-                        onClick={() => { setForm(f => ({ ...f, interval: String(i.ms) })); setOpenIntervalDd(false); }}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs transition-all ${isSelected
-                            ? 'bg-violet-500/15 text-violet-400 font-bold'
-                            : 'text-surface-200/60 hover:bg-white/[0.05] hover:text-surface-100'
-                        }`}>
-                        <Clock size={11} className={isSelected ? 'text-violet-400' : 'text-surface-200/25'} />
-                        <span className="flex-1 text-left font-medium">{i.label}</span>
-                        {isSelected && <span className="text-violet-400 text-sm">✓</span>}
-                    </button>
-                );
-            })}
-        </div>,
-        document.body
-    ) : null;
+    const canSubmit = form.walletId && form.toTokenAddress && form.amount && Number(form.amount) > 0;
+    const activeCount = tasks.filter(tk => tk.status === 'active').length;
 
     return (
-        <div className="glass-card relative">
+        <div className="glass-card p-5 relative">
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500 rounded-t-2xl" />
-            <div className="p-4 border-b border-white/5 flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-violet-500/15 flex items-center justify-center">
-                    <Repeat size={13} className="text-violet-400" />
+
+            {/* ─── Header — matches Swap/Transfer ─── */}
+            <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
+                    <Repeat size={15} className="text-violet-400" />
                 </div>
-                <h3 className="text-sm font-bold text-surface-100 flex-1">{t('dashboard.tradingUx.dcaAutoSwap', 'DCA — Auto Swap')}</h3>
-                <button onClick={() => setShowForm(!showForm)}
-                    className={`p-1.5 rounded-lg transition-all ${showForm ? 'bg-violet-500/15 text-violet-400' : 'text-surface-200/30 hover:text-violet-400'}`}>
-                    {showForm ? <X size={14} /> : <Plus size={14} />}
+                <div className="flex-1">
+                    <h3 className="text-sm font-bold text-surface-100">{t('dashboard.tradingUx.dcaAutoSwap', 'DCA — Auto Swap')}</h3>
+                    {activeCount > 0 && (
+                        <p className="text-[9px] text-emerald-400/70">{activeCount} {t('dashboard.dca.activeSchedules', 'active schedule(s)')}</p>
+                    )}
+                </div>
+                <button onClick={() => { setShowForm(!showForm); setShowConfirm(false); }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-semibold transition-all ${showForm
+                        ? 'bg-violet-500/15 text-violet-400 border border-violet-500/20'
+                        : 'bg-surface-800/60 text-surface-200/40 hover:text-violet-400 hover:bg-violet-500/10 border border-white/[0.06]'
+                    }`}>
+                    {showForm ? <><X size={11} /> {t('dashboard.common.cancel', 'Cancel')}</> : <><Plus size={11} /> {t('dashboard.dca.newSchedule', 'New')}</>}
                 </button>
             </div>
 
-            {/* Create Form */}
+            {/* ─── Create Form ─── */}
             {showForm && (
-                <div className="p-4 border-b border-white/5 space-y-3 animate-fadeIn bg-surface-900/30">
-                    <div className="grid grid-cols-2 gap-2">
-                        {/* Custom Wallet Dropdown */}
+                <div className="space-y-3 animate-fadeIn mb-4">
+                    {/* Wallet selector — reuse WalletDropdown */}
+                    <WalletDropdown wallets={wallets} value={form.walletId} onChange={(id) => setForm(f => ({ ...f, walletId: id }))} accentColor="violet" chainIndex={chainIndex} />
+
+                    {/* From token chips — like Swap/Transfer */}
+                    {walletTokens.length > 0 && (
                         <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.wallet', 'Wallet')}</label>
-                            <button ref={walletTriggerRef}
-                                onClick={() => { setOpenWalletDd(!openWalletDd); setOpenIntervalDd(false); }}
-                                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-800/80 border transition-all text-left ${openWalletDd
-                                    ? 'border-violet-500/40 shadow-sm shadow-violet-500/10'
-                                    : 'border-white/[0.08] hover:border-white/[0.15]'
-                                }`}>
-                                <Wallet size={12} className={form.walletId ? 'text-violet-400' : 'text-surface-200/25'} />
-                                <span className={`flex-1 text-xs truncate ${form.walletId ? 'text-surface-100 font-semibold' : 'text-surface-200/30'}`}>
-                                    {walletDisplayText}
-                                </span>
-                                <ChevronDown size={12} className={`text-surface-200/30 transition-transform ${openWalletDd ? 'rotate-180' : ''}`} />
-                            </button>
-                            {walletDropdown}
+                            <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">{t('dashboard.dca.fromToken', 'FROM TOKEN')}</label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {walletTokens.filter(wt => Number(wt.balance || 0) > 0).map((wt, i) => {
+                                    const sym = (wt.symbol || wt.tokenSymbol || '?').toUpperCase();
+                                    const logo = wt.logoUrl || wt.tokenLogoUrl || '';
+                                    const bal = Number(wt.balance || 0);
+                                    const isActive = form.fromSymbol === sym;
+                                    const addr = wt.tokenContractAddress || wt.address || '';
+                                    return (
+                                        <button key={i} onClick={() => setForm(f => ({
+                                            ...f, fromSymbol: sym,
+                                            fromTokenAddress: addr || '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+                                        }))} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-medium transition-all ${
+                                            isActive ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-surface-800/40 text-surface-200/40 border border-white/[0.06] hover:border-white/[0.12]'
+                                        }`}>
+                                            {logo ? <img src={logo} alt="" width={12} height={12} className="rounded-full" onError={e => { e.target.style.display = 'none'; }} /> : <span>{knownTokens[sym]?.icon || '🪙'}</span>}
+                                            <span>{sym}</span>
+                                            <span className="text-surface-200/20">{parseFloat(bal.toFixed(4))}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {/* Available balance */}
+                            {form.walletId && walletBalance != null && (
+                                <div className="flex items-center gap-2 mt-1.5">
+                                    <span className="text-[9px] text-surface-200/30">
+                                        {t('dashboard.tradingUx.available', 'Available')}: {balanceLoading ? '...' : parseFloat(Number(walletBalance).toFixed(4))} {form.fromSymbol}
+                                    </span>
+                                    {walletBalance > 0 && (
+                                        <button onClick={() => setForm(f => ({ ...f, amount: String(walletBalance) }))} className="text-[9px] text-brand-400 font-bold hover:text-brand-300 transition-colors">MAX</button>
+                                    )}
+                                </div>
+                            )}
                         </div>
-                        {/* Custom Interval Dropdown */}
-                        <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.interval', 'Interval')}</label>
-                            <button ref={intervalTriggerRef}
-                                onClick={() => { setOpenIntervalDd(!openIntervalDd); setOpenWalletDd(false); }}
-                                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-800/80 border transition-all text-left ${openIntervalDd
-                                    ? 'border-violet-500/40 shadow-sm shadow-violet-500/10'
-                                    : 'border-white/[0.08] hover:border-white/[0.15]'
-                                }`}>
-                                <Clock size={12} className="text-violet-400" />
-                                <span className="flex-1 text-xs text-surface-100 font-semibold">{intervalDisplayText}</span>
-                                <ChevronDown size={12} className={`text-surface-200/30 transition-transform ${openIntervalDd ? 'rotate-180' : ''}`} />
-                            </button>
-                            {intervalDropdown}
-                        </div>
-                    </div>
+                    )}
+
+                    {/* To token address */}
                     <div>
-                        <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.toTokenAddr', 'To Token (Contract Address)')}</label>
-                        <input type="text" value={form.toTokenAddress} placeholder="0x..." onChange={e => setForm(f => ({ ...f, toTokenAddress: e.target.value }))}
-                            className="w-full bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] focus:border-violet-500/40 rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none font-mono transition-colors" />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                        <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.amount', 'Amount')}</label>
-                            <input type="number" value={form.amount} placeholder="0.1" onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                                className="w-full bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] focus:border-violet-500/40 rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                        </div>
-                        <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.stopLoss', 'Stop Loss %')}</label>
-                            <input type="number" value={form.stopLossPct} placeholder="10" onChange={e => setForm(f => ({ ...f, stopLossPct: e.target.value }))}
-                                className="w-full bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] focus:border-violet-500/40 rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                        </div>
-                        <div>
-                            <label className="text-[9px] text-surface-200/30 uppercase tracking-widest block mb-1.5 font-semibold">{t('dashboard.tradingUx.takeProfit', 'Take Profit %')}</label>
-                            <input type="number" value={form.takeProfitPct} placeholder="50" onChange={e => setForm(f => ({ ...f, takeProfitPct: e.target.value }))}
-                                className="w-full bg-surface-800/80 border border-white/[0.08] hover:border-white/[0.15] focus:border-violet-500/40 rounded-xl px-3 py-2.5 text-xs text-surface-100 outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                        <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">{t('dashboard.dca.toToken', 'TO TOKEN (Contract Address)')}</label>
+                        <div className="bg-surface-900/60 rounded-2xl border border-white/[0.08] p-3">
+                            <input type="text" value={form.toTokenAddress} placeholder="0x..." onChange={e => setForm(f => ({ ...f, toTokenAddress: e.target.value }))}
+                                className="w-full bg-transparent text-sm text-surface-100 font-mono outline-none placeholder:text-surface-200/15" />
                         </div>
                     </div>
-                    <button onClick={handleCreate} disabled={creating || !form.walletId || !form.toTokenAddress || !form.amount}
-                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-bold shadow-lg hover:shadow-violet-500/25 hover:scale-[1.01] active:scale-95 transition-all disabled:opacity-40">
-                        {creating ? <Loader2 size={14} className="animate-spin mx-auto" /> : '🔄 Create DCA Schedule'}
-                    </button>
+
+                    {/* Amount + Interval row */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">{t('dashboard.tradingUx.amount', 'Amount')}</label>
+                            <div className="bg-surface-900/60 rounded-2xl border border-white/[0.08] p-3">
+                                <input type="number" value={form.amount} placeholder="0.1" onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                                    className="w-full bg-transparent text-lg font-bold text-surface-100 outline-none placeholder:text-surface-200/15 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                <span className="text-[9px] text-surface-200/25 mt-0.5 block">{form.fromSymbol} {t('dashboard.dca.perSwap', 'per swap')}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">{t('dashboard.tradingUx.interval', 'Interval')}</label>
+                            <div className="grid grid-cols-3 gap-1">
+                                {INTERVALS.map(i => {
+                                    const isSelected = String(i.ms) === String(form.interval);
+                                    return (
+                                        <button key={i.ms} onClick={() => setForm(f => ({ ...f, interval: String(i.ms) }))}
+                                            className={`py-2 rounded-lg text-[10px] font-semibold transition-all ${isSelected
+                                                ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+                                                : 'bg-surface-800/60 text-surface-200/40 border border-white/[0.06] hover:border-white/[0.12]'
+                                            }`}>
+                                            {i.short}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Stop Loss / Take Profit — collapsible */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold flex items-center gap-1">
+                                <ArrowDownRight size={9} className="text-red-400" /> {t('dashboard.tradingUx.stopLoss', 'Stop Loss %')}
+                            </label>
+                            <div className="bg-surface-900/60 rounded-2xl border border-white/[0.08] p-3">
+                                <input type="number" value={form.stopLossPct} placeholder="10" onChange={e => setForm(f => ({ ...f, stopLossPct: e.target.value }))}
+                                    className="w-full bg-transparent text-sm font-semibold text-surface-100 outline-none placeholder:text-surface-200/15 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold flex items-center gap-1">
+                                <ArrowUpRight size={9} className="text-emerald-400" /> {t('dashboard.tradingUx.takeProfit', 'Take Profit %')}
+                            </label>
+                            <div className="bg-surface-900/60 rounded-2xl border border-white/[0.08] p-3">
+                                <input type="number" value={form.takeProfitPct} placeholder="50" onChange={e => setForm(f => ({ ...f, takeProfitPct: e.target.value }))}
+                                    className="w-full bg-transparent text-sm font-semibold text-surface-100 outline-none placeholder:text-surface-200/15 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Confirmation step — like Transfer widget */}
+                    {showConfirm ? (
+                        <div className="space-y-2 animate-fadeIn bg-surface-900/60 rounded-xl p-3 border border-white/[0.06]">
+                            <p className="text-[10px] text-amber-400 flex items-center gap-1 font-semibold"><AlertTriangle size={11} /> {t('dashboard.dca.confirmCreate', 'Confirm DCA schedule:')}</p>
+                            <div className="space-y-1.5 text-[10px]">
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.wallet', 'Wallet')}</span><span className="text-surface-100 font-mono">{selectedWallet?.name || `Wallet ${form.walletId}`}</span></div>
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.dca.pair', 'Pair')}</span><span className="text-surface-100 font-bold">{form.fromSymbol} → {form.toSymbol || form.toTokenAddress.slice(0, 8) + '...'}</span></div>
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.trading.amount', 'Amount')}</span><span className="text-surface-100 font-bold">{form.amount} {form.fromSymbol}</span></div>
+                                <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.interval', 'Interval')}</span><span className="text-surface-100">{selectedInterval?.label || '24h'}</span></div>
+                                {form.stopLossPct && <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.stopLoss', 'Stop Loss')}</span><span className="text-red-400">-{form.stopLossPct}%</span></div>}
+                                {form.takeProfitPct && <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.takeProfit', 'Take Profit')}</span><span className="text-emerald-400">+{form.takeProfitPct}%</span></div>}
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                                <button onClick={() => setShowConfirm(false)} className="flex-1 py-2 rounded-lg bg-surface-800/60 border border-white/[0.08] text-xs text-surface-200/50 hover:text-surface-100 transition-colors">{t('dashboard.common.cancel', 'Cancel')}</button>
+                                <button onClick={handleCreate} disabled={creating}
+                                    className="flex-1 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-bold hover:shadow-violet-500/25 transition-all disabled:opacity-40">
+                                    {creating ? <Loader2 size={12} className="animate-spin mx-auto" /> : `✅ ${t('dashboard.dca.confirmStart', 'Start DCA')}`}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button onClick={() => canSubmit ? setShowConfirm(true) : null} disabled={!canSubmit}
+                            className="w-full py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:shadow-lg hover:shadow-violet-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
+                            <Repeat size={14} /> {t('dashboard.dca.createSchedule', 'Create DCA Schedule')}
+                        </button>
+                    )}
+
                     {createError && (
                         <div className="px-3 py-2 rounded-xl text-xs bg-red-500/10 border border-red-500/15 text-red-400 flex items-center gap-1.5">
                             <AlertTriangle size={11} /> {createError}
@@ -1979,69 +1994,87 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                 </div>
             )}
 
-            {/* Task List */}
+            {/* ─── Schedule List ─── */}
             {loading ? (
                 <div className="p-6 flex justify-center"><Loader2 size={16} className="animate-spin text-surface-200/30" /></div>
-            ) : tasks.length === 0 ? (
-                <div className="p-6 text-center">
-                    <Repeat size={24} className="text-surface-200/10 mx-auto mb-2" />
-                    <p className="text-xs text-surface-200/20">{t('dashboard.trading.noDcaSchedules', 'No DCA schedules yet')}</p>
-                    <p className="text-[10px] text-surface-200/15 mt-1">{t('dashboard.trading.createFirstDca', 'Click + to create your first auto-swap')}</p>
+            ) : tasks.length === 0 && !showForm ? (
+                <div className="text-center py-8">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 flex items-center justify-center mx-auto mb-3">
+                        <Repeat size={24} className="text-violet-400/30" />
+                    </div>
+                    <p className="text-xs text-surface-200/30 font-medium">{t('dashboard.trading.noDcaSchedules', 'No DCA schedules yet')}</p>
+                    <p className="text-[10px] text-surface-200/15 mt-1 mb-3">{t('dashboard.dca.emptyHint', 'Automate your buys at regular intervals')}</p>
+                    <button onClick={() => setShowForm(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-500/15 text-violet-400 text-xs font-semibold hover:bg-violet-500/25 transition-all border border-violet-500/20">
+                        <Plus size={12} /> {t('dashboard.dca.newSchedule', 'New Schedule')}
+                    </button>
                 </div>
-            ) : (
-                <div className="divide-y divide-white/[0.03]">
+            ) : tasks.length > 0 ? (
+                <div className={`divide-y divide-white/[0.03] ${showForm ? 'border-t border-white/5' : ''}`}>
                     {tasks.map(task => {
                         const isActive = task.status === 'active';
                         const isPaused = task.status === 'paused';
+                        const isExpanded = expandedTask === task.id;
                         const nextRun = task.nextRunAt ? new Date(task.nextRunAt).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
                         return (
-                            <div key={task.id} className="px-4 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors">
-                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-emerald-400 animate-pulse' : isPaused ? 'bg-amber-400' : 'bg-surface-200/20'}`} />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-semibold text-surface-100">
-                                        {task.fromSymbol} → {task.toSymbol}
-                                        <span className="text-[9px] text-surface-200/25 ml-1.5">{fmtInterval(task.intervalMs)}</span>
-                                    </p>
-                                    <p className="text-[10px] text-surface-200/30">
-                                        {task.amount} per swap • Chain {CHAINS[task.chainIndex]?.name || task.chainIndex}
-                                        {isActive && <span className="text-emerald-400/60 ml-1">• Next: {nextRun}</span>}
-                                    </p>
-                                    {/* U4: Execution history */}
-                                    {(task.executionCount > 0 || task.totalVolume) && (
-                                        <p className="text-[9px] text-surface-200/25 flex items-center gap-2">
-                                            <span>🔄 {task.executionCount || 0} executions</span>
-                                            {task.totalVolume && <span>• Vol: {Number(task.totalVolume).toFixed(4)} {task.fromSymbol}</span>}
-                                            {task.lastExecutedAt && <span>• Last: {new Date(task.lastExecutedAt).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
+                            <div key={task.id} className="group">
+                                <div className="px-4 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors cursor-pointer"
+                                    onClick={() => setExpandedTask(isExpanded ? null : task.id)}>
+                                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isActive ? 'bg-emerald-400 shadow-lg shadow-emerald-400/30' : isPaused ? 'bg-amber-400' : 'bg-surface-200/20'}`}>
+                                        {isActive && <div className="w-full h-full rounded-full bg-emerald-400 animate-ping" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-semibold text-surface-100 flex items-center gap-1.5">
+                                            {task.fromSymbol} → {task.toSymbol}
+                                            <span className="text-[9px] text-surface-200/25 bg-surface-800/60 px-1.5 py-0.5 rounded-md">{fmtInterval(task.intervalMs)}</span>
+                                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? 'bg-emerald-500/15 text-emerald-400' : isPaused ? 'bg-amber-500/15 text-amber-400' : 'bg-surface-200/10 text-surface-200/30'}`}>
+                                                {isActive ? '● ACTIVE' : isPaused ? '◼ PAUSED' : '● STOPPED'}
+                                            </span>
                                         </p>
-                                    )}
-                                    {(task.stopLossPct || task.takeProfitPct) && (
-                                        <p className="text-[9px] text-surface-200/20">
-                                            {task.stopLossPct && <span className="text-red-400/60">SL: -{task.stopLossPct}%</span>}
-                                            {task.stopLossPct && task.takeProfitPct && ' • '}
-                                            {task.takeProfitPct && <span className="text-emerald-400/60">TP: +{task.takeProfitPct}%</span>}
+                                        <p className="text-[10px] text-surface-200/30">
+                                            {task.amount} {task.fromSymbol} {t('dashboard.dca.perSwap', 'per swap')}
+                                            {isActive && <span className="text-emerald-400/60 ml-1">• Next: {nextRun}</span>}
                                         </p>
-                                    )}
-                                </div>
-                                <div className="flex gap-1">
-                                    {isActive && (
-                                        <button onClick={() => handleAction(task.id, 'pause')} className="p-1.5 rounded-lg hover:bg-amber-500/15 text-surface-200/30 hover:text-amber-400 transition-all" title="Pause">
-                                            <Pause size={12} />
+                                    </div>
+                                    <div className="flex gap-1 flex-shrink-0">
+                                        {isActive && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleAction(task.id, 'pause'); }} className="p-1.5 rounded-lg hover:bg-amber-500/15 text-surface-200/30 hover:text-amber-400 transition-all" title="Pause">
+                                                <Pause size={12} />
+                                            </button>
+                                        )}
+                                        {isPaused && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleAction(task.id, 'resume'); }} className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-surface-200/30 hover:text-emerald-400 transition-all" title="Resume">
+                                                <Play size={12} />
+                                            </button>
+                                        )}
+                                        <button onClick={(e) => { e.stopPropagation(); handleAction(task.id, 'delete'); }} className="p-1.5 rounded-lg hover:bg-red-500/15 text-surface-200/30 hover:text-red-400 transition-all" title="Delete">
+                                            <Trash2 size={12} />
                                         </button>
-                                    )}
-                                    {isPaused && (
-                                        <button onClick={() => handleAction(task.id, 'resume')} className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-surface-200/30 hover:text-emerald-400 transition-all" title="Resume">
-                                            <Play size={12} />
-                                        </button>
-                                    )}
-                                    <button onClick={() => handleAction(task.id, 'delete')} className="p-1.5 rounded-lg hover:bg-red-500/15 text-surface-200/30 hover:text-red-400 transition-all" title="Cancel">
-                                        <Trash2 size={12} />
-                                    </button>
+                                        <ChevronDown size={12} className={`text-surface-200/20 transition-transform mt-1.5 ${isExpanded ? 'rotate-180' : ''}`} />
+                                    </div>
                                 </div>
+                                {/* Expanded details */}
+                                {isExpanded && (
+                                    <div className="px-4 pb-3 animate-fadeIn">
+                                        <div className="bg-surface-900/40 rounded-xl p-3 space-y-1.5 text-[10px]">
+                                            <div className="flex justify-between"><span className="text-surface-200/30">Chain</span><span className="text-surface-100">{CHAINS[task.chainIndex]?.name || task.chainIndex}</span></div>
+                                            {(task.executionCount > 0 || task.totalVolume) && (
+                                                <>
+                                                    <div className="flex justify-between"><span className="text-surface-200/30">{t('dashboard.dca.executions', 'Executions')}</span><span className="text-surface-100 font-semibold">{task.executionCount || 0}</span></div>
+                                                    {task.totalVolume && <div className="flex justify-between"><span className="text-surface-200/30">{t('dashboard.dca.totalVolume', 'Total Volume')}</span><span className="text-surface-100">{Number(task.totalVolume).toFixed(4)} {task.fromSymbol}</span></div>}
+                                                    {task.lastExecutedAt && <div className="flex justify-between"><span className="text-surface-200/30">{t('dashboard.dca.lastRun', 'Last Run')}</span><span className="text-surface-100">{new Date(task.lastExecutedAt).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></div>}
+                                                </>
+                                            )}
+                                            {task.stopLossPct && <div className="flex justify-between"><span className="text-surface-200/30">{t('dashboard.tradingUx.stopLoss', 'Stop Loss')}</span><span className="text-red-400 font-semibold">-{task.stopLossPct}%</span></div>}
+                                            {task.takeProfitPct && <div className="flex justify-between"><span className="text-surface-200/30">{t('dashboard.tradingUx.takeProfit', 'Take Profit')}</span><span className="text-emerald-400 font-semibold">+{task.takeProfitPct}%</span></div>}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
                 </div>
-            )}
+            ) : null}
         </div>
     );
 }
