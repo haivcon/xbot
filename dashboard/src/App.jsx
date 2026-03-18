@@ -126,12 +126,12 @@ export default function App() {
                     <Route path="history" element={<SuspenseWrapper><TransferHistoryPage /></SuspenseWrapper>} />
                     <Route path="community" element={<Navigate to="/my-space" />} />
                     <Route path="profile" element={<Navigate to="/my-space" />} />
-                    <Route path="token-lookup" element={<SuspenseWrapper><TokenLookupPage /></SuspenseWrapper>} />
+                    <Route path="token-lookup" element={<Navigate to="/trading" />} />
                     <Route path="portfolio" element={<SuspenseWrapper><PortfolioPage /></SuspenseWrapper>} />
                     <Route path="games" element={<SuspenseWrapper><MiniGamesPage /></SuspenseWrapper>} />
                     <Route path="ai-memory" element={<SuspenseWrapper><AiMemoryPage /></SuspenseWrapper>} />
                     <Route path="ai-trader" element={<SuspenseWrapper><AiTraderPage /></SuspenseWrapper>} />
-                    <Route path="meme-scanner" element={<SuspenseWrapper><MemeScannerPage /></SuspenseWrapper>} />
+                    <Route path="meme-scanner" element={<Navigate to="/trading" />} />
                     <Route path="discovery" element={<SuspenseWrapper><DiscoveryPage /></SuspenseWrapper>} />
                     <Route path="my-groups" element={<SuspenseWrapper><UserGroupsPage /></SuspenseWrapper>} />
                     <Route path="checkin-admin" element={isOwnerView() ? <SuspenseWrapper><CheckinAdminPage /></SuspenseWrapper> : <Navigate to="/" />} />

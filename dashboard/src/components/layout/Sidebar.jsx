@@ -243,8 +243,6 @@ export default function Sidebar({ open, onClose }) {
             icon: Compass,
             items: [
                 { to: '/overview', icon: LayoutDashboard, label: t('dashboard.sidebar.home') },
-                { to: '/token-lookup', icon: Search, label: t('dashboard.sidebar.tokenLookup') || 'Token Lookup' },
-                { to: '/meme-scanner', icon: Zap, label: t('dashboard.sidebar.memeScanner') },
                 { to: '/discovery', icon: Compass, label: t('dashboard.sidebar.discovery') },
                 { to: '/leaderboard', icon: Trophy, label: t('dashboard.sidebar.leaderboard') },
                 { to: '/alerts', icon: Bell, label: t('dashboard.sidebar.alerts') },

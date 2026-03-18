@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 
 const TransferHistorySection = lazy(() => import('./TransferHistoryPage'));
+const TokenLookupSection = lazy(() => import('./TokenLookupPage'));
+const MemeScannerSection = lazy(() => import('./MemeScannerPage'));
 
 /* ═══════════════════════════════════════════
    Constants & Helpers
@@ -2958,6 +2960,8 @@ const TABS = [
     { key: 'trade',   icon: ArrowLeftRight, label: 'dashboard.trading.tabTrade' },
     { key: 'market',  icon: TrendingUp,     label: 'dashboard.trading.tabMarket' },
     { key: 'history', icon: History,         label: 'dashboard.trading.tabHistory' },
+    { key: 'lookup',  icon: Search,         label: 'dashboard.trading.tabLookup' },
+    { key: 'meme',    icon: Zap,            label: 'dashboard.trading.tabMeme' },
 ];
 
 
@@ -3097,6 +3101,20 @@ export default function TradingPage() {
                         </Suspense>
                     </div>
                 </div>
+            )}
+
+            {/* ═══════ Tab 4: Token Lookup ═══════ */}
+            {activeTab === 'lookup' && (
+                <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-brand-400" /></div>}>
+                    <TokenLookupSection />
+                </Suspense>
+            )}
+
+            {/* ═══════ Tab 5: Meme Scanner ═══════ */}
+            {activeTab === 'meme' && (
+                <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-brand-400" /></div>}>
+                    <MemeScannerSection />
+                </Suspense>
             )}
 
             {/* #6: Global toast */}
