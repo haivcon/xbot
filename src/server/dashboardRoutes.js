@@ -1512,6 +1512,338 @@ function createDashboardRoutes() {
         }
     });
 
+
+    // ==================
+    // USER GROUP MANAGEMENT (users manage only groups they admin)
+    // ==================
+
+    // Security middleware: verify user is admin of the target group
+    async function userGroupGuard(req, res, next) {
+        try {
+            const userId = String(req.dashboardUser.userId);
+            const chatId = decodeURIComponent(req.params.chatId);
+            if (!chatId) return res.status(400).json({ error: 'chatId required' });
+
+            // Fast DB check first
+            const inDb = await db.isGroupAdminInDb?.(chatId, userId);
+            if (inDb) {
+                req.groupChatId = chatId;
+                return next();
+            }
+
+            // Verify with Telegram API
+            try {
+                const { bot } = require('../core/bot');
+                const member = await bot.getChatMember(chatId, userId);
+                if (member && (member.status === 'administrator' || member.status === 'creator')) {
+                    // Cache in DB for future requests
+                    await db.addGroupAdmin?.(chatId, userId);
+                    req.groupChatId = chatId;
+                    return next();
+                }
+            } catch (tgErr) {
+                log.warn(`userGroupGuard: Telegram check failed for user ${userId} in ${chatId}: ${tgErr.message}`);
+            }
+
+            return res.status(403).json({ error: 'You are not an admin of this group' });
+        } catch (err) {
+            log.error(`userGroupGuard error: ${err.message}`);
+            return res.status(500).json({ error: 'Authorization check failed' });
+        }
+    }
+
+    // List groups where user is admin (with auto-discovery)
+    router.get('/user/groups', async (req, res) => {
+        try {
+            const userId = String(req.dashboardUser.userId);
+            const { bot } = require('../core/bot');
+            const { dbRun: _dbRun } = require('../../db/core');
+
+            // Ensure the group_admins table exists (self-healing)
+            try {
+                await _dbRun(`CREATE TABLE IF NOT EXISTS group_admins (
+                    chatId TEXT, userId TEXT, addedAt INTEGER,
+                    PRIMARY KEY (chatId, userId)
+                )`);
+                await _dbRun(`CREATE INDEX IF NOT EXISTS idx_group_admins_userId ON group_admins(userId)`);
+            } catch (tableErr) {
+                log.warn(`group_admins table creation: ${tableErr.message}`);
+            }
+
+            // Step 1: Get all group profiles the bot is tracking
+            const allGroupProfiles = await db.listGroupProfiles?.() || [];
+            log.info(`User ${userId} group discovery: ${allGroupProfiles.length} total group profiles found`);
+
+            // Step 2: Get already-cached admin records
+            let cachedGroups = [];
+            try {
+                cachedGroups = await db.getGroupsByAdmin?.(userId) || [];
+            } catch (cacheErr) {
+                log.warn(`getGroupsByAdmin failed: ${cacheErr.message}`);
+            }
+            const cachedChatIds = new Set(cachedGroups.map(g => String(g.chatId)));
+
+            // Step 3: Discover new groups where user might be admin
+            const uncheckedGroups = allGroupProfiles.filter(gp => !cachedChatIds.has(String(gp.chatId)));
+            log.info(`User ${userId}: ${cachedGroups.length} cached, ${uncheckedGroups.length} to check via Telegram API`);
+
+            // Check Telegram API for each unchecked group
+            for (const gp of uncheckedGroups) {
+                try {
+                    const member = await bot.getChatMember(gp.chatId, userId);
+                    if (member && (member.status === 'administrator' || member.status === 'creator')) {
+                        try {
+                            await db.addGroupAdmin?.(gp.chatId, userId);
+                        } catch (addErr) {
+                            log.warn(`addGroupAdmin failed for ${gp.chatId}: ${addErr.message}`);
+                        }
+                        cachedGroups.push(gp); // Add to result directly
+                        log.info(`User ${userId} discovered as admin of group ${gp.chatId} (${gp.title})`);
+                    }
+                } catch (tgErr) {
+                    // Bot might not be in group anymore, or API error — skip
+                    log.debug?.(`getChatMember skipped for ${gp.chatId}: ${tgErr.message}`);
+                }
+                // Small delay to avoid Telegram rate limits
+                if (uncheckedGroups.length > 3) {
+                    await new Promise(r => setTimeout(r, 150));
+                }
+            }
+
+            // Step 4: Enrich with subscription + settings
+            const enriched = await Promise.all(cachedGroups.map(async (g) => {
+                let subscription = null, settingsSummary = {};
+                try { subscription = await db.getGroupSubscription?.(g.chatId); } catch {}
+                try {
+                    const s = await db.getGroupBotSettings?.(g.chatId);
+                    settingsSummary = { hasRules: !!s?.rulesText, hasBlacklist: (s?.blacklist?.length || 0) > 0, lang: s?.groupLanguage };
+                } catch {}
+                return { ...g, subscription, ...settingsSummary };
+            }));
+
+            log.info(`User ${userId} groups result: ${enriched.length} groups`);
+            res.json({ groups: enriched });
+        } catch (err) {
+            log.error(`GET /user/groups FATAL: ${err.message}\n${err.stack}`);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Get group detail
+    router.get('/user/groups/:chatId', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const [settings, subscription, memberLangs] = await Promise.all([
+                db.getGroupBotSettings?.(chatId) || {},
+                db.getGroupSubscription?.(chatId),
+                db.getGroupMemberLanguages?.(chatId) || [],
+            ]);
+            res.json({
+                settings: settings || {},
+                rules: settings?.rulesText || null,
+                blacklist: Array.isArray(settings?.blacklist) ? settings.blacklist : [],
+                subscription: subscription || null,
+                memberLanguages: memberLangs || [],
+                groupLanguage: settings?.groupLanguage || null,
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Update group settings (user-level)
+    router.put('/user/groups/:chatId/settings', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { settings, rules, blacklist, subscription } = req.body;
+
+            const settingsUpdates = {};
+            if (settings && typeof settings === 'object') {
+                Object.assign(settingsUpdates, settings);
+            }
+            if (Array.isArray(blacklist)) {
+                settingsUpdates.blacklist = blacklist;
+            }
+            if (Object.keys(settingsUpdates).length > 0) {
+                await db.updateGroupBotSettings?.(chatId, settingsUpdates);
+            }
+            if (rules !== undefined) {
+                await db.setGroupRules?.(chatId, rules, req.dashboardUser.userId);
+            }
+            if (subscription !== undefined) {
+                if (subscription === null) {
+                    await db.removeGroupSubscription?.(chatId);
+                } else if (subscription && typeof subscription === 'object') {
+                    await db.upsertGroupSubscription?.(chatId, subscription.lang || 'en', subscription.minStake || 0, subscription.messageThreadId || null);
+                }
+            }
+            log.info(`Dashboard: User ${req.dashboardUser.userId} updated group ${chatId} settings`);
+            logGroupActivity(chatId, 'settings_update', `Settings updated by user ${req.dashboardUser.userId}`, req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Send message to group (user-level)
+    router.post('/user/groups/:chatId/message', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { text } = req.body;
+            if (!text || !text.trim()) return res.status(400).json({ error: 'Message text required' });
+
+            const { bot } = require('../core/bot');
+            await bot.sendMessage(chatId, sanitizeTelegramHtml(text.trim()), { parse_mode: 'HTML' });
+            log.info(`Dashboard: User ${req.dashboardUser.userId} sent message to group ${chatId}`);
+            logGroupActivity(chatId, 'message_sent', text.trim().substring(0, 100), req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Sync group member count (user-level)
+    router.post('/user/groups/:chatId/sync', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { bot } = require('../core/bot');
+            const count = await bot.getChatMemberCount(chatId);
+            await db.upsertGroupProfile?.({ chatId, memberCount: count });
+            logGroupActivity(chatId, 'member_sync', `Synced: ${count} members (by user)`, req.dashboardUser.userId);
+            res.json({ success: true, memberCount: count });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Get checkin settings for a group (user-level)
+    router.get('/user/groups/:chatId/checkin', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const settings = await db.getCheckinGroup?.(chatId);
+            res.json({ settings: settings || {} });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Update checkin settings (user-level)
+    router.put('/user/groups/:chatId/checkin', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const patch = req.body;
+            const updated = await db.updateCheckinGroup?.(chatId, patch);
+            log.info(`Dashboard: User ${req.dashboardUser.userId} updated checkin for ${chatId}`);
+            logGroupActivity(chatId, 'checkin_update', `Checkin settings updated by user`, req.dashboardUser.userId);
+            res.json({ success: true, settings: updated });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Get checkin leaderboard (user-level)
+    router.get('/user/groups/:chatId/checkin/leaderboard', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const mode = req.query.mode || 'streak';
+            const limit = Math.min(Number(req.query.limit) || 20, 100);
+            const settings = await db.getCheckinGroup?.(chatId);
+            const top = await db.getTopCheckins?.(chatId, limit, mode, settings?.leaderboardPeriodStart) || [];
+            res.json({ leaderboard: top });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Get welcome verification settings (user-level)
+    router.get('/user/groups/:chatId/welcome', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const settings = await db.getGroupBotSettings?.(chatId) || {};
+            const welcome = settings.welcomeVerification || {};
+            res.json({
+                enabled: !!welcome.enabled,
+                timeLimitSeconds: welcome.timeLimitSeconds || 60,
+                maxAttempts: welcome.maxAttempts || 3,
+                action: welcome.action || 'kick',
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Update welcome verification settings (user-level)
+    router.put('/user/groups/:chatId/welcome', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { enabled, timeLimitSeconds, maxAttempts, action } = req.body;
+            const welcomeSettings = {};
+            if (enabled !== undefined) welcomeSettings.enabled = !!enabled;
+            if (timeLimitSeconds !== undefined) welcomeSettings.timeLimitSeconds = Math.max(15, Math.min(300, Number(timeLimitSeconds) || 60));
+            if (maxAttempts !== undefined) welcomeSettings.maxAttempts = Math.max(1, Math.min(10, Number(maxAttempts) || 3));
+            if (action !== undefined && ['kick', 'ban', 'mute'].includes(action)) welcomeSettings.action = action;
+            await db.updateGroupBotSettings?.(chatId, { welcomeVerification: welcomeSettings });
+            log.info(`Dashboard: User ${req.dashboardUser.userId} updated welcome for ${chatId}`);
+            logGroupActivity(chatId, 'welcome_update', `Welcome verification updated by user`, req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Update group bot language (user-level)
+    router.put('/user/groups/:chatId/language', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { lang } = req.body;
+            if (!lang) return res.status(400).json({ error: 'lang required' });
+            const validLangs = ['en', 'vi', 'zh', 'ko', 'ru', 'id'];
+            if (!validLangs.includes(lang)) return res.status(400).json({ error: 'Invalid language code' });
+            await db.updateGroupBotSettings?.(chatId, { groupLanguage: lang });
+            // Also update subscription language if exists
+            try { await db.updateGroupSubscriptionLanguage?.(chatId, lang); } catch {}
+            log.info(`Dashboard: User ${req.dashboardUser.userId} set group ${chatId} language to ${lang}`);
+            logGroupActivity(chatId, 'language_change', `Language set to ${lang}`, req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ==================
+    // OWNER: BROADCAST TO ALL USERS (DM)
+    // ==================
+    router.post('/owner/broadcast-users', ownerGuard, async (req, res) => {
+        try {
+            const { text } = req.body;
+            if (!text || !text.trim()) return res.status(400).json({ error: 'Message text required' });
+
+            const { bot } = require('../core/bot');
+            const users = await db.listUsersDetailed?.() || [];
+            let success = 0, failed = 0;
+
+            for (const [idx, u] of users.entries()) {
+                const userId = u.chatId || u.userId;
+                if (!userId) continue;
+                try {
+                    await bot.sendMessage(userId, sanitizeTelegramHtml(text.trim()), { parse_mode: 'HTML' });
+                    success++;
+                } catch {
+                    failed++;
+                }
+                // Rate limit: 500ms between messages
+                if (idx < users.length - 1) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+
+            log.info(`Dashboard: Broadcast to users sent to ${success}/${users.length} users by ${req.dashboardUser.userId}`);
+            res.json({ success: true, sent: success, failed, total: users.length });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     return router;
 }
 

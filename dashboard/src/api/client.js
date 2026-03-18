@@ -417,6 +417,22 @@ class ApiClient {
     sendMessage(userId, data) { return this.post(`/social/messages/${userId}`, data); }
     getUnreadDMs() { return this.get('/social/messages/unread'); }
     getPost(id) { return this.get(`/social/posts/${id}`); }
+
+    // === User Group Management APIs ===
+    getUserGroups() { return this.get('/user/groups'); }
+    getUserGroupDetail(chatId) { return this.get(`/user/groups/${encodeURIComponent(chatId)}`); }
+    updateUserGroupSettings(chatId, data) { return this.put(`/user/groups/${encodeURIComponent(chatId)}/settings`, data); }
+    sendUserGroupMessage(chatId, text) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/message`, { text }); }
+    syncUserGroupMembers(chatId) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/sync`); }
+    getUserGroupCheckin(chatId) { return this.get(`/user/groups/${encodeURIComponent(chatId)}/checkin`); }
+    updateUserGroupCheckin(chatId, data) { return this.put(`/user/groups/${encodeURIComponent(chatId)}/checkin`, data); }
+    getUserGroupCheckinLeaderboard(chatId, mode = 'streak', limit = 20) { return this.get(`/user/groups/${encodeURIComponent(chatId)}/checkin/leaderboard?mode=${mode}&limit=${limit}`); }
+    getUserGroupWelcome(chatId) { return this.get(`/user/groups/${encodeURIComponent(chatId)}/welcome`); }
+    updateUserGroupWelcome(chatId, data) { return this.put(`/user/groups/${encodeURIComponent(chatId)}/welcome`, data); }
+    updateUserGroupLanguage(chatId, lang) { return this.put(`/user/groups/${encodeURIComponent(chatId)}/language`, { lang }); }
+
+    // === Owner Broadcast to Users ===
+    broadcastToUsers(text) { return this.post('/owner/broadcast-users', { text }); }
 }
 
 const api = new ApiClient();

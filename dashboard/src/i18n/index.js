@@ -42,6 +42,7 @@ const dashboardResources = {
                 groupCommunity: 'Community & Fun',
                 memeScanner: 'Meme Scanner',
                 discovery: 'Discovery',
+                myGroups: 'My Groups',
             },
             walletPage: {
                 title: 'Wallets',
@@ -712,6 +713,20 @@ const dashboardResources = {
                 on: 'ON', off: 'OFF', editSettings: 'Edit Settings',
                 leaderboard: 'Leaderboard', noData: 'No data',
             },
+            userGroups: {
+                title: 'My Groups', totalGroups: 'My Groups',
+                info: 'Only groups where you are an admin and the bot is active are shown here.',
+                noGroups: 'No groups found', noGroupsHint: 'Add the bot to a group as admin to manage it here.',
+                checkin: 'Check-in', welcome: 'Welcome', language: 'Language',
+                welcomeDesc: 'Configure new member verification (anti-bot protection)',
+                welcomeEnabled: 'Enable Welcome Verification',
+                timeLimit: 'Time Limit (seconds)', maxAttempts: 'Max Attempts', action: 'Fail Action',
+                checkinNotEnabled: 'Check-in not enabled for this group. Use /checkinadmin in the group to set up.',
+                langDesc: 'Set the language for bot responses in this group',
+                broadcastUsers: 'Broadcast to All Users', broadcastUsersDesc: 'Send a DM to all bot users',
+                broadcastPlaceholder: 'Enter broadcast message (HTML supported)...', broadcastBtn: 'Send to All Users',
+                broadcastDone: 'Broadcast sent to {sent}/{total} users',
+            },
             postsPage: {
                 chatId: 'Group/Chat ID', scheduleTime: 'Schedule Time', repeat: 'Repeat', timezone: 'Timezone',
                 content: 'Content', contentPlaceholder: 'Message content (supports HTML)', totalPosts: 'Total Posts',
@@ -792,6 +807,7 @@ const dashboardResources = {
                 groupCommunity: 'Cộng đồng & Giải trí',
                 memeScanner: 'Quét Meme',
                 discovery: 'Khám phá',
+                myGroups: 'Nhóm của tôi',
             },
             walletPage: {
                 title: 'Ví',

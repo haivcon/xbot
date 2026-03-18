@@ -86,6 +86,15 @@ async function init() {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_group_activity_log_chatId ON group_activity_log(chatId)`);
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_group_activity_log_time ON group_activity_log(createdAt DESC)`);
 
+    // Group admins (tracks which users are admins of which groups for dashboard access)
+    await dbRun(`CREATE TABLE IF NOT EXISTS group_admins (
+        chatId TEXT,
+        userId TEXT,
+        addedAt INTEGER,
+        PRIMARY KEY (chatId, userId)
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_group_admins_userId ON group_admins(userId)`);
+
     // User wallet tokens
     await dbRun(`CREATE TABLE IF NOT EXISTS user_wallet_tokens (
         chatId TEXT,

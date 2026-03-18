@@ -149,6 +149,42 @@ async function removeGroupMemberLanguage(groupChatId, userId) {
     await dbRun('DELETE FROM group_member_languages WHERE groupChatId = ? AND userId = ?', [groupChatId, userId]);
 }
 
+// ========================================================================
+// GROUP ADMINS (for dashboard user-level group management)
+// ========================================================================
+
+async function addGroupAdmin(chatId, userId) {
+    if (!chatId || !userId) return;
+    const now = Math.floor(Date.now() / 1000);
+    await dbRun(`INSERT INTO group_admins (chatId, userId, addedAt) VALUES (?, ?, ?)
+        ON CONFLICT(chatId, userId) DO UPDATE SET addedAt = excluded.addedAt`,
+        [String(chatId), String(userId), now]);
+}
+
+async function removeGroupAdmin(chatId, userId) {
+    if (!chatId || !userId) return;
+    await dbRun('DELETE FROM group_admins WHERE chatId = ? AND userId = ?', [String(chatId), String(userId)]);
+}
+
+async function getGroupsByAdmin(userId) {
+    if (!userId) return [];
+    const rows = await dbAll(
+        `SELECT ga.chatId, ga.addedAt, gp.title, gp.type, gp.memberCount, gp.updatedAt
+         FROM group_admins ga
+         LEFT JOIN group_profiles gp ON ga.chatId = gp.chatId
+         WHERE ga.userId = ?
+         ORDER BY gp.updatedAt DESC`,
+        [String(userId)]
+    );
+    return rows || [];
+}
+
+async function isGroupAdminInDb(chatId, userId) {
+    if (!chatId || !userId) return false;
+    const row = await dbGet('SELECT 1 FROM group_admins WHERE chatId = ? AND userId = ?', [String(chatId), String(userId)]);
+    return !!row;
+}
+
 module.exports = {
     // Settings
     getGroupBotSettings,
@@ -178,5 +214,11 @@ module.exports = {
     getGroupMemberLanguage,
     getGroupMemberLanguages,
     setGroupMemberLanguage,
-    removeGroupMemberLanguage
+    removeGroupMemberLanguage,
+
+    // Group admins
+    addGroupAdmin,
+    removeGroupAdmin,
+    getGroupsByAdmin,
+    isGroupAdminInDb,
 };

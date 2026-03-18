@@ -257,6 +257,7 @@ function useFavorites() {
    Gas Widget
    ═══════════════════════════════════════════ */
 function GasWidget({ chainIndex }) {
+    const { t } = useTranslation();
     const [gas, setGas] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -348,6 +349,7 @@ function TokenInfoCard({ chainIndex, tokenAddress, symbol }) {
    Mini Price Chart (#2)
    ═══════════════════════════════════════════ */
 function MiniPriceChart({ chainIndex, tokenAddress, symbol }) {
+    const { t } = useTranslation();
     const [candles, setCandles] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -391,6 +393,7 @@ function MiniPriceChart({ chainIndex, tokenAddress, symbol }) {
    Recent Trades (#7)
    ═══════════════════════════════════════════ */
 function RecentTrades({ chainIndex, tokenAddress }) {
+    const { t } = useTranslation();
     const [trades, setTrades] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -418,15 +421,15 @@ function RecentTrades({ chainIndex, tokenAddress }) {
                 <div className="p-4 text-[10px] text-surface-200/25 text-center">{t('dashboard.trading.noTrades', 'No trades')}</div>
             ) : (
                 <div className="divide-y divide-white/[0.03]">
-                    {trades.map((t, i) => {
-                        const isBuy = t.type === 'buy';
-                        const time = new Date(Number(t.time || Date.now())).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    {trades.map((trade, i) => {
+                        const isBuy = trade.type === 'buy';
+                        const time = new Date(Number(trade.time || Date.now())).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
                         return (
                             <div key={i} className="px-3 py-1.5 flex items-center gap-2 text-[10px]">
                                 <span className={`w-8 font-bold ${isBuy ? 'text-emerald-400' : 'text-red-400'}`}>{isBuy ? 'BUY' : 'SELL'}</span>
                                 <span className="text-surface-200/40 flex-1">{time}</span>
-                                <span className="text-surface-100">{formatPrice(t.price)}</span>
-                                <span className="text-surface-200/30 w-16 text-right">${Number(t.volume || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                <span className="text-surface-100">{formatPrice(trade.price)}</span>
+                                <span className="text-surface-200/30 w-16 text-right">${Number(trade.volume || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                             </div>
                         );
                     })}
@@ -614,16 +617,16 @@ function WalletDropdown({ wallets = [], value, onChange, accentColor = 'violet',
                 <div className="mt-1.5">
                     <button onClick={() => setShowTokens(!showTokens)} className="text-[9px] text-surface-200/25 hover:text-surface-200/50 transition-colors flex items-center gap-1">
                         <ChevronDown size={9} className={`transition-transform ${showTokens ? 'rotate-180' : ''}`} />
-                        {showTokens ? t('dashboard.tradingUx.hideBalances', 'Hide balances') : t('dashboard.tradingUx.showBalances', 'Show balances')} ({selectedBal.tokens.filter(t => Number(t.balance) > 0).length} {t('dashboard.tradingUx.tokens', 'tokens')})
+                        {showTokens ? t('dashboard.tradingUx.hideBalances', 'Hide balances') : t('dashboard.tradingUx.showBalances', 'Show balances')} ({selectedBal.tokens.filter(tk => Number(tk.balance) > 0).length} {t('dashboard.tradingUx.tokens', 'tokens')})
                     </button>
                     {showTokens && (
                         <div className="mt-1 rounded-lg bg-surface-900/40 border border-white/[0.04] max-h-[120px] overflow-y-auto">
-                            {selectedBal.tokens.filter(t => Number(t.balance) > 0).map((t, i) => (
+                            {selectedBal.tokens.filter(tk => Number(tk.balance) > 0).map((tk, i) => (
                                 <div key={i} className="flex items-center justify-between px-2.5 py-1.5 text-[10px] border-b border-white/[0.02] last:border-0">
-                                    <span className="text-surface-200/50 font-medium">{t.symbol}</span>
+                                    <span className="text-surface-200/50 font-medium">{tk.symbol}</span>
                                     <div className="text-right">
-                                        <span className="text-surface-100 font-mono">{formatQty(t.balance)}</span>
-                                        <span className="text-surface-200/30 ml-1.5">{formatUsd(Number(t.balance) * Number(t.price))}</span>
+                                        <span className="text-surface-100 font-mono">{formatQty(tk.balance)}</span>
+                                        <span className="text-surface-200/30 ml-1.5">{formatUsd(Number(tk.balance) * Number(tk.price))}</span>
                                     </div>
                                 </div>
                             ))}
@@ -2824,6 +2827,7 @@ function CandlestickChart({ chainIndex, tokenAddress, symbol }) {
    Portfolio Card
    ═══════════════════════════════════════════ */
 function PortfolioCard({ chainIndex, walletAddress }) {
+    const { t } = useTranslation();
     const [data, setData] = useState(null);
     const [pnl, setPnl] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -2889,6 +2893,7 @@ function PortfolioCard({ chainIndex, walletAddress }) {
    DEX History Card
    ═══════════════════════════════════════════ */
 function DexHistoryCard({ chainIndex, walletAddress }) {
+    const { t } = useTranslation();
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
 
