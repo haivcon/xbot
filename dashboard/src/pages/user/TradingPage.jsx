@@ -1595,6 +1595,7 @@ function TopTokensList({ chainIndex, onSelectToken }) {
    TX History Widget
    ═══════════════════════════════════════════ */
 function TxHistory({ chainIndex }) {
+    const { t } = useTranslation();
     const [txs, setTxs] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -2596,6 +2597,7 @@ function ExecuteSwapButton({ chainIndex, fromTokenAddress, toTokenAddress, amoun
    Candlestick Chart — Premium v2
    ═══════════════════════════════════════════ */
 function CandlestickChart({ chainIndex, tokenAddress, symbol }) {
+    const { t } = useTranslation();
     const [candles, setCandles] = useState([]);
     const [loading, setLoading] = useState(false);
     const [bar, setBar] = useState('1H');
