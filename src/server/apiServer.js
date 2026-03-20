@@ -23,7 +23,7 @@ const {
 const app = express();
 const startedAt = new Date();
 const RATE_LIMIT_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS || 60_000);
-const RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX || 120);
+const RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX || 500);
 const REQUEST_TIMEOUT_MS = Number(process.env.API_REQUEST_TIMEOUT_MS || 10_000);
 const MAX_PENDING_REQUESTS = Number(process.env.API_MAX_PENDING_REQUESTS || 300);
 const BODY_LIMIT = process.env.API_BODY_LIMIT || '64kb';
@@ -115,7 +115,7 @@ function backpressureGuard(req, res, next) {
 }
 
 function rateLimit(req, res, next) {
-    if (isControlPath(req)) {
+    if (isControlPath(req) || req.path.startsWith('/api/dashboard')) {
         return next();
     }
 

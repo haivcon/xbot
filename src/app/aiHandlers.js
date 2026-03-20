@@ -3937,7 +3937,8 @@ function createAiHandlers(deps) {
           const bypassedFunctions = [
             'transfer_tokens', 'batch_transfer', 'batch_swap', 'simulate_batch_swap', 'get_swap_quote', 'execute_swap', 'get_trading_wallet_balance',
             'get_token_holders', 'get_top_tokens', 'search_token', 'get_token_market_detail', 'get_market_candles',
-            'get_token_security', 'get_trade_history', 'get_signal_list', 'calculate_profit_roi'
+            'get_token_security', 'get_trade_history', 'get_signal_list', 'calculate_profit_roi',
+            'get_hot_tokens', 'get_top_traders', 'get_address_tracker', 'get_trader_leaderboard', 'get_holder_cluster'
           ];
           // Use resolved name from onchain fuzzy matching (e.g. getsignallist → get_signal_list)
           const resolvedFnName = functionResult?._resolvedName || functionCall.name;
@@ -4205,7 +4206,8 @@ function createAiHandlers(deps) {
               const dataFunctions = [
                 'get_signal_list', 'get_top_tokens', 'search_token', 'get_token_market_detail',
                 'get_market_candles', 'get_token_security', 'get_trade_history', 'calculate_profit_roi',
-                'get_token_holders', 'get_trading_wallet_balance'
+                'get_token_holders', 'get_trading_wallet_balance',
+                'get_hot_tokens', 'get_top_traders', 'get_address_tracker', 'get_trader_leaderboard', 'get_holder_cluster'
               ];
               if (dataFunctions.includes(resolvedFnName)) {
                 await addToSessionHistory(userId, 'model',

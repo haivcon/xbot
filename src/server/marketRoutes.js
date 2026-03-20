@@ -279,7 +279,7 @@ function createMarketRoutes() {
             const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
             if (!tw) return res.status(404).json({ error: 'Wallet not found' });
 
-            const chainIdx = tw.chainIndex || '196';
+            const chainIdx = req.query.chainIndex || tw.chainIndex || '196';
             const [totalValue, balances] = await Promise.all([
                 onchainos.getWalletTotalValue(tw.address, chainIdx).catch(() => null),
                 onchainos.getWalletBalances(tw.address, chainIdx).catch(() => null)
@@ -374,11 +374,18 @@ function createMarketRoutes() {
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
             const { dbGet, dbRun } = require('../../db/core');
-            const tw = await dbGet('SELECT id FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
+            const tw = await dbGet('SELECT id, isDefault FROM user_trading_wallets WHERE id = ? AND userId = ?', [req.params.id, userId]);
             if (!tw) return res.status(404).json({ error: 'Wallet not found' });
-            await dbRun('UPDATE user_trading_wallets SET isDefault = 0 WHERE userId = ?', [userId]);
-            await dbRun('UPDATE user_trading_wallets SET isDefault = 1 WHERE id = ? AND userId = ?', [req.params.id, userId]);
-            res.json({ ok: true });
+            
+            // Toggle: if already default, unset it; otherwise set it as default
+            if (tw.isDefault) {
+                await dbRun('UPDATE user_trading_wallets SET isDefault = 0 WHERE id = ? AND userId = ?', [req.params.id, userId]);
+                res.json({ ok: true, isDefault: false });
+            } else {
+                await dbRun('UPDATE user_trading_wallets SET isDefault = 0 WHERE userId = ?', [userId]);
+                await dbRun('UPDATE user_trading_wallets SET isDefault = 1 WHERE id = ? AND userId = ?', [req.params.id, userId]);
+                res.json({ ok: true, isDefault: true });
+            }
         } catch (err) {
             log.error('wallets/set-default error:', err.message);
             res.status(500).json({ error: err.message });
@@ -516,7 +523,7 @@ function createMarketRoutes() {
         if (now > limiter.resetAt) { limiter.count = 0; limiter.resetAt = now + 60000; }
         limiter.count++;
         _exportKeyLimiter.set(userId, limiter);
-        if (limiter.count > 10) {
+        if (limiter.count > 30) {
             return res.status(429).json({ error: 'Too many export requests. Please wait 1 minute.' });
         }
 
@@ -552,6 +559,76 @@ function createMarketRoutes() {
             res.json({ privateKey, address: tw.address });
         } catch (err) {
             log.error('wallets/export-key error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    /**
+     * POST /wallets/bulk-export
+     * Bulk export private keys for multiple wallets in one request
+     * Body: { walletIds: [id1, id2, ...] }
+     */
+    const _bulkExportLimiter = new Map();
+    router.post('/wallets/bulk-export', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+
+        // Rate limit: 1 bulk export per minute per user
+        const now = Date.now();
+        const limiter = _bulkExportLimiter.get(userId) || { count: 0, resetAt: now + 60000 };
+        if (now > limiter.resetAt) { limiter.count = 0; limiter.resetAt = now + 60000; }
+        limiter.count++;
+        _bulkExportLimiter.set(userId, limiter);
+        if (limiter.count > 3) {
+            return res.status(429).json({ error: 'Too many export requests. Please wait 1 minute.' });
+        }
+
+        try {
+            const crypto = require('crypto');
+            const { dbGet, dbAll, dbRun } = require('../../db/core');
+            const { _getEncryptKey, _verifyPin } = require('../features/ai/onchain/helpers');
+
+            // PIN check
+            let user = null;
+            try { user = await dbGet('SELECT pinCode FROM users WHERE chatId = ?', [userId]); } catch {}
+            if (user?.pinCode) {
+                const pin = req.body.pin || req.headers['x-pin'];
+                if (!pin) return res.status(403).json({ error: 'PIN required', needPin: true });
+                if (!_verifyPin(pin, user.pinCode, userId)) return res.status(403).json({ error: 'Invalid PIN', needPin: true });
+            }
+
+            const walletIds = req.body.walletIds;
+            if (!Array.isArray(walletIds) || walletIds.length === 0) {
+                return res.status(400).json({ error: 'walletIds[] required' });
+            }
+            if (walletIds.length > 50) {
+                return res.status(400).json({ error: 'Maximum 50 wallets per export' });
+            }
+
+            const ENCRYPT_KEY = _getEncryptKey();
+            const results = [];
+            const nowSec = Math.floor(Date.now() / 1000);
+
+            for (const id of walletIds) {
+                const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [id, userId]);
+                if (!tw) { results.push({ id, error: 'Not found' }); continue; }
+
+                try {
+                    const [ivHex, encrypted] = tw.encryptedKey.split(':');
+                    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPT_KEY), Buffer.from(ivHex, 'hex'));
+                    let privateKey = decipher.update(encrypted, 'hex', 'utf8');
+                    privateKey += decipher.final('utf8');
+                    results.push({ id, privateKey, address: tw.address, name: tw.walletName || 'Wallet' });
+                    try { await dbRun('UPDATE user_trading_wallets SET lastExportedAt = ? WHERE id = ?', [nowSec, tw.id]); } catch {}
+                } catch (e) {
+                    results.push({ id, error: 'Decryption failed' });
+                }
+            }
+
+            log.info(`Bulk export: ${results.filter(r => r.privateKey).length}/${walletIds.length} keys by user ${userId}`);
+            res.json({ results });
+        } catch (err) {
+            log.error('wallets/bulk-export error:', err.message);
             res.status(500).json({ error: err.message });
         }
     });
@@ -689,6 +766,35 @@ function createMarketRoutes() {
                 [userId, since]
             );
             res.json({ snapshots: snapshots || [] });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    /**
+     * POST /wallets/portfolio-snapshot
+     * Body: { totalUsd }
+     */
+    router.post('/wallets/portfolio-snapshot', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        if (!userId) return res.status(401).json({ error: 'Auth required' });
+        try {
+            const { dbRun, dbGet } = require('../../db/core');
+            const totalUsd = parseFloat(req.body.totalUsd) || 0;
+            // Rate limit: max 1 snapshot per hour
+            const last = await dbGet(
+                'SELECT snapshotAt FROM wallet_portfolio_snapshots WHERE userId = ? ORDER BY snapshotAt DESC LIMIT 1',
+                [userId]
+            );
+            const now = Math.floor(Date.now() / 1000);
+            if (last && now - last.snapshotAt < 3600) {
+                return res.json({ ok: true, skipped: true });
+            }
+            await dbRun(
+                'INSERT INTO wallet_portfolio_snapshots (userId, totalUsd, snapshotAt) VALUES (?, ?, ?)',
+                [userId, totalUsd, now]
+            );
+            res.json({ ok: true });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }
@@ -866,12 +972,9 @@ function createMarketRoutes() {
      */
     router.get('/token/top-traders', async (req, res) => {
         try {
-            const { chainIndex = '196', tokenContractAddress } = req.query;
+            const { chainIndex = '196', tokenContractAddress, tagFilter } = req.query;
             if (!tokenContractAddress) return res.status(400).json({ error: 'tokenContractAddress required' });
-            const { okxFetch } = onchainos;
-            // Build path manually for top-trader endpoint
-            const qs = new URLSearchParams({ chainIndex, tokenContractAddress }).toString();
-            const data = await okxFetch('GET', `/api/v6/dex/market/token/top-trader?${qs}`);
+            const data = await onchainos.getTopTrader(chainIndex, tokenContractAddress, { tagFilter });
             res.json({ data: data || [] });
         } catch (err) {
             log.error('token/top-traders error:', err.msg || err.message);
@@ -890,6 +993,176 @@ function createMarketRoutes() {
             res.json({ data: data || [] });
         } catch (err) {
             log.error('token/top-liquidity error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    // ════════════════════════════════════════
+    // Wallet Balance (AI Trader wallet selector)
+    // ════════════════════════════════════════
+    router.get('/wallet/balance', async (req, res) => {
+        try {
+            const { address, chains = '196' } = req.query;
+            if (!address) return res.status(400).json({ error: 'address required' });
+            const data = await onchainos.getWalletTotalValue(address, chains);
+            const totalValue = Array.isArray(data) ? (data[0]?.totalValue || '0') : (data?.totalValue || '0');
+            res.json({ totalValue });
+        } catch (err) {
+            log.error('wallet/balance error:', err.msg || err.message);
+            res.json({ totalValue: '0' });
+        }
+    });
+
+    // ════════════════════════════════════════
+    // Token Search & Info (AI Trader Step 2)
+    // ════════════════════════════════════════
+
+    router.get('/wallet/tokens', async (req, res) => {
+        try {
+            const { address, chains = '196' } = req.query;
+            if (!address) return res.status(400).json({ error: 'address required' });
+            const data = await onchainos.getWalletBalances(address, chains, { excludeRiskToken: true });
+            res.json({ tokens: data || [] });
+        } catch (err) {
+            log.error('wallet/tokens error:', err.msg || err.message);
+            res.json({ tokens: [] });
+        }
+    });
+
+    /**
+     * GET /token/search?keyword=PEPE&chainIndex=1
+     * Search tokens by name/symbol on a specific chain
+     */
+    router.get('/token/search', async (req, res) => {
+        try {
+            const { keyword, chainIndex, chains } = req.query;
+            const chain = chainIndex || chains || '196';
+            if (!keyword || keyword.length < 2) return res.status(400).json({ error: 'keyword required (min 2 chars)' });
+            const data = await onchainos.getTokenSearch(chain, keyword);
+            const tokens = Array.isArray(data) ? data : (data?.tokens || data?.data || []);
+            res.json({ tokens });
+        } catch (err) {
+            log.error('token/search error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /**
+     * POST /token/info { address, chainIndex }
+     * Get token basic info by contract address
+     */
+    router.post('/token/info', async (req, res) => {
+        try {
+            const { address, chainIndex = '196' } = req.body;
+            if (!address) return res.status(400).json({ error: 'address required' });
+            const data = await onchainos.getTokenBasicInfo([{ chainIndex, tokenContractAddress: address }]);
+            const token = Array.isArray(data) && data.length > 0 ? data[0] : null;
+            if (token) {
+                res.json({ symbol: token.tokenSymbol, name: token.tokenName || token.tokenSymbol, address: token.tokenContractAddress, decimal: token.decimal, chainIndex });
+            } else {
+                res.json({ symbol: null });
+            }
+        } catch (err) {
+            log.error('token/info error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    // ════════════════════════════════════════
+    // New OnchainOS API Endpoints
+    // ════════════════════════════════════════
+
+    /** GET /token/hot-tokens?chainIndex=1&limit=20 */
+    router.get('/token/hot-tokens', async (req, res) => {
+        try {
+            const { chainIndex, limit = '20' } = req.query;
+            const data = await onchainos.getHotTokens({ chainIndex, limit });
+            res.json({ data: data || [] });
+        } catch (err) {
+            log.error('token/hot-tokens error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /** GET /market/address-tracker?trackerType=1&chainIndex=1 */
+    router.get('/market/address-tracker', async (req, res) => {
+        try {
+            const { trackerType = '1', chainIndex, limit = '20' } = req.query;
+            const data = await onchainos.getAddressTrackerActivities({ trackerType, chainIndex, limit });
+            res.json({ data: data || [] });
+        } catch (err) {
+            log.error('market/address-tracker error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /** GET /market/leaderboard?chainIndex=1&timeFrame=2 */
+    router.get('/market/leaderboard', async (req, res) => {
+        try {
+            const { chainIndex = '1', timeFrame = '2', traderType, sort, limit = '20' } = req.query;
+            const data = await onchainos.getLeaderboardList({ chainIndex, timeFrame, traderType, sort, limit });
+            res.json({ data: data || [] });
+        } catch (err) {
+            log.error('market/leaderboard error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /** GET /market/leaderboard-chains */
+    router.get('/market/leaderboard-chains', async (req, res) => {
+        try {
+            const data = await onchainos.getLeaderboardChains();
+            res.json({ data: data || [] });
+        } catch (err) {
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /** POST /security/token-scan — Body: { tokens: [{ chainId, contractAddress }] } */
+    router.post('/security/token-scan', async (req, res) => {
+        try {
+            const { tokens } = req.body;
+            if (!tokens || !Array.isArray(tokens)) return res.status(400).json({ error: 'tokens[] required' });
+            const data = await onchainos.tokenScan(tokens);
+            res.json({ data });
+        } catch (err) {
+            log.error('security/token-scan error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /** GET /token/cluster?chainIndex=1&tokenContractAddress=0x... */
+    router.get('/token/cluster', async (req, res) => {
+        try {
+            const { chainIndex = '1', tokenContractAddress, mode = 'overview' } = req.query;
+            if (!tokenContractAddress) return res.status(400).json({ error: 'tokenContractAddress required' });
+            let data;
+            if (mode === 'top_holders') data = await onchainos.getClusterTopHolders(chainIndex, tokenContractAddress);
+            else if (mode === 'clusters') data = await onchainos.getClusterList(chainIndex, tokenContractAddress);
+            else data = await onchainos.getClusterOverview(chainIndex, tokenContractAddress);
+            res.json({ data: data || {} });
+        } catch (err) {
+            log.error('token/cluster error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /** GET /wallet/approvals?address=0x...&chains=1,56 */
+    router.get('/wallet/approvals', async (req, res) => {
+        try {
+            const userId = req.dashboardUser?.userId?.toString();
+            if (!userId) return res.status(401).json({ error: 'Auth required' });
+            let { address, chains } = req.query;
+            if (!address) {
+                const { dbGet } = require('../../db/core');
+                const tw = await dbGet('SELECT address FROM user_trading_wallets WHERE userId = ? AND isDefault = 1', [userId]);
+                if (!tw) return res.json({ data: { approvalList: [] } });
+                address = tw.address;
+            }
+            const data = await onchainos.getApprovals(address, { chains });
+            res.json({ data, address });
+        } catch (err) {
+            log.error('wallet/approvals error:', err.msg || err.message);
             res.status(500).json({ error: err.msg || err.message });
         }
     });

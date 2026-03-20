@@ -35,14 +35,12 @@ async function deepResearch(chainIndex, tokenAddress, options = {}) {
         onchainos.getTokenHolder(chainIndex, tokenAddress),
         onchainos.getMarketCandles(chainIndex, tokenAddress, { bar: '1H', limit: 48 }),
         onchainos.getSignalList(chainIndex, { tokenContractAddress: tokenAddress }),
-        typeof onchainos.getTokenSecurity === 'function'
-            ? onchainos.getTokenSecurity(chainIndex, tokenAddress) : Promise.resolve(null),
+        typeof onchainos.tokenScan === 'function'
+            ? onchainos.tokenScan([{ chainId: chainIndex, contractAddress: tokenAddress }]) : Promise.resolve(null),
         typeof onchainos.getMemePumpTokenDetails === 'function'
             ? onchainos.getMemePumpTokenDetails(chainIndex, tokenAddress).catch(() => null) : Promise.resolve(null),
-        typeof onchainos.getTokenLiquidity === 'function'
-            ? onchainos.getTokenLiquidity(chainIndex, tokenAddress).catch(() => null) : Promise.resolve(null),
-        typeof onchainos.getSmartTrades === 'function'
-            ? onchainos.getSmartTrades(chainIndex, tokenAddress, { limit: '20' }).catch(() => null) : Promise.resolve(null),
+        onchainos.getTokenLiquidityPool(chainIndex, tokenAddress).catch(() => null),
+        onchainos.getAddressTrackerActivities({ trackerType: '1', chainIndex }).catch(() => null),
         onchainos.getMarketTrades(chainIndex, tokenAddress, { limit: '20' }).catch(() => null)
     ]);
 
@@ -202,20 +200,33 @@ function extractSignalMetrics(signals) {
 function extractSafetyMetrics(security, audit) {
     const result = { isHoneypot: false, canSell: true, buyTax: 0, sellTax: 0, isOpenSource: false, hasProxy: false, rugRisk: 'LOW', devRugCount: 0, lpBurnPct: 0 };
 
-    if (security && Array.isArray(security) && security.length > 0) {
-        const sec = security[0];
-        result.isHoneypot = sec.isHoneypot === '1' || sec.is_honeypot === '1';
-        result.canSell = !(sec.cannotSell === '1' || sec.cannot_sell === '1');
-        result.buyTax = Number(sec.buyTax || sec.buy_tax || 0) * 100;
-        result.sellTax = Number(sec.sellTax || sec.sell_tax || 0) * 100;
-        result.isOpenSource = sec.isOpenSource === '1' || sec.is_open_source === '1';
-        result.hasProxy = sec.isProxy === '1' || sec.is_proxy === '1';
+    // Handle tokenScan API response: { data: [{ isRiskToken, buyTaxes, sellTaxes, isChainSupported }] }
+    if (security) {
+        const secData = Array.isArray(security) ? security[0] : (security?.data?.[0] || security);
+        if (secData) {
+            // New tokenScan format
+            if ('isRiskToken' in secData) {
+                result.isHoneypot = secData.isRiskToken === true || secData.isRiskToken === 'true';
+                result.canSell = !result.isHoneypot;
+                result.buyTax = Number(secData.buyTaxes || 0);
+                result.sellTax = Number(secData.sellTaxes || 0);
+            }
+            // Legacy format (backward compat)
+            else {
+                result.isHoneypot = secData.isHoneypot === '1' || secData.is_honeypot === '1';
+                result.canSell = !(secData.cannotSell === '1' || secData.cannot_sell === '1');
+                result.buyTax = Number(secData.buyTax || secData.buy_tax || 0) * 100;
+                result.sellTax = Number(secData.sellTax || secData.sell_tax || 0) * 100;
+                result.isOpenSource = secData.isOpenSource === '1' || secData.is_open_source === '1';
+                result.hasProxy = secData.isProxy === '1' || secData.is_proxy === '1';
+            }
+        }
     }
 
     if (audit && typeof audit === 'object') {
         const a = Array.isArray(audit) ? audit[0] : audit;
         if (a) {
-            result.devRugCount = Number(a.rugPullCount || a.rugs || 0);
+            result.devRugCount = Number(a.rugPullCount || a.rugs || a.devRugPullTokenCount || 0);
             result.lpBurnPct = Number(a.lpBurnPercent || a.lpBurn || 0);
             if (result.devRugCount > 3) result.rugRisk = 'HIGH';
             else if (result.devRugCount > 0) result.rugRisk = 'MEDIUM';

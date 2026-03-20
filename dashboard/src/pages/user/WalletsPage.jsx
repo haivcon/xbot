@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import api from '@/api/client';
@@ -7,7 +8,7 @@ import {
     Wallet, Plus, Trash2, Star, RefreshCw, Eye, EyeOff, Copy, Check,
     ExternalLink, AlertTriangle, Loader2, ChevronDown, Shield, Download,
     Key, Pencil, Send, X, ArrowUpDown, Upload, FileText, CheckSquare, Square,
-    Lock, Tag, BarChart3
+    Lock, Tag, BarChart3, Search, LayoutGrid, List, GripVertical, Link
 } from 'lucide-react';
 
 const CHAIN_NAMES = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana' };
@@ -20,6 +21,19 @@ const TAG_COLORS = { Trading: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
 let _pinVerifiedAt = 0;
 const isPinCacheValid = () => Date.now() - _pinVerifiedAt < 300_000;
 const cachePinVerified = () => { _pinVerifiedAt = Date.now(); };
+
+// Balance cache (30s TTL) — prevents redundant API calls across re-renders
+const _balanceCache = new Map();
+const CACHE_TTL = 30_000;
+function getCachedBalance(walletId, chainIndex) {
+    const key = `${walletId}:${chainIndex}`;
+    const cached = _balanceCache.get(key);
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data;
+    return null;
+}
+function setCachedBalance(walletId, chainIndex, data) {
+    _balanceCache.set(`${walletId}:${chainIndex}`, { data, fetchedAt: Date.now() });
+}
 
 function formatUsd(val) {
     const n = Number(val || 0);
@@ -328,25 +342,25 @@ function ImportWalletModal({ onClose, onImported }) {
         e.target.value = ''; // reset
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    return createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
             <div className="bg-surface-900 border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-fadeIn max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 {!result ? (
                     <>
                         <div className="flex items-center gap-2 mb-3">
                             <Download className="text-brand-400" size={20} />
-                            <h3 className="text-lg font-bold text-surface-100">Import Wallets</h3>
+                            <h3 className="text-lg font-bold text-surface-100">{t('dashboard.walletPage.importTitle', 'Import Wallets')}</h3>
                         </div>
                         <p className="text-xs text-surface-200/50 mb-1">
-                            Paste or upload EVM private keys. Each will be encrypted with AES-256-CBC.
+                            {t('dashboard.walletPage.importDesc', 'Paste or upload EVM private keys. Each will be encrypted with AES-256-CBC.')}
                         </p>
                         <p className="text-[10px] text-surface-200/30 mb-4 flex items-center gap-1">
-                            <AlertTriangle size={9} /> Tối đa 50 key mỗi lần · Hỗ trợ file .txt/.csv (mỗi dòng: key hoặc key,name)
+                            <AlertTriangle size={9} /> {t('dashboard.walletPage.importHint', 'Max 50 keys per batch · Supports .txt/.csv (one per line: key or key,name)')}
                         </p>
 
                         {/* Chain selector */}
                         <div className="mb-3">
-                            <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">Chain</label>
+                            <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">{t('dashboard.walletPage.chain', 'Chain')}</label>
                             <CustomSelect value={chainIndex} onChange={setChainIndex} size="sm"
                                 options={CHAIN_OPTIONS.map(c => ({ value: c.value, label: c.label }))} />
                         </div>
@@ -380,7 +394,7 @@ function ImportWalletModal({ onClose, onImported }) {
                                             type="text"
                                             value={row.name}
                                             onChange={e => updateRow(i, 'name', e.target.value)}
-                                            placeholder="Name"
+                                            placeholder={t('dashboard.walletPage.nameLabel', 'Name')}
                                             maxLength={30}
                                             className="w-full bg-surface-800/80 border border-white/[0.08] rounded-lg px-2.5 py-2 text-[11px] text-surface-100 outline-none focus:border-brand-500/40"
                                         />
@@ -400,15 +414,15 @@ function ImportWalletModal({ onClose, onImported }) {
                             </button>
                             <button onClick={() => setShowKeys(!showKeys)} className="text-xs text-surface-200/30 hover:text-surface-200/60 flex items-center gap-1 transition-colors ml-auto">
                                 {showKeys ? <EyeOff size={12} /> : <Eye size={12} />}
-                                {showKeys ? 'Hide' : 'Show'}
+                                {showKeys ? t('dashboard.walletPage.hide', 'Hide') : t('dashboard.walletPage.show', 'Show')}
                             </button>
                         </div>
 
                         <div className="flex gap-3">
-                            <button onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
+                            <button onClick={onClose} className="btn-secondary flex-1 text-sm">{t('dashboard.common.cancel', 'Cancel')}</button>
                             <button onClick={handleImport} disabled={loading || validCount === 0} className="btn-primary flex-1 text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                                 {loading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                                Import {validCount > 1 ? `(${validCount})` : ''}
+                                {t('dashboard.walletPage.importBtn', 'Import')} {validCount > 1 ? `(${validCount})` : ''}
                             </button>
                         </div>
                     </>
@@ -416,24 +430,24 @@ function ImportWalletModal({ onClose, onImported }) {
                     <>
                         <div className="flex items-center gap-2 mb-4">
                             <AlertTriangle className="text-red-400" size={20} />
-                            <h3 className="text-lg font-bold text-red-400">Import Failed</h3>
+                            <h3 className="text-lg font-bold text-red-400">{t('dashboard.walletPage.importFailed', 'Import Failed')}</h3>
                         </div>
                         <p className="text-sm text-surface-200/70 mb-4">{result.error}</p>
                         <div className="flex gap-3">
-                            <button onClick={() => setResult(null)} className="btn-secondary flex-1 text-sm">Try Again</button>
-                            <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
+                            <button onClick={() => setResult(null)} className="btn-secondary flex-1 text-sm">{t('dashboard.walletPage.tryAgain', 'Try Again')}</button>
+                            <button onClick={onClose} className="btn-secondary flex-1 text-sm">{t('dashboard.walletPage.close', 'Close')}</button>
                         </div>
                     </>
                 ) : (
                     <>
                         <div className="flex items-center gap-2 mb-4">
                             <Shield className="text-emerald-400" size={20} />
-                            <h3 className="text-lg font-bold text-emerald-400">Import Complete!</h3>
+                            <h3 className="text-lg font-bold text-emerald-400">{t('dashboard.walletPage.importComplete', 'Import Complete!')}</h3>
                         </div>
                         <div className="space-y-3 mb-4">
                             {result.results?.imported?.length > 0 && (
                                 <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
-                                    <p className="text-xs font-bold text-emerald-400 mb-1.5">✅ Imported ({result.results.imported.length})</p>
+                                    <p className="text-xs font-bold text-emerald-400 mb-1.5">✅ {t('dashboard.walletPage.imported', 'Imported')} ({result.results.imported.length})</p>
                                     {result.results.imported.map((w, i) => (
                                         <p key={i} className="text-[11px] text-surface-200/60 font-mono">{w.name}: {shortAddr(w.address)}</p>
                                     ))}
@@ -441,26 +455,27 @@ function ImportWalletModal({ onClose, onImported }) {
                             )}
                             {result.results?.duplicates?.length > 0 && (
                                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
-                                    <p className="text-xs font-bold text-amber-400 mb-1">⚠️ Duplicates ({result.results.duplicates.length})</p>
+                                    <p className="text-xs font-bold text-amber-400 mb-1">⚠️ {t('dashboard.walletPage.duplicates', 'Duplicates')} ({result.results.duplicates.length})</p>
                                     {result.results.duplicates.map((w, i) => (
-                                        <p key={i} className="text-[11px] text-surface-200/50 font-mono">{shortAddr(w.address)} — already exists</p>
+                                        <p key={i} className="text-[11px] text-surface-200/50 font-mono">{shortAddr(w.address)} — {t('dashboard.walletPage.alreadyExists', 'already exists')}</p>
                                     ))}
                                 </div>
                             )}
                             {result.results?.invalid?.length > 0 && (
                                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
-                                    <p className="text-xs font-bold text-red-400 mb-1">❌ Invalid ({result.results.invalid.length})</p>
+                                    <p className="text-xs font-bold text-red-400 mb-1">❌ {t('dashboard.walletPage.invalid', 'Invalid')} ({result.results.invalid.length})</p>
                                     {result.results.invalid.map((w, i) => (
                                         <p key={i} className="text-[11px] text-surface-200/50">{w.key}: {w.error}</p>
                                     ))}
                                 </div>
                             )}
                         </div>
-                        <button onClick={() => { onImported(); onClose(); }} className="btn-primary w-full text-sm">Done</button>
+                        <button onClick={() => { onImported(); onClose(); }} className="btn-primary w-full text-sm">{t('dashboard.walletPage.done', 'Done')}</button>
                     </>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
@@ -511,10 +526,12 @@ function ExportKeyModal({ walletId, walletAddress, onClose }) {
         navigator.clipboard.writeText(privateKey);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+        // Auto-lock: hide key and close after 5s
+        setTimeout(() => { setPrivateKey(null); setShowKey(false); onClose(); }, 5000);
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    return createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
             <div className="bg-surface-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl animate-fadeIn" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-2 mb-4">
                     <Key className="text-amber-400" size={20} />
@@ -593,7 +610,8 @@ function ExportKeyModal({ walletId, walletAddress, onClose }) {
                     </>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
@@ -605,33 +623,56 @@ function BulkExportModal({ walletIds, wallets, onClose }) {
     const [showKeys, setShowKeys] = useState(false);
     const [copied, setCopied] = useState(false);
     const [error, setError] = useState(null);
+    const [needPin, setNeedPin] = useState(false);
+    const [pin, setPin] = useState('');
     const timerRef = useRef(null);
 
-    const exportAll = async () => {
-        setLoading(true);
+    const exportAll = async (pinOverride) => {
+        setLoading(true); setError(null);
+        const usePin = pinOverride || pin || undefined;
         try {
-            const results = [];
-            for (const id of walletIds) {
-                const data = await api.exportWalletKey(id);
-                const w = wallets.find(w => w.id === id);
-                results.push({ ...data, name: w?.walletName || 'Wallet' });
-            }
+            const data = await api.bulkExportKeys(walletIds, usePin);
+            if (usePin) cachePinVerified();
+            const results = (data.results || []).map(r => ({
+                ...r,
+                name: r.name || wallets.find(w => w.id === r.id)?.walletName || 'Wallet'
+            }));
             setKeys(results);
+            setNeedPin(false);
             timerRef.current = setTimeout(() => { setKeys(null); setShowKeys(false); onClose(); }, 60000);
         } catch (err) {
-            setError(err.message);
+            if (err.message === 'PIN required' || err.message?.includes('PIN')) {
+                if (isPinCacheValid()) {
+                    // PIN was recently verified — shouldn't happen
+                }
+                setNeedPin(true);
+                if (err.message !== 'PIN required') setError(err.message);
+                else setError(null);
+            } else {
+                setError(err.message);
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+    const handlePinSubmit = () => {
+        if (pin.length < 4) return;
+        exportAll(pin);
+    };
+
+    useEffect(() => () => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        // Clear keys from memory on unmount
+    }, []);
 
     const copyAll = () => {
         const text = keys.map(k => `${k.privateKey}  ${k.name}  ${k.address}`).join('\n');
         navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+        // Auto-lock: hide keys after 5s post-copy
+        setTimeout(() => { setKeys(null); setShowKeys(false); onClose(); }, 5000);
     };
 
     const downloadFile = () => {
@@ -643,25 +684,48 @@ function BulkExportModal({ walletIds, wallets, onClose }) {
         URL.revokeObjectURL(url);
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    return createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
             <div className="bg-surface-900 border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-fadeIn max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-2 mb-4">
                     <Key className="text-amber-400" size={20} />
-                    <h3 className="text-lg font-bold text-surface-100">Export {walletIds.length} Wallet{walletIds.length > 1 ? 's' : ''}</h3>
+                    <h3 className="text-lg font-bold text-surface-100">{t('dashboard.walletPage.exportBulkTitle', 'Export {{count}} Wallets', { count: walletIds.length })}</h3>
                 </div>
 
-                {error ? (
+                {error && !needPin ? (
                     <>
                         <p className="text-sm text-red-400 mb-4">{error}</p>
-                        <button onClick={onClose} className="btn-secondary w-full text-sm">Close</button>
+                        <button onClick={onClose} className="btn-secondary w-full text-sm">{t('dashboard.walletPage.close', 'Close')}</button>
+                    </>
+                ) : needPin && !keys ? (
+                    <>
+                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 mb-4">
+                            <p className="text-xs text-amber-400 flex items-start gap-2">
+                                <Lock size={14} className="mt-0.5 flex-shrink-0" />
+                                <span>{t('dashboard.walletPage.enterPin', 'Enter PIN to export private keys')}</span>
+                            </p>
+                        </div>
+                        <p className="text-xs text-surface-200/50 mb-3">
+                            {walletIds.length} {t('dashboard.walletPage.bulkExportDesc', 'wallets selected')}
+                        </p>
+                        <input type="password" maxLength={6} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+                            onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
+                            placeholder="••••" className="input-field text-sm text-center tracking-[0.5em] mb-3" autoFocus />
+                        {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+                        <div className="flex gap-3">
+                            <button onClick={onClose} className="btn-secondary flex-1 text-sm">{t('dashboard.common.cancel', 'Cancel')}</button>
+                            <button onClick={handlePinSubmit} disabled={loading || pin.length < 4} className="flex-1 text-sm flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold hover:shadow-lg transition-all disabled:opacity-50">
+                                {loading ? <Loader2 size={16} className="animate-spin" /> : <Key size={16} />}
+                                {t('dashboard.walletPage.confirm', 'Confirm')}
+                            </button>
+                        </div>
                     </>
                 ) : !keys ? (
                     <>
                         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4">
                             <p className="text-xs text-red-400 flex items-start gap-2">
                                 <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
-                                <span>{t('dashboard.walletPage.bulkExportWarning', { count: walletIds.length })}</span>
+                                <span>{t('dashboard.walletPage.bulkExportWarning', 'You are about to export private keys for {{count}} wallets. Never share these with anyone!', { count: walletIds.length })}</span>
                             </p>
                         </div>
                         <div className="mb-4 space-y-1">
@@ -671,10 +735,10 @@ function BulkExportModal({ walletIds, wallets, onClose }) {
                             })}
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
-                            <button onClick={exportAll} disabled={loading} className="flex-1 text-sm flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold hover:shadow-lg transition-all disabled:opacity-50">
+                            <button onClick={onClose} className="btn-secondary flex-1 text-sm">{t('dashboard.common.cancel', 'Cancel')}</button>
+                            <button onClick={() => exportAll()} disabled={loading} className="flex-1 text-sm flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold hover:shadow-lg transition-all disabled:opacity-50">
                                 {loading ? <Loader2 size={16} className="animate-spin" /> : <Key size={16} />}
-                                Reveal All
+                                {t('dashboard.walletPage.revealAll', 'Reveal All')}
                             </button>
                         </div>
                     </>
@@ -682,9 +746,20 @@ function BulkExportModal({ walletIds, wallets, onClose }) {
                     <>
                         <div className="space-y-2 mb-4" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
                             {keys.map((k, i) => (
-                                <div key={i} className="bg-surface-800/80 rounded-lg px-3 py-2">
-                                    <p className="text-[10px] text-surface-200/40 mb-0.5">{k.name} · {shortAddr(k.address)}</p>
-                                    <code className="text-[11px] text-amber-400/80 break-all">
+                                <div key={i} className="bg-surface-800/80 rounded-lg px-3 py-2.5">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <p className="text-[10px] font-medium text-surface-200/60">{k.name}</p>
+                                        <div className="flex items-center gap-1">
+                                            <button onClick={() => { navigator.clipboard.writeText(k.address); }} className="p-0.5 rounded hover:bg-white/5 text-surface-200/30 hover:text-brand-400 transition-colors" title="Copy address">
+                                                <Copy size={9} />
+                                            </button>
+                                            <a href={`https://www.okx.com/web3/explorer/xlayer/address/${k.address}`} target="_blank" rel="noopener" className="p-0.5 rounded hover:bg-white/5 text-surface-200/30 hover:text-brand-400 transition-colors" title="View on OKX Explorer">
+                                                <ExternalLink size={9} />
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <code className="text-[9px] text-surface-200/40 break-all block mb-1">{k.address}</code>
+                                    <code className="text-[11px] text-amber-400/80 break-all block">
                                         {showKeys ? k.privateKey : '••••••••••••••••••••••••'}
                                     </code>
                                 </div>
@@ -693,29 +768,31 @@ function BulkExportModal({ walletIds, wallets, onClose }) {
                         <div className="flex gap-2 mb-3">
                             <button onClick={() => setShowKeys(!showKeys)} className="btn-secondary flex-1 text-xs flex items-center justify-center gap-1">
                                 {showKeys ? <EyeOff size={12} /> : <Eye size={12} />}
-                                {showKeys ? 'Hide' : 'Show'}
+                                {showKeys ? t('dashboard.walletPage.hide', 'Hide') : t('dashboard.walletPage.show', 'Show')}
                             </button>
                             <button onClick={copyAll} className="btn-secondary flex-1 text-xs flex items-center justify-center gap-1">
                                 {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                                Copy All
+                                {t('dashboard.walletPage.copyAll', 'Copy All')}
                             </button>
                             <button onClick={downloadFile} className="btn-secondary flex-1 text-xs flex items-center justify-center gap-1">
                                 <FileText size={12} /> {t('dashboard.walletPage.saveCsv', 'Save CSV')}
                             </button>
                         </div>
                         <p className="text-[9px] text-amber-400/50 mb-3 flex items-center gap-1">
-                            <AlertTriangle size={8} /> Auto-hides in 60 seconds
+                            <AlertTriangle size={8} /> {t('dashboard.walletPage.autoHideBulk', 'Auto-hides in 60 seconds')}
                         </p>
-                        <button onClick={onClose} className="btn-secondary w-full text-sm">Close</button>
+                        <button onClick={onClose} className="btn-secondary w-full text-sm">{t('dashboard.walletPage.close', 'Close')}</button>
                     </>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
 /* ── Wallet Card ── */
-function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTagsChange, selected, onToggleSelect, hasPinCode }) {
+function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTagsChange, selected, onToggleSelect, hasPinCode, onBalanceUpdate }) {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const [balance, setBalance] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -725,22 +802,59 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
     const [editName, setEditName] = useState(wallet.walletName || '');
     const [showExport, setShowExport] = useState(false);
     const [showTagMenu, setShowTagMenu] = useState(false);
+    const [selectedChain, setSelectedChain] = useState(wallet.chainIndex || '196');
+    const [showChainMenu, setShowChainMenu] = useState(false);
+    const [settingDefault, setSettingDefault] = useState(false);
+    const [isVisible, setIsVisible] = useState(false);
     const nameInputRef = useRef(null);
+    const chainBtnRef = useRef(null);
+    const cardRef = useRef(null);
+    const hasLoadedRef = useRef(false);
 
-    const loadBalance = useCallback(async () => {
+    // IntersectionObserver: only load balance when card enters viewport
+    useEffect(() => {
+        const el = cardRef.current;
+        if (!el) return;
+        const obs = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) setIsVisible(true);
+        }, { rootMargin: '100px' });
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, []);
+
+    const loadBalance = useCallback(async (force = false) => {
+        if (!force) {
+            const cached = getCachedBalance(wallet.id, selectedChain);
+            if (cached) {
+                setBalance(cached);
+                const usd = (cached?.tokens || []).reduce((s, t) => s + Number(t.price || 0) * Number(t.balance || 0), 0);
+                onBalanceUpdate?.(wallet.id, usd);
+                return;
+            }
+        }
         setLoading(true);
         try {
-            const data = await api.getWalletBalance(wallet.id);
+            const data = await api.getWalletBalance(wallet.id, selectedChain);
             setBalance(data);
+            setCachedBalance(wallet.id, selectedChain, data);
+            const usd = (data?.tokens || []).reduce((s, t) => s + Number(t.price || 0) * Number(t.balance || 0), 0);
+            onBalanceUpdate?.(wallet.id, usd);
         } catch { /* ignore */ }
         finally { setLoading(false); }
-    }, [wallet.id]);
+    }, [wallet.id, selectedChain, onBalanceUpdate]);
 
-    useEffect(() => { loadBalance(); }, [loadBalance]);
+    // Load when visible (lazy) or when chain changes
+    useEffect(() => {
+        if (!isVisible) return;
+        if (!hasLoadedRef.current || selectedChain !== wallet.chainIndex) {
+            hasLoadedRef.current = true;
+            loadBalance();
+        }
+    }, [isVisible, loadBalance, selectedChain, wallet.chainIndex]);
 
     const totalUsd = balance?.tokens?.reduce((sum, t) => sum + Number(t.price || 0) * Number(t.balance || 0), 0) || 0;
-    const chainName = CHAIN_NAMES[wallet.chainIndex] || `Chain #${wallet.chainIndex}`;
-    const explorer = EXPLORERS[wallet.chainIndex] || EXPLORERS['196'];
+    const chainName = CHAIN_NAMES[selectedChain] || `Chain #${selectedChain}`;
+    const explorer = EXPLORERS[selectedChain] || EXPLORERS['196'];
     const walletTags = (() => { try { return JSON.parse(wallet.tags || '[]'); } catch { return []; } })();
     const needsBackup = wallet.lastExportedAt === 0 || (Math.floor(Date.now() / 1000) - (wallet.lastExportedAt || 0) > 7 * 86400);
 
@@ -771,7 +885,7 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
 
     return (
         <>
-            <div className={`glass-card overflow-hidden transition-all ${wallet.isDefault ? 'ring-1 ring-brand-500/30' : ''} ${selected ? 'ring-1 ring-amber-400/40' : ''}`}>
+            <div ref={cardRef} className={`glass-card overflow-hidden transition-all ${wallet.isDefault ? 'ring-1 ring-brand-500/30' : ''} ${selected ? 'ring-1 ring-amber-400/40' : ''}`}>
                 {/* Header */}
                 <div className="p-3 flex items-center gap-2.5">
                     {/* Select checkbox */}
@@ -800,19 +914,55 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
                                 <h3
                                     className="text-xs font-semibold text-surface-100 cursor-pointer hover:text-brand-400 transition-colors group flex items-center gap-1 truncate"
                                     onClick={() => { setEditName(wallet.walletName || ''); setEditing(true); }}
-                                    title="Click to rename"
+                                    title={t('dashboard.walletPage.clickRename', 'Click to rename')}
                                 >
-                                    {wallet.walletName || 'Trading Wallet'}
+                                    {wallet.walletName || t('dashboard.walletPage.defaultName', 'Trading Wallet')}
                                     <Pencil size={8} className="text-surface-200/20 group-hover:text-brand-400 transition-colors flex-shrink-0" />
                                 </h3>
                             )}
                             {wallet.isDefault && (
-                                <span className="px-1 py-0.5 rounded text-[8px] bg-brand-500/15 text-brand-400 border border-brand-500/20 flex-shrink-0">Default</span>
+                                <span className="px-1 py-0.5 rounded text-[8px] bg-brand-500/15 text-brand-400 border border-brand-500/20 flex-shrink-0">{t('dashboard.walletPage.default', 'Default')}</span>
                             )}
                         </div>
                         {/* Chain badge + backup warning */}
                         <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[8px] px-1 py-0.5 rounded bg-surface-700/60 border border-white/5 text-surface-200/40">{chainName}</span>
+                            <div className="relative">
+                                <button
+                                    ref={chainBtnRef}
+                                    onClick={() => setShowChainMenu(!showChainMenu)}
+                                    className="text-[8px] px-1 py-0.5 rounded bg-surface-700/60 border border-white/5 text-surface-200/40 hover:border-brand-500/30 hover:text-brand-400 transition-colors flex items-center gap-0.5 cursor-pointer"
+                                >
+                                    {chainName}
+                                    <ChevronDown size={7} className={`transition-transform ${showChainMenu ? 'rotate-180' : ''}`} />
+                                </button>
+                                {showChainMenu && createPortal(
+                                    <>
+                                        <div className="fixed inset-0 z-[90]" onClick={() => setShowChainMenu(false)} />
+                                        <div
+                                            className="fixed z-[91] bg-surface-800 border border-white/10 rounded-xl shadow-2xl py-1 min-w-[130px]"
+                                            style={(() => {
+                                                const r = chainBtnRef.current?.getBoundingClientRect();
+                                                return r ? { top: r.bottom + 4, left: r.left } : {};
+                                            })()}
+                                        >
+                                            {CHAIN_OPTIONS.map(c => (
+                                                <button
+                                                    key={c.value}
+                                                    onClick={() => { setSelectedChain(c.value); setShowChainMenu(false); }}
+                                                    className={`w-full text-left px-3 py-1.5 text-[10px] hover:bg-white/5 transition-colors flex items-center gap-2 ${selectedChain === c.value ? 'text-brand-400 font-semibold' : 'text-surface-200/50'}`}
+                                                >
+                                                    {selectedChain === c.value ? <Check size={9} /> : <span className="w-[9px]" />}
+                                                    {c.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>,
+                                    document.body
+                                )}
+                            </div>
+                            <button onClick={loadBalance} className="text-surface-200/30 hover:text-brand-400 transition-colors" title={t('dashboard.walletPage.refresh')}>
+                                <RefreshCw size={9} className={loading ? 'animate-spin' : ''} />
+                            </button>
                             <code className="text-[10px] text-surface-200/40">{shortAddr(wallet.address)}</code>
                             <button onClick={copyAddr} className="text-surface-200/30 hover:text-brand-400 transition-colors">
                                 {copied ? <Check size={9} className="text-emerald-400" /> : <Copy size={9} />}
@@ -847,14 +997,20 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
                                     const usd = price * bal;
                                     return (
                                         <div key={i} className="px-3 py-2 flex items-center gap-2">
-                                            <div className="w-6 h-6 rounded-full bg-surface-700/60 border border-white/5 flex items-center justify-center text-[9px] font-bold text-surface-200/60">
+                                            {token.logoUrl ? (
+                                                <img src={token.logoUrl} alt={token.symbol} className="w-6 h-6 rounded-full object-cover flex-shrink-0" onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                                            ) : null}
+                                            <div className={`w-6 h-6 rounded-full bg-surface-700/60 border border-white/5 flex items-center justify-center text-[9px] font-bold text-surface-200/60 flex-shrink-0 ${token.logoUrl ? 'hidden' : ''}`}>
                                                 {token.symbol?.slice(0, 2) || '?'}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-[10px] font-medium text-surface-100">{token.symbol}</p>
                                                 <p className="text-[9px] text-surface-200/30">{bal.toLocaleString('en-US', { maximumFractionDigits: 4 })}</p>
                                             </div>
-                                            <p className="text-[10px] text-surface-100">{formatUsd(usd)}</p>
+                                            <div className="text-right flex-shrink-0">
+                                                <p className="text-[10px] text-surface-100">{formatUsd(usd)}</p>
+                                                <p className="text-[8px] text-surface-200/30">{price > 0 ? formatUsd(price) : ''}</p>
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -865,7 +1021,7 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
 
                 {balance?.tokens?.length === 0 && !loading && (
                     <div className="px-3 py-2 border-t border-white/5 text-center text-[10px] text-surface-200/25">
-                        📭 Empty — fund to trade
+                        📭 {t('dashboard.walletPage.emptyWallet', 'Empty — fund to trade')}
                     </div>
                 )}
 
@@ -880,20 +1036,27 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
 
                 {/* Actions */}
                 <div className="px-3 py-2 border-t border-white/5 flex items-center gap-1">
-                    <button onClick={() => { loadBalance(); onRefresh(); }} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-brand-400 transition-colors" title="Refresh">
+                    <button onClick={() => { loadBalance(true); onRefresh(); }} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-brand-400 transition-colors" title={t('dashboard.walletPage.refresh', 'Refresh')}>
                         <RefreshCw size={11} />
                     </button>
-                    {!wallet.isDefault && (
-                        <button onClick={() => onSetDefault(wallet.id)} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-amber-400 transition-colors" title="Set Default">
-                            <Star size={11} />
-                        </button>
-                    )}
-                    <button onClick={() => setShowExport(true)} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-amber-400 transition-colors relative" title={hasPinCode ? 'Export Key (PIN required)' : 'Export Key'}>
+                    <button 
+                        onClick={async () => {
+                            if (settingDefault) return;
+                            setSettingDefault(true);
+                            try { await onSetDefault(wallet.id); } finally { setSettingDefault(false); }
+                        }} 
+                        disabled={settingDefault}
+                        className={`p-1 rounded-lg hover:bg-white/5 transition-all ${wallet.isDefault ? 'text-amber-400 scale-110' : 'text-surface-200/30 hover:text-amber-400'} ${settingDefault ? 'opacity-50 animate-pulse' : ''}`} 
+                        title={wallet.isDefault ? t('dashboard.walletPage.unsetDefault', 'Remove Default') : t('dashboard.walletPage.setDefault', 'Set Default')}
+                    >
+                        {settingDefault ? <Loader2 size={11} className="animate-spin" /> : <Star size={11} className={wallet.isDefault ? 'fill-amber-400' : ''} />}
+                    </button>
+                    <button onClick={() => setShowExport(true)} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-amber-400 transition-colors relative" title={hasPinCode ? t('dashboard.walletPage.exportKeyPin', 'Export Key (PIN required)') : t('dashboard.walletPage.exportKey', 'Export Key')}>
                         <Key size={11} />
                         {hasPinCode && <Lock size={6} className="absolute -top-0.5 -right-0.5 text-amber-400" />}
                     </button>
                     <div className="relative">
-                        <button onClick={() => setShowTagMenu(!showTagMenu)} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-purple-400 transition-colors" title="Tags">
+                        <button onClick={() => setShowTagMenu(!showTagMenu)} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-purple-400 transition-colors" title={t('dashboard.walletPage.tags', 'Tags')}>
                             <Tag size={11} />
                         </button>
                         {showTagMenu && (
@@ -911,11 +1074,11 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
                             </>
                         )}
                     </div>
-                    <button onClick={() => navigate('/trading')} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-emerald-400 transition-colors" title="Quick Trade">
+                    <button onClick={() => navigate('/trading')} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-emerald-400 transition-colors" title={t('dashboard.walletPage.quickTrade', 'Quick Trade')}>
                         <Send size={11} />
                     </button>
                     <div className="flex-1" />
-                    <button onClick={() => onDelete(wallet.id)} className="p-1 rounded-lg hover:bg-red-500/10 text-surface-200/20 hover:text-red-400 transition-colors relative" title={hasPinCode ? 'Delete (PIN required)' : 'Delete'}>
+                    <button onClick={() => onDelete(wallet.id)} className="p-1 rounded-lg hover:bg-red-500/10 text-surface-200/20 hover:text-red-400 transition-colors relative" title={hasPinCode ? t('dashboard.walletPage.deletePin', 'Delete (PIN required)') : t('dashboard.walletPage.delete', 'Delete')}>
                         <Trash2 size={11} />
                         {hasPinCode && <Lock size={6} className="absolute -top-0.5 -right-0.5 text-amber-400" />}
                     </button>
@@ -960,6 +1123,12 @@ export default function WalletsPage() {
     const [removePinInput, setRemovePinInput] = useState('');
     const [walletLimit, setWalletLimit] = useState(50);
     const [filterTag, setFilterTag] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [viewMode, setViewMode] = useState(() => localStorage.getItem('walletViewMode') || 'grid');
+    const [draggedId, setDraggedId] = useState(null);
+    const [walletOrder, setWalletOrder] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('walletOrder') || '[]'); } catch { return []; }
+    });
 
     const loadWallets = useCallback(async () => {
         setLoading(true);
@@ -981,38 +1150,38 @@ export default function WalletsPage() {
 
     const backupCount = wallets.filter(w => w.lastExportedAt === 0 || (Math.floor(Date.now() / 1000) - (w.lastExportedAt || 0) > 7 * 86400)).length;
 
-    // Balance tracking for sorting and portfolio total
+    // Balance tracking — each WalletCard reports its balance via onBalanceUpdate
     const balancesRef = useRef({});
-    const updatePortfolioTotal = useCallback(() => {
+    const snapshotSavedRef = useRef(false);
+    const handleBalanceUpdate = useCallback((walletId, usd) => {
+        balancesRef.current[walletId] = usd;
         const total = Object.values(balancesRef.current).reduce((sum, val) => sum + val, 0);
         setTotalPortfolio(total);
-    }, []);
+        // Auto-save portfolio snapshot (once per page load, rate-limited on backend)
+        if (!snapshotSavedRef.current && total > 0 && Object.keys(balancesRef.current).length >= Math.min(wallets.length, 3)) {
+            snapshotSavedRef.current = true;
+            api.savePortfolioSnapshot(total).catch(() => {});
+        }
+    }, [wallets.length]);
 
     useEffect(() => {
-        if (wallets.length === 0) { setTotalPortfolio(0); return; }
-        let cancelled = false;
-        const fetchAll = async () => {
-            const sums = {};
-            await Promise.all(wallets.map(async (w) => {
-                try {
-                    const data = await api.getWalletBalance(w.id);
-                    const usd = (data?.tokens || []).reduce((s, t) => s + Number(t.price || 0) * Number(t.balance || 0), 0);
-                    sums[w.id] = usd;
-                } catch { sums[w.id] = 0; }
-            }));
-            if (!cancelled) {
-                balancesRef.current = sums;
-                updatePortfolioTotal();
-            }
-        };
-        fetchAll();
-        return () => { cancelled = true; };
-    }, [wallets, updatePortfolioTotal]);
+        if (wallets.length === 0) { setTotalPortfolio(0); balancesRef.current = {}; snapshotSavedRef.current = false; }
+    }, [wallets]);
 
     // Sorted + filtered wallets
     const sortedWallets = useMemo(() => {
         let list = [...wallets];
+        // Search filter
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            list = list.filter(w => (w.walletName || '').toLowerCase().includes(q) || (w.address || '').toLowerCase().includes(q));
+        }
         if (filterTag) list = list.filter(w => { try { return JSON.parse(w.tags || '[]').includes(filterTag); } catch { return false; } });
+        // Custom order from drag-drop
+        if (sortBy === 'custom' && walletOrder.length > 0) {
+            const orderMap = new Map(walletOrder.map((id, i) => [id, i]));
+            return list.sort((a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
+        }
         switch (sortBy) {
             case 'name': return list.sort((a, b) => (a.walletName || '').localeCompare(b.walletName || ''));
             case 'name-desc': return list.sort((a, b) => (b.walletName || '').localeCompare(a.walletName || ''));
@@ -1023,7 +1192,7 @@ export default function WalletsPage() {
             case 'default': return list.sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
             default: return list;
         }
-    }, [wallets, sortBy, filterTag]);
+    }, [wallets, sortBy, filterTag, searchQuery, walletOrder]);
 
     const toggleSelect = (id) => {
         setSelectedIds(prev => {
@@ -1041,8 +1210,24 @@ export default function WalletsPage() {
         }
     };
 
+    const [defaultToast, setDefaultToast] = useState(null);
     const handleSetDefault = async (id) => {
-        try { await api.setDefaultWallet(id); loadWallets(); } catch { /* ignore */ }
+        try {
+            const result = await api.setDefaultWallet(id);
+            await loadWallets();
+            const wallet = wallets.find(w => w.id === id);
+            const name = wallet?.walletName || 'Wallet';
+            if (result.isDefault) {
+                setDefaultToast({ type: 'success', msg: `⭐ ${name} ${t('dashboard.walletPage.setAsDefault', 'set as default')}` });
+            } else {
+                setDefaultToast({ type: 'info', msg: `${name} ${t('dashboard.walletPage.removedDefault', 'removed from default')}` });
+            }
+            setTimeout(() => setDefaultToast(null), 3000);
+        } catch (err) {
+            console.error('Set default wallet error:', err);
+            setDefaultToast({ type: 'error', msg: err.message || 'Failed' });
+            setTimeout(() => setDefaultToast(null), 3000);
+        }
     };
 
     const handleDelete = async (id) => {
@@ -1052,6 +1237,43 @@ export default function WalletsPage() {
 
     const handleRename = (id, newName) => {
         setWallets(prev => prev.map(w => w.id === id ? { ...w, walletName: newName } : w));
+    };
+
+    // Drag-and-drop handlers
+    const handleDragStart = (id) => setDraggedId(id);
+    const handleDragOver = (e, targetId) => {
+        e.preventDefault();
+        if (!draggedId || draggedId === targetId) return;
+    };
+    const handleDrop = (targetId) => {
+        if (!draggedId || draggedId === targetId) return;
+        const ids = sortedWallets.map(w => w.id);
+        const fromIdx = ids.indexOf(draggedId);
+        const toIdx = ids.indexOf(targetId);
+        if (fromIdx < 0 || toIdx < 0) return;
+        ids.splice(fromIdx, 1);
+        ids.splice(toIdx, 0, draggedId);
+        setWalletOrder(ids);
+        setSortBy('custom');
+        localStorage.setItem('walletOrder', JSON.stringify(ids));
+        setDraggedId(null);
+    };
+    const handleDragEnd = () => setDraggedId(null);
+
+    // Bulk delete
+    const handleBulkDelete = async () => {
+        if (!confirm(t('dashboard.walletPage.bulkDeleteConfirm', `Delete ${selectedIds.size} wallets?`))) return;
+        try {
+            await Promise.all([...selectedIds].map(id => api.deleteWallet(id)));
+            loadWallets();
+        } catch { /* ignore */ }
+    };
+
+    // Toggle view mode
+    const toggleViewMode = () => {
+        const next = viewMode === 'grid' ? 'list' : 'grid';
+        setViewMode(next);
+        localStorage.setItem('walletViewMode', next);
     };
 
     return (
@@ -1074,13 +1296,13 @@ export default function WalletsPage() {
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={loadWallets} className="btn-secondary text-xs flex items-center gap-1.5 px-3 py-2">
-                        <RefreshCw size={12} /> Refresh
+                        <RefreshCw size={12} /> {t('dashboard.walletPage.refresh')}
                     </button>
                     <button onClick={() => setShowImport(true)} className="btn-secondary text-xs flex items-center gap-1.5 px-3 py-2 border-brand-500/20 text-brand-400 hover:bg-brand-500/10">
-                        <Download size={12} /> Import
+                        <Download size={12} /> {t('dashboard.walletPage.import')}
                     </button>
                     <button onClick={() => setShowCreate(true)} className="btn-primary text-xs flex items-center gap-1.5 px-3 py-2">
-                        <Plus size={12} /> New
+                        <Plus size={12} /> {t('dashboard.walletPage.newWallet')}
                     </button>
                 </div>
             </div>
@@ -1196,6 +1418,54 @@ export default function WalletsPage() {
                             </button>
                         ))}
                     </div>
+
+                    {/* View mode toggle */}
+                    <button onClick={toggleViewMode} className="btn-secondary text-[11px] flex items-center gap-1 px-2 py-1.5" title={viewMode === 'grid' ? 'List view' : 'Grid view'}>
+                        {viewMode === 'grid' ? <List size={11} /> : <LayoutGrid size={11} />}
+                    </button>
+                </div>
+            )}
+
+            {/* Search bar */}
+            {wallets.length > 0 && (
+                <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-200/30" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder={t('dashboard.walletPage.searchPlaceholder', 'Search by name or address...')}
+                        className="w-full pl-9 pr-3 py-2 bg-surface-800/50 border border-white/5 rounded-xl text-xs text-surface-100 placeholder-surface-200/30 focus:border-brand-500/30 focus:outline-none transition-colors"
+                    />
+                    {searchQuery && (
+                        <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-200/30 hover:text-surface-200">
+                            <X size={12} />
+                        </button>
+                    )}
+                    {searchQuery && <p className="text-[10px] text-surface-200/40 mt-1 ml-1">{sortedWallets.length} {t('dashboard.walletPage.results', 'results')}</p>}
+                </div>
+            )}
+
+            {/* Bulk action bar */}
+            {selectedIds.size > 0 && (
+                <div className="glass-card p-2.5 flex items-center gap-2 flex-wrap animate-fadeIn">
+                    <span className="text-[11px] text-surface-200/60 font-medium">{selectedIds.size} {t('dashboard.walletPage.selected', 'selected')}</span>
+                    <div className="h-4 w-px bg-white/10" />
+                    <button
+                        onClick={() => setShowBulkExport(true)}
+                        className="text-[10px] flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
+                    >
+                        <Key size={10} /> {t('dashboard.walletPage.exportKey', 'Export')}
+                    </button>
+                    <button
+                        onClick={handleBulkDelete}
+                        className="text-[10px] flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                    >
+                        <Trash2 size={10} /> {t('dashboard.common.delete', 'Delete')}
+                    </button>
+                    <button onClick={() => setSelectedIds(new Set())} className="text-[10px] text-surface-200/40 hover:text-surface-200 ml-auto">
+                        <X size={12} />
+                    </button>
                 </div>
             )}
 
@@ -1219,10 +1489,62 @@ export default function WalletsPage() {
                     </div>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {sortedWallets.map(w => (
-                        <WalletCard
+                <>
+                {defaultToast && (
+                    <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] px-4 py-2.5 rounded-xl shadow-2xl text-sm font-medium animate-fadeIn flex items-center gap-2 ${
+                        defaultToast.type === 'success' ? 'bg-emerald-500/90 text-white' :
+                        defaultToast.type === 'error' ? 'bg-red-500/90 text-white' :
+                        'bg-surface-700/90 text-surface-100 border border-white/10'
+                    }`}>
+                        {defaultToast.type === 'success' && <Star size={14} className="fill-white" />}
+                        {defaultToast.msg}
+                    </div>
+                )}
+                <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3' : 'space-y-2'}>
+                    {sortedWallets.map(w => viewMode === 'list' ? (
+                        /* Compact List View */
+                        <div
                             key={w.id}
+                            draggable
+                            onDragStart={() => handleDragStart(w.id)}
+                            onDragOver={(e) => handleDragOver(e, w.id)}
+                            onDrop={() => handleDrop(w.id)}
+                            onDragEnd={handleDragEnd}
+                            className={`glass-card px-3 py-2 flex items-center gap-3 cursor-grab active:cursor-grabbing transition-all ${draggedId === w.id ? 'opacity-50 scale-95' : ''} ${w.isDefault ? 'ring-1 ring-brand-500/20' : ''} ${selectedIds.has(w.id) ? 'ring-1 ring-amber-400/30' : ''}`}
+                        >
+                            <GripVertical size={12} className="text-surface-200/20 flex-shrink-0" />
+                            <button onClick={() => toggleSelect(w.id)} className="flex-shrink-0 text-surface-200/30 hover:text-brand-400">
+                                {selectedIds.has(w.id) ? <CheckSquare size={14} className="text-amber-400" /> : <Square size={14} />}
+                            </button>
+                            <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${w.isDefault ? 'bg-gradient-to-br from-brand-500 to-cyan-500' : 'bg-surface-700/60'}`}>
+                                <Wallet size={10} className="text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <span className="text-xs font-medium text-surface-100 truncate block">{w.walletName || 'Unnamed'}</span>
+                            </div>
+                            <span className="text-[10px] text-surface-200/40 font-mono hidden sm:block">{shortAddr(w.address)}</span>
+                            <span className="text-[10px] text-surface-200/30 hidden md:block">{CHAIN_NAMES[w.chainIndex] || 'Chain'}</span>
+                            <span className="text-xs font-bold text-emerald-400 min-w-[60px] text-right">{formatUsd(balancesRef.current[w.id] || 0)}</span>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                                <button onClick={() => handleSetDefault(w.id)} className={`p-1 rounded hover:bg-white/5 ${w.isDefault ? 'text-amber-400' : 'text-surface-200/20 hover:text-amber-400'}`}>
+                                    <Star size={11} className={w.isDefault ? 'fill-amber-400' : ''} />
+                                </button>
+                                <button onClick={() => handleDelete(w.id)} className="p-1 rounded hover:bg-white/5 text-surface-200/20 hover:text-red-400">
+                                    <Trash2 size={11} />
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div
+                            key={w.id}
+                            draggable
+                            onDragStart={() => handleDragStart(w.id)}
+                            onDragOver={(e) => handleDragOver(e, w.id)}
+                            onDrop={() => handleDrop(w.id)}
+                            onDragEnd={handleDragEnd}
+                            className={`transition-all ${draggedId === w.id ? 'opacity-50 scale-95' : ''}`}
+                        >
+                        <WalletCard
                             wallet={w}
                             onRefresh={loadWallets}
                             onSetDefault={handleSetDefault}
@@ -1231,10 +1553,13 @@ export default function WalletsPage() {
                             onTagsChange={handleTagsChange}
                             selected={selectedIds.has(w.id)}
                             onToggleSelect={toggleSelect}
+                            onBalanceUpdate={handleBalanceUpdate}
                             hasPinCode={hasPinCode}
                         />
+                        </div>
                     ))}
                 </div>
+                </>
             )}
 
             {/* Modals */}

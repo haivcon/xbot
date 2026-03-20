@@ -1220,5 +1220,190 @@ module.exports = {
             return `❌ Error: ${error.msg || error.message}`;
         }
     },
+
+    // ═══════════════════════════════════════════════════════
+    // New OnchainOS API Tool Handlers  
+    // ═══════════════════════════════════════════════════════
+
+    async get_hot_tokens(args, context) {
+        try {
+            const lang = context?.lang || 'en';
+            const data = await onchainos.getHotTokens({ chainIndex: args.chainIndex || '', limit: args.limit || '20' });
+            const list = Array.isArray(data) ? data : (data?.data || []);
+            if (!list || list.length === 0) {
+                return { vi: '📭 Không tìm thấy token hot.', en: '📭 No hot tokens found.' }[lang] || '📭 No hot tokens found.';
+            }
+            const headerL = { vi: '🔥 Token Đang Hot', en: '🔥 Hot Tokens', zh: '🔥 热门代币', ko: '🔥 인기 토큰' };
+            const chainNames = { '1': 'ETH', '56': 'BSC', '196': 'XLayer', '501': 'SOL', '137': 'Polygon', '42161': 'Arb', '8453': 'Base' };
+            let card = `${headerL[lang] || headerL.en}\n━━━━━━━━━━━━━━━━━━\n\n`;
+            const fmtNum = (n) => n > 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : n > 1e3 ? '$' + (n / 1e3).toFixed(0) + 'K' : '$' + n.toFixed(0);
+            for (let i = 0; i < Math.min(list.length, 20); i++) {
+                const t = list[i];
+                const price = Number(t.price || t.lastPrice || 0);
+                const change = Number(t.priceChange24h || t.change24h || 0);
+                const pStr = price < 0.01 ? price.toFixed(8) : price.toFixed(4);
+                const changeIcon = change > 0 ? '🟢' : change < 0 ? '🔴' : '⚪';
+                const chain = chainNames[t.chainIndex || t.chainId] || '';
+                card += `${i + 1}. <b>${t.tokenSymbol || '?'}</b>${chain ? ' (' + chain + ')' : ''}\n`;
+                card += `   💰 $${pStr} ${changeIcon} ${change >= 0 ? '+' : ''}${change.toFixed(1)}%\n`;
+                if (Number(t.marketCap || 0) > 0) card += `   📊 MCap: ${fmtNum(t.marketCap)} | Vol: ${fmtNum(t.volume24h || 0)}\n`;
+                card += '\n';
+            }
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_top_traders(args, context) {
+        try {
+            const lang = context?.lang || 'en';
+            let chainIndex = args.chainIndex || '196';
+            let tokenAddress = args.tokenContractAddress;
+            if (tokenAddress && !tokenAddress.startsWith('0x') && tokenAddress.length < 20) {
+                const resolved = await autoResolveToken(tokenAddress, chainIndex);
+                if (resolved.error) return resolved.error;
+                chainIndex = resolved.chainIndex;
+                tokenAddress = resolved.tokenAddress;
+            }
+            const data = await onchainos.getTopTrader(chainIndex, tokenAddress, { tagFilter: args.tagFilter });
+            const list = Array.isArray(data) ? data : (data?.data || []);
+            if (!list || list.length === 0) {
+                return { vi: '📭 Không tìm thấy trader.', en: '📭 No top traders found.' }[lang] || '📭 No top traders found.';
+            }
+            const headerL = { vi: '🏆 Top Traders', en: '🏆 Top Traders', zh: '🏆 顶级交易者', ko: '🏆 탑 트레이더' };
+            const tagMap = { '1': 'KOL', '2': 'Dev', '3': 'Smart Money', '4': 'Whale', '7': 'Sniper' };
+            let card = `${headerL[lang] || headerL.en}\n━━━━━━━━━━━━━━━━━━\n\n`;
+            const fmtNum = (n) => n > 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : n > 1e3 ? '$' + (n / 1e3).toFixed(0) + 'K' : '$' + n.toFixed(0);
+            for (let i = 0; i < Math.min(list.length, 15); i++) {
+                const t = list[i];
+                const addr = t.traderAddress || t.address || '?';
+                const pnl = Number(t.pnl || t.profitUsd || 0);
+                const vol = Number(t.volumeUsd || t.tradeVolume || 0);
+                const tag = t.tag ? tagMap[t.tag] || t.tag : '';
+                const pnlIcon = pnl > 0 ? '🟢' : pnl < 0 ? '🔴' : '⚪';
+                card += `${i + 1}. <code>${addr.slice(0, 6)}...${addr.slice(-4)}</code>${tag ? ' [' + tag + ']' : ''}\n`;
+                card += `   ${pnlIcon} PnL: ${pnl >= 0 ? '+' : ''}${fmtNum(pnl)} | Vol: ${fmtNum(vol)}\n\n`;
+            }
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_address_tracker(args, context) {
+        try {
+            const lang = context?.lang || 'en';
+            const data = await onchainos.getAddressTrackerActivities({
+                chainIndex: args.chainIndex, trackerType: args.trackerType || '1', limit: args.limit || '20'
+            });
+            const list = Array.isArray(data) ? data : (data?.data || []);
+            if (!list || list.length === 0) {
+                return { vi: '📭 Không có hoạt động.', en: '📭 No recent activities.' }[lang] || '📭 No recent activities.';
+            }
+            const typeMap = { '1': '🧠 Smart Money', '2': '⭐ KOL', '3': '🐋 Whale', '4': '🎯 Sniper' };
+            const headerType = typeMap[args.trackerType || '1'] || '🧠 Smart Money';
+            let card = `${headerType} — ${lang === 'vi' ? 'Hoạt Động Gần Đây' : 'Recent Activity'}\n━━━━━━━━━━━━━━━━━━\n\n`;
+            const chainNames = { '1': 'ETH', '56': 'BSC', '196': 'XLayer', '501': 'SOL', '137': 'Polygon', '42161': 'Arb', '8453': 'Base' };
+            const fmtNum = (n) => n > 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : n > 1e3 ? '$' + (n / 1e3).toFixed(0) + 'K' : '$' + n.toFixed(0);
+            for (let i = 0; i < Math.min(list.length, 15); i++) {
+                const a = list[i];
+                const action = String(a.action || a.type || 'BUY').toLowerCase();
+                const actionIcon = action.includes('buy') ? '🟢' : '🔴';
+                const addr = a.address || a.traderAddress || '?';
+                const chain = chainNames[a.chainIndex] || '';
+                card += `${actionIcon} <b>${a.tokenSymbol || '?'}</b>${chain ? ' (' + chain + ')' : ''} — ${fmtNum(Number(a.amountUsd || a.amount || 0))}\n`;
+                card += `   👤 <code>${addr.slice(0, 6)}...${addr.slice(-4)}</code>\n\n`;
+            }
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_trader_leaderboard(args, context) {
+        try {
+            const lang = context?.lang || 'en';
+            const chainIndex = args.chainIndex || '1';
+            const data = await onchainos.getLeaderboardList({
+                chainIndex, timeFrame: args.timeFrame || '2', traderType: args.traderType, sort: args.sort, limit: args.limit || '20'
+            });
+            const list = Array.isArray(data) ? data : (data?.data || []);
+            if (!list || list.length === 0) {
+                return { vi: '📭 Không có dữ liệu.', en: '📭 No leaderboard data.' }[lang] || '📭 No leaderboard data.';
+            }
+            const headerL = { vi: '🏆 Bảng Xếp Hạng Trader', en: '🏆 Trader Leaderboard', zh: '🏆 交易者排行榜', ko: '🏆 트레이더 리더보드' };
+            const chainNames = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '501': 'Solana' };
+            const timeLabels = { '1': '24H', '2': '7D', '3': '30D', '4': '90D' };
+            let card = `${headerL[lang] || headerL.en}\n⛓ ${chainNames[chainIndex] || 'Chain #' + chainIndex} | ⏱ ${timeLabels[args.timeFrame || '2'] || '7D'}\n━━━━━━━━━━━━━━━━━━\n\n`;
+            const fmtNum = (n) => n > 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : n > 1e3 ? '$' + (n / 1e3).toFixed(0) + 'K' : '$' + n.toFixed(0);
+            for (let i = 0; i < Math.min(list.length, 20); i++) {
+                const t = list[i];
+                const addr = t.traderAddress || t.address || '?';
+                const pnl = Number(t.pnl || t.totalPnl || 0);
+                const winRate = Number(t.winRate || 0);
+                const txCount = Number(t.txCount || t.tradeCount || 0);
+                const medal = i < 3 ? ['🥇', '🥈', '🥉'][i] : `${i + 1}.`;
+                const pnlIcon = pnl > 0 ? '🟢' : '🔴';
+                card += `${medal} <code>${addr.slice(0, 6)}...${addr.slice(-4)}</code>\n`;
+                card += `   ${pnlIcon} PnL: ${pnl >= 0 ? '+' : ''}${fmtNum(pnl)}`;
+                if (winRate > 0) card += ` | Win: ${(winRate * 100).toFixed(0)}%`;
+                if (txCount > 0) card += ` | Txs: ${txCount}`;
+                card += '\n\n';
+            }
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
+
+    async get_holder_cluster(args, context) {
+        try {
+            const lang = context?.lang || 'en';
+            let chainIndex = args.chainIndex;
+            let tokenAddress = args.tokenContractAddress;
+            if (tokenAddress && !tokenAddress.startsWith('0x') && tokenAddress.length < 20) {
+                const resolved = await autoResolveToken(tokenAddress, chainIndex);
+                if (resolved.error) return resolved.error;
+                chainIndex = resolved.chainIndex;
+                tokenAddress = resolved.tokenAddress;
+            }
+            const mode = args.mode || 'overview';
+            const headerL = { vi: '👥 Phân Tích Holder', en: '👥 Holder Analysis', zh: '👥 持有者分析', ko: '👥 보유자 분석' };
+            let card = `${headerL[lang] || headerL.en}\n━━━━━━━━━━━━━━━━━━\n\n`;
+
+            if (mode === 'overview') {
+                const data = await onchainos.getClusterOverview(chainIndex, tokenAddress);
+                const d = Array.isArray(data) ? data[0] : (data?.data || data || {});
+                card += `📊 <b>Cluster Overview</b>\n`;
+                if (d.clusterCount) card += `🔗 Clusters: ${d.clusterCount}\n`;
+                if (d.totalHolders) card += `👥 Total Holders: ${d.totalHolders}\n`;
+                if (d.top10HoldPercent) card += `🏆 Top 10 Hold: ${d.top10HoldPercent}%\n`;
+            } else if (mode === 'top_holders') {
+                const data = await onchainos.getClusterTopHolders(chainIndex, tokenAddress);
+                const list = Array.isArray(data) ? data : (data?.data || []);
+                card += `📊 <b>Top Holders</b>\n\n`;
+                for (let i = 0; i < Math.min(list.length, 15); i++) {
+                    const h = list[i];
+                    const addr = h.holderAddress || h.address || '?';
+                    const pct = Number(h.holdingPercent || h.percentage || 0);
+                    const tag = h.tag || h.label || '';
+                    card += `${i + 1}. <code>${addr.slice(0, 6)}...${addr.slice(-4)}</code> — ${(pct * 100).toFixed(2)}%${tag ? ' [' + tag + ']' : ''}\n`;
+                }
+            } else {
+                const data = await onchainos.getClusterList(chainIndex, tokenAddress);
+                const list = Array.isArray(data) ? data : (data?.data || []);
+                card += `📊 <b>Holder Clusters</b>\n\n`;
+                for (let i = 0; i < Math.min(list.length, 10); i++) {
+                    const c = list[i];
+                    card += `${i + 1}. Cluster: ${c.clusterName || 'Group ' + (i + 1)} — ${c.memberCount || '?'} wallets\n`;
+                    if (c.holdingPercent) card += `   📊 Holding: ${(Number(c.holdingPercent) * 100).toFixed(2)}%\n`;
+                }
+            }
+            return { displayMessage: card };
+        } catch (error) {
+            return `❌ Error: ${error.msg || error.message}`;
+        }
+    },
 };
 

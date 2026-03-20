@@ -891,6 +891,32 @@ module.exports.ONCHAIN_TOOLS = [
                 name: 'create_ai_price_alert',
                 description: 'Create price alerts using natural language — no need for /price command. Vietnamese: "báo khi ETH lên 3000", "nhắc khi OKB dưới 50", "cảnh báo giá". English: "alert me when ETH hits 3000", "notify when BTC drops to 60000".',
                 parameters: { type: 'object', properties: { description: { type: 'string', description: 'Natural language alert description' }, token: { type: 'string', description: 'Token symbol' }, targetPrice: { type: 'string', description: 'Target price in USD' }, direction: { type: 'string', description: '"above" or "below"' } }, required: ['token', 'targetPrice', 'direction'] }
+            },
+            // ── New OnchainOS API Tools ──
+            {
+                name: 'get_hot_tokens',
+                description: 'Get trending/hot tokens — most discussed on X/Twitter, biggest gainers, or newly listed. Vietnamese: "token nào đang hot", "xu hướng token", "token trending", "mới lên sàn". English: "hot tokens", "trending tokens", "whats trending", "new listings".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Chain ID (e.g. "1" Ethereum, "56" BSC, "501" Solana). Default all chains.' }, sortBy: { type: 'string', description: '"hot" (trending), "gainers" (price gain), "newest" (new). Default "hot"' }, limit: { type: 'string', description: 'Number of results. Default "20", max 50' } }, required: [] }
+            },
+            {
+                name: 'get_top_traders',
+                description: 'Get top traders for a specific token — sorted by PnL, volume, or win rate. Vietnamese: "ai mua token này nhiều nhất", "top trader của token", "ai lãi nhiều nhất". English: "top traders", "who is trading this", "biggest traders".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Chain ID. Default "196"' }, tokenContractAddress: { type: 'string', description: 'Token contract address or symbol' }, tagFilter: { type: 'string', description: '"1"=KOL, "3"=Smart Money, "4"=Whale. Optional filter.' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            },
+            {
+                name: 'get_address_tracker',
+                description: 'Get real-time smart money / whale / KOL trade activities feed. Different from signal list — this shows DETAILED trade activity with addresses. Vietnamese: "smart money đang giao dịch gì", "hoạt động cá voi", "theo dõi ví thông minh". English: "smart money activity", "whale trades", "address tracker".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Chain ID. Default all chains.' }, trackerType: { type: 'string', description: '"1"=Smart Money, "2"=KOL, "3"=Whale, "4"=Sniper. Default "1"' }, limit: { type: 'string', description: 'Number of results. Default "20"' } }, required: [] }
+            },
+            {
+                name: 'get_trader_leaderboard',
+                description: 'Get the on-chain top trader leaderboard — ranked by PnL, win rate, or trade volume. Vietnamese: "bảng xếp hạng trader", "top trader on-chain", "ai trade giỏi nhất". English: "trader leaderboard", "top PnL traders", "best traders".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Chain ID. Default "1" (Ethereum)' }, timeFrame: { type: 'string', description: '"1"=1D, "2"=7D, "3"=30D, "4"=90D. Default "2"' }, traderType: { type: 'string', description: '"1"=Smart Money, "2"=Whale. Default all.' }, sort: { type: 'string', description: '"pnl", "winRate", "txCount". Default "pnl"' }, limit: { type: 'string', description: 'Number of results. Default "20"' } }, required: [] }
+            },
+            {
+                name: 'get_holder_cluster',
+                description: 'Analyze holder clusters/concentration for a token — identifies related wallets, dev holdings, and whale groups. Vietnamese: "phân tích holder", "ai đang nắm giữ", "dev còn hold không", "cluster holder". English: "holder analysis", "holder clusters", "who holds this token".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Chain ID' }, tokenContractAddress: { type: 'string', description: 'Token contract address or symbol' }, mode: { type: 'string', description: '"overview" (summary), "top_holders" (biggest holders), "clusters" (related groups). Default "overview"' } }, required: ['chainIndex', 'tokenContractAddress'] }
             }
         ]
     }

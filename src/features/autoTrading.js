@@ -143,6 +143,7 @@ async function initDB() {
         try { await dbRun('ALTER TABLE auto_trading_config ADD COLUMN walletId INTEGER'); } catch {}
         try { await dbRun('ALTER TABLE auto_trading_config ADD COLUMN paperMode INTEGER DEFAULT 0'); } catch {}
         try { await dbRun('ALTER TABLE auto_trading_config ADD COLUMN selectedTokens TEXT'); } catch {}
+        try { await dbRun('ALTER TABLE auto_trading_config ADD COLUMN aiModel TEXT DEFAULT \'auto\''); } catch {}
         _dbInitialized = true;
     } catch (err) {
         log.error('initDB error:', err.message);
@@ -219,6 +220,10 @@ async function enableAgent(userId, config = {}) {
         // Save selectedTokens
         if (config.selectedTokens !== undefined) {
             await dbRun('UPDATE auto_trading_config SET selectedTokens = ? WHERE userId = ?', [config.selectedTokens || null, userId]);
+        }
+        // Save aiModel
+        if (config.aiModel) {
+            await dbRun('UPDATE auto_trading_config SET aiModel = ? WHERE userId = ?', [config.aiModel, userId]);
         }
     } else {
         await dbRun(`INSERT INTO auto_trading_config 
@@ -313,6 +318,7 @@ async function getAgentStatus(userId) {
         profitTargetPct: config.profitTargetPct || 25,
         totalBudgetUsd: config.totalBudgetUsd || 100,
         autoApprove: Boolean(config.autoApprove),
+        aiModel: config.aiModel || 'auto',
         totalTrades: config.totalTrades || 0,
         totalPnlUsd: Number(config.totalPnlUsd || 0),
         currentPnlUsd: Number(config.currentPnlUsd || 0),
@@ -786,7 +792,7 @@ async function exportTradeHistory(userId) {
 async function updateAgentConfig(userId, updates) {
     await initDB();
     const { dbRun } = require('../../db/core');
-    const allowed = ['riskLevel', 'maxAmountUsd', 'chains', 'stopLossPct', 'takeProfitPct', 'profitTargetPct', 'totalBudgetUsd', 'autoApprove', 'walletId', 'paperMode'];
+    const allowed = ['riskLevel', 'maxAmountUsd', 'chains', 'stopLossPct', 'takeProfitPct', 'profitTargetPct', 'totalBudgetUsd', 'autoApprove', 'walletId', 'paperMode', 'selectedTokens', 'aiModel'];
     const numericFields = ['maxAmountUsd', 'stopLossPct', 'takeProfitPct', 'profitTargetPct', 'totalBudgetUsd'];
     const setClauses = [];
     const params = [];
@@ -845,7 +851,16 @@ function startSignalPolling(userId, config, minimalContext) {
                     const signals = await onchainos.getSignalList(chain.trim(), { walletType: '4' });
                     const allSignals = Array.isArray(signals) ? signals : [];
 
-                    for (const signal of allSignals.slice(0, 3)) {
+                    // ★ FIX: Filter signals by user's selectedTokens
+                    const selectedTokenFilter = dbConfig.selectedTokens ? dbConfig.selectedTokens.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+                    const filteredSignals = selectedTokenFilter.length > 0
+                        ? allSignals.filter(s => selectedTokenFilter.includes((s.tokenSymbol || '').toUpperCase()))
+                        : allSignals;
+                    if (selectedTokenFilter.length > 0 && filteredSignals.length === 0) {
+                        log.info(`[${userId}] No signals matched selectedTokens: ${selectedTokenFilter.join(',')} on chain ${chain}`);
+                    }
+
+                    for (const signal of filteredSignals.slice(0, 3)) {
                         const tokenAddr = signal.tokenContractAddress;
                         if (!tokenAddr) continue;
 
@@ -968,19 +983,12 @@ function startSignalPolling(userId, config, minimalContext) {
                     const userChains = (dbConfig.chains || '196').split(',').map(c => c.trim());
                     // ── Comprehensive token pool per chain ──
                     const TOKEN_POOL = {
-                        '196': [ // XLayer
+                        '196': [ // XLayer (cleaned — matches frontend)
                             { symbol: 'WOKB', name: 'Wrapped OKB', addr: '0x7c6b91D9Be155A6Db01f749217d76fF02A7227F2', price: 42.5 },
                             { symbol: 'USDT', name: 'Tether USD', addr: '0x1E4a5963aBFD975d8c9021ce480b42188849D41d', price: 1.00 },
                             { symbol: 'WETH', name: 'Wrapped ETH', addr: '0xe538905cf8410324e03a5a23c1c177a474d59b2b', price: 3450.0 },
                             { symbol: 'OKB', name: 'OKB Token', addr: '0xd2637562F0e81cf5Ba4F5D9e1A30BcD0a3FBCeF1', price: 48.3 },
                             { symbol: 'USDC', name: 'USD Coin', addr: '0xA8CE8aee21bC2A48a5EF670afCc9274C7bbbC035', price: 1.00 },
-                            { symbol: 'DAI', name: 'Dai Stablecoin', addr: '0xc5015b9d9161dca7e18e32f6f25C4aD850731Fd4', price: 1.00 },
-                            { symbol: 'XLAYER', name: 'XLayer Token', addr: '0x5A77f1443D16ee5195CC2485159d4BF1A5F56189', price: 0.085 },
-                            { symbol: 'OKSWAP', name: 'OKSwap Token', addr: '0x3B86a9c2C1A2e8c38C77e8B1F5A9C2D1E0F3a4b5', price: 0.42 },
-                            { symbol: 'xSUSHI', name: 'XLayer Sushi', addr: '0x6B175474E89094C44Da98b954EedeAC495271d0F', price: 1.12 },
-                            { symbol: 'XDAO', name: 'XLayer DAO', addr: '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', price: 3.75 },
-                            { symbol: 'XNFT', name: 'XLayer NFT', addr: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', price: 0.032 },
-                            { symbol: 'xBRIDGE', name: 'XBridge Token', addr: '0xdAC17F958D2ee523a2206206994597C13D831ec7', price: 0.28 },
                         ],
                         '1': [ // Ethereum
                             { symbol: 'WBTC', name: 'Wrapped BTC', addr: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', price: 87200.0 },

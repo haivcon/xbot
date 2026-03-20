@@ -621,6 +621,270 @@ async function getTokenLiquidityPool(chainIndex, tokenContractAddress) {
 }
 
 // ═══════════════════════════════════════════════════════
+// Security API  (/api/v6/dex/security)
+// ═══════════════════════════════════════════════════════
+
+/**
+ * Scan tokens for honeypot / risk detection
+ * @param {Array<{chainId: string, contractAddress: string}>} tokenList - max 50
+ */
+async function tokenScan(tokenList) {
+    return okxFetch('POST', '/api/v6/dex/security/token-scan', { tokenList });
+}
+
+/**
+ * Scan a DApp/URL for phishing
+ * @param {string} domain - Full URL or domain
+ */
+async function dappScan(domain) {
+    const path = buildGetPath('/api/v6/dex/security/dapp-scan', { domain });
+    return okxFetch('GET', path);
+}
+
+/**
+ * Transaction pre-execution security scan (EVM + Solana)
+ * @param {object} params
+ * @param {string} params.chainIndex
+ * @param {string} params.fromAddress
+ * @param {string} [params.toAddress]
+ * @param {string} params.data - Calldata (hex) for EVM
+ * @param {string} [params.value] - Value in wei (hex or decimal)
+ * @param {string} [params.gas]
+ * @param {string} [params.gasPrice]
+ * @param {string} [params.encoding] - 'base58'|'base64' for Solana
+ * @param {string} [params.transactions] - Comma-separated tx payloads for Solana
+ */
+async function txScan(params) {
+    const payload = {
+        chainIndex: params.chainIndex,
+        fromAddress: params.fromAddress,
+        toAddress: params.toAddress,
+        inputData: params.data,
+        txAmount: params.value,
+        gas: params.gas,
+        gasPrice: params.gasPrice,
+        encoding: params.encoding,
+        transactions: params.transactions
+    };
+    const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    return okxFetch('POST', '/api/v6/dex/security/tx-scan', clean);
+}
+
+/**
+ * Message signature security scan (EVM only)
+ * @param {object} params
+ * @param {string} params.chainIndex
+ * @param {string} params.fromAddress
+ * @param {string} params.sigMethod - 'personal_sign'|'eth_sign'|'eth_signTypedData'|'eth_signTypedData_v3'|'eth_signTypedData_v4'
+ * @param {string} params.message - Message or EIP-712 typed data JSON
+ */
+async function sigScan(params) {
+    return okxFetch('POST', '/api/v6/dex/security/sig-scan', {
+        chainIndex: params.chainIndex,
+        fromAddress: params.fromAddress,
+        sigMethod: params.sigMethod,
+        message: params.message
+    });
+}
+
+/**
+ * Query token approvals / Permit2 authorizations (EVM only)
+ * @param {string} address - Wallet address
+ * @param {object} [options]
+ * @param {string} [options.chains] - Comma-separated chain IDs
+ * @param {string} [options.limit]
+ * @param {string} [options.cursor]
+ */
+async function getApprovals(address, options = {}) {
+    const path = buildGetPath('/api/v6/dex/security/approvals', {
+        address: address.toLowerCase(),
+        chainIndexes: options.chains,
+        limit: options.limit,
+        cursor: options.cursor
+    });
+    return okxFetch('GET', path);
+}
+
+// ═══════════════════════════════════════════════════════
+// Token Hot / Top-Trader / Cluster API
+// ═══════════════════════════════════════════════════════
+
+/**
+ * Get hot token list (trending score or X/Twitter mentions)
+ * @param {object} [options]
+ * @param {string} [options.rankingType] - '4'=trending score, '5'=X mentions
+ * @param {string} [options.chainIndex]
+ * @param {string} [options.rankBy] - Sort field (1-15)
+ * @param {string} [options.timeFrame] - '1'=5min, '2'=1h, '3'=4h, '4'=24h
+ */
+async function getHotTokens(options = {}) {
+    const clean = Object.fromEntries(Object.entries({
+        rankingType: options.rankingType || '4',
+        chainIndex: options.chainIndex,
+        rankBy: options.rankBy,
+        timeFrame: options.timeFrame,
+        riskFilter: options.riskFilter,
+        stableTokenFilter: options.stableTokenFilter,
+        projectId: options.projectId,
+        priceChangeMin: options.priceChangeMin,
+        priceChangeMax: options.priceChangeMax,
+        volumeMin: options.volumeMin,
+        volumeMax: options.volumeMax,
+        marketCapMin: options.marketCapMin,
+        marketCapMax: options.marketCapMax,
+        liquidityMin: options.liquidityMin,
+        liquidityMax: options.liquidityMax,
+        holdersMin: options.holdersMin,
+        holdersMax: options.holdersMax,
+        inflowMin: options.inflowMin,
+        inflowMax: options.inflowMax,
+        isLpBurnt: options.isLpBurnt,
+        isMint: options.isMint,
+        isFreeze: options.isFreeze
+    }).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    const path = buildGetPath('/api/v6/dex/market/token/hotTokenList', clean);
+    return okxFetch('GET', path);
+}
+
+/**
+ * Get top traders / profit addresses for a token
+ * @param {string} chainIndex
+ * @param {string} tokenContractAddress
+ * @param {object} [options]
+ * @param {string} [options.tagFilter] - 1=KOL,2=Dev,3=SmartMoney,4=Whale,5=Fresh,6=Insider,7=Sniper,8=Phishing,9=Bundler
+ */
+async function getTopTrader(chainIndex, tokenContractAddress, options = {}) {
+    const path = buildGetPath('/api/v6/dex/market/token/topTrader', {
+        chainIndex,
+        tokenContractAddress: tokenContractAddress.toLowerCase(),
+        tagFilter: options.tagFilter
+    });
+    return okxFetch('GET', path);
+}
+
+/**
+ * Get holder cluster concentration overview
+ * @param {string} chainIndex
+ * @param {string} tokenContractAddress
+ */
+async function getClusterOverview(chainIndex, tokenContractAddress) {
+    const path = buildGetPath('/api/v6/dex/market/token/cluster/overview', {
+        chainIndex,
+        tokenContractAddress: tokenContractAddress.toLowerCase()
+    });
+    return okxFetch('GET', path);
+}
+
+/**
+ * Get top 10/50/100 holder overview
+ * @param {string} chainIndex
+ * @param {string} tokenContractAddress
+ * @param {string} rangeFilter - '1'=top10, '2'=top50, '3'=top100
+ */
+async function getClusterTopHolders(chainIndex, tokenContractAddress, rangeFilter) {
+    const path = buildGetPath('/api/v6/dex/market/token/cluster/topHolders', {
+        chainIndex,
+        tokenContractAddress: tokenContractAddress.toLowerCase(),
+        rangeFilter
+    });
+    return okxFetch('GET', path);
+}
+
+/**
+ * Get holder cluster list (groups of top 300 holders)
+ * @param {string} chainIndex
+ * @param {string} tokenContractAddress
+ */
+async function getClusterList(chainIndex, tokenContractAddress) {
+    const path = buildGetPath('/api/v6/dex/market/token/cluster/list', {
+        chainIndex,
+        tokenContractAddress: tokenContractAddress.toLowerCase()
+    });
+    return okxFetch('GET', path);
+}
+
+/**
+ * Get chains supported by holder cluster analysis
+ */
+async function getClusterSupportedChains() {
+    return okxFetch('GET', '/api/v6/dex/market/token/cluster/supported/chain');
+}
+
+// ═══════════════════════════════════════════════════════
+// Address Tracker API  (/api/v6/dex/market/tracker)
+// ═══════════════════════════════════════════════════════
+
+/**
+ * Get latest DEX activities for tracked addresses (smart money, KOL, custom)
+ * @param {object} params
+ * @param {string} params.trackerType - '1'=smart_money, '2'=kol, '3'=multi_address
+ * @param {string} [params.walletAddress] - Required for multi_address, comma-separated (max 20)
+ * @param {string} [params.tradeType] - '0'=all, '1'=buy, '2'=sell
+ * @param {string} [params.chainIndex]
+ */
+async function getAddressTrackerActivities(params) {
+    const clean = Object.fromEntries(Object.entries({
+        trackerType: params.trackerType,
+        walletAddress: params.walletAddress,
+        tradeType: params.tradeType,
+        chainIndex: params.chainIndex,
+        minVolume: params.minVolume,
+        maxVolume: params.maxVolume,
+        minHolders: params.minHolders,
+        minMarketCap: params.minMarketCap,
+        maxMarketCap: params.maxMarketCap,
+        minLiquidity: params.minLiquidity,
+        maxLiquidity: params.maxLiquidity
+    }).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    const path = buildGetPath('/api/v6/dex/market/tracker/address-activities', clean);
+    return okxFetch('GET', path);
+}
+
+/**
+ * Get chains supported by portfolio PnL endpoints
+ */
+async function getPortfolioSupportedChains() {
+    return okxFetch('GET', '/api/v6/dex/market/portfolio/supported/chain');
+}
+
+// ═══════════════════════════════════════════════════════
+// Leaderboard API  (/api/v6/dex/market/leaderboard)
+// ═══════════════════════════════════════════════════════
+
+/**
+ * Get chains supported by leaderboard
+ */
+async function getLeaderboardChains() {
+    return okxFetch('GET', '/api/v6/dex/market/leaderboard/supported/chain');
+}
+
+/**
+ * Get top trader leaderboard
+ * @param {object} params
+ * @param {string} params.chainIndex
+ * @param {string} params.timeFrame - '1'=1D, '2'=3D, '3'=7D, '4'=1M, '5'=3M
+ * @param {string} params.sortBy - '1'=PnL, '2'=WinRate, '3'=TxNum, '4'=Volume, '5'=ROI
+ * @param {string} [params.walletType] - 'sniper','dev','fresh','pump','smartMoney','influencer'
+ */
+async function getLeaderboardList(params) {
+    const clean = Object.fromEntries(Object.entries({
+        chainIndex: params.chainIndex,
+        timeFrame: params.timeFrame,
+        sortBy: params.sortBy,
+        walletType: params.walletType,
+        minRealizedPnlUsd: params.minRealizedPnlUsd,
+        maxRealizedPnlUsd: params.maxRealizedPnlUsd,
+        minWinRatePercent: params.minWinRatePercent,
+        maxWinRatePercent: params.maxWinRatePercent,
+        minTxs: params.minTxs,
+        maxTxs: params.maxTxs,
+        minTxVolume: params.minTxVolume,
+        maxTxVolume: params.maxTxVolume
+    }).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    return okxFetch('POST', '/api/v6/dex/market/leaderboard/list', clean);
+}
+
+// ═══════════════════════════════════════════════════════
 // Convenience helpers
 // ═══════════════════════════════════════════════════════
 
@@ -657,10 +921,16 @@ module.exports = {
     getTokenBasicInfo,
     getTokenPriceInfo,
     getTokenTopList,
-    getTokenSearch,
     getTokenHolder,
     getTokenAdvancedInfo,
     getTokenLiquidityPool,
+    getHotTokens,
+    getTopTrader,
+    // Token Cluster
+    getClusterOverview,
+    getClusterTopHolders,
+    getClusterList,
+    getClusterSupportedChains,
     // Meme Pump Scanner
     getMemePumpChains,
     getMemePumpTokenList,
@@ -671,9 +941,15 @@ module.exports = {
     getMemePumpApedWallets,
     // Portfolio
     getPortfolioOverview,
+    getPortfolioSupportedChains,
     getRecentPnl,
     getTokenLatestPnl,
     getDexHistory,
+    // Address Tracker
+    getAddressTrackerActivities,
+    // Leaderboard
+    getLeaderboardChains,
+    getLeaderboardList,
     // Transaction History
     getTransactionHistory,
     getTransactionDetail,
@@ -688,6 +964,12 @@ module.exports = {
     simulateTransaction,
     broadcastTransaction,
     getOrderStatus,
+    // Security
+    tokenScan,
+    dappScan,
+    txScan,
+    sigScan,
+    getApprovals,
     // Helpers
     getBanmaoPrice,
     DEFAULT_CHAINS

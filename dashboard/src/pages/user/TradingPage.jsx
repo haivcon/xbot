@@ -1744,6 +1744,17 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
     const [walletTokens, setWalletTokens] = useState([]);
     const [walletBalance, setWalletBalance] = useState(null);
     const [balanceLoading, setBalanceLoading] = useState(false);
+    // To-token selector state
+    const [showToTokenSelector, setShowToTokenSelector] = useState(false);
+    const [toTokenSearch, setToTokenSearch] = useState('');
+    const [toTokenSearchResults, setToTokenSearchResults] = useState([]);
+    const [toTokenSearching, setToTokenSearching] = useState(false);
+    const toTokenSearchTimeout = useRef(null);
+    // Delete confirm, Edit, Duplicate states
+    const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+    const [editingTask, setEditingTask] = useState(null);
+    const [editForm, setEditForm] = useState({ amount: '', interval: '', stopLossPct: '', takeProfitPct: '' });
+    const [editSaving, setEditSaving] = useState(false);
 
     const [form, setForm] = useState({
         walletId: '', fromTokenAddress: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', toTokenAddress: '',
@@ -1789,6 +1800,28 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
             .finally(() => setBalanceLoading(false));
     }, [form.walletId, form.fromSymbol, chainIndex]);
 
+    // Debounced token search
+    const handleToTokenSearchChange = useCallback((val) => {
+        setToTokenSearch(val);
+        if (toTokenSearchTimeout.current) clearTimeout(toTokenSearchTimeout.current);
+        if (!val.trim() || val.trim().length < 2) { setToTokenSearchResults([]); return; }
+        toTokenSearchTimeout.current = setTimeout(async () => {
+            setToTokenSearching(true);
+            try {
+                const data = await api.searchToken(val.trim(), String(chainIndex));
+                setToTokenSearchResults(data?.data || data?.tokens || data || []);
+            } catch { setToTokenSearchResults([]); }
+            setToTokenSearching(false);
+        }, 400);
+    }, [chainIndex]);
+
+    const selectToToken = (addr, sym, logo) => {
+        setForm(f => ({ ...f, toTokenAddress: addr, toSymbol: sym }));
+        setShowToTokenSelector(false);
+        setToTokenSearch('');
+        setToTokenSearchResults([]);
+    };
+
     const handleCreate = async () => {
         if (!form.walletId || !form.toTokenAddress || !form.amount) return;
         setCreating(true);
@@ -1818,11 +1851,91 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
         } catch { /* ignore */ }
     };
 
+    // Delete with confirmation
+    const handleDelete = async (id) => {
+        try { await api.deleteDca(id); setDeleteConfirmId(null); loadTasks(); } catch { /* ignore */ }
+    };
+
+    // Duplicate schedule → prefill form
+    const handleDuplicate = (task) => {
+        setForm(f => ({
+            ...f,
+            walletId: String(task.walletId || ''),
+            fromTokenAddress: task.fromTokenAddress || '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+            fromSymbol: task.fromSymbol || 'OKB',
+            toTokenAddress: task.toTokenAddress || '',
+            toSymbol: task.toSymbol || '',
+            amount: String(task.amount || ''),
+            interval: String(task.intervalMs || '86400000'),
+            stopLossPct: task.stopLossPct ? String(task.stopLossPct) : '',
+            takeProfitPct: task.takeProfitPct ? String(task.takeProfitPct) : '',
+        }));
+        setShowForm(true);
+        setExpandedTask(null);
+    };
+
+    // Start editing a task
+    const startEdit = (task) => {
+        setEditingTask(task.id);
+        setEditForm({
+            amount: String(task.amount || ''),
+            interval: String(task.intervalMs || '86400000'),
+            stopLossPct: task.stopLossPct ? String(task.stopLossPct) : '',
+            takeProfitPct: task.takeProfitPct ? String(task.takeProfitPct) : '',
+        });
+    };
+
+    // Save edit
+    const handleEditSave = async (taskId) => {
+        setEditSaving(true);
+        try {
+            await api.editDca(taskId, {
+                amount: editForm.amount,
+                intervalMs: Number(editForm.interval),
+                stopLossPct: editForm.stopLossPct || null,
+                takeProfitPct: editForm.takeProfitPct || null,
+            });
+            setEditingTask(null);
+            loadTasks();
+        } catch { /* ignore */ }
+        setEditSaving(false);
+    };
+
     const fmtInterval = (ms) => {
         if (INTERVALS_SHORT[ms]) return INTERVALS_SHORT[ms];
         const h = ms / 3600000;
         return h >= 24 ? `${(h / 24).toFixed(0)}d` : `${h.toFixed(0)}h`;
     };
+
+    // Quick presets
+    const QUICK_PRESETS = [
+        { label: `OKB → USDT ${t('dashboard.dca.daily', 'daily')}`, from: 'OKB', fromAddr: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', to: 'USDT', toAddr: (knownTokens['USDT']?.address || ''), interval: '86400000', amount: '0.1' },
+        { label: `OKB → ETH ${t('dashboard.dca.weekly', 'weekly')}`, from: 'OKB', fromAddr: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', to: 'ETH', toAddr: (knownTokens['ETH']?.address || ''), interval: '604800000', amount: '0.5' },
+    ].filter(p => p.toAddr); // only show if we know the address
+
+    const applyPreset = (preset) => {
+        setForm(f => ({
+            ...f,
+            fromSymbol: preset.from,
+            fromTokenAddress: preset.fromAddr,
+            toTokenAddress: preset.toAddr,
+            toSymbol: preset.to,
+            amount: preset.amount,
+            interval: preset.interval,
+        }));
+        setShowForm(true);
+    };
+
+    // Estimated cost
+    const estimatedCost = useMemo(() => {
+        if (!form.amount || !form.interval) return null;
+        const amt = Number(form.amount);
+        if (!amt || amt <= 0) return null;
+        const ms = Number(form.interval);
+        const perWeek = (604800000 / ms) * amt;
+        const perMonth = perWeek * 4.33;
+        return { perWeek: perWeek.toFixed(4), perMonth: perMonth.toFixed(2) };
+    }, [form.amount, form.interval]);
 
     const selectedWallet = wallets.find(w => String(w.id) === String(form.walletId));
     const selectedInterval = INTERVALS.find(i => String(i.ms) === String(form.interval));
@@ -1898,12 +2011,110 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                         </div>
                     )}
 
-                    {/* To token address */}
+                    {/* ─── To Token Selector (wallet tokens + search) ─── */}
                     <div>
-                        <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">{t('dashboard.dca.toToken', 'TO TOKEN (Contract Address)')}</label>
+                        <label className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1.5 block font-semibold">{t('dashboard.dca.toToken', 'TO TOKEN')}</label>
                         <div className="bg-surface-900/60 rounded-2xl border border-white/[0.08] p-3">
-                            <input type="text" value={form.toTokenAddress} placeholder="0x..." onChange={e => setForm(f => ({ ...f, toTokenAddress: e.target.value }))}
-                                className="w-full bg-transparent text-sm text-surface-100 font-mono outline-none placeholder:text-surface-200/15" />
+                            {/* Selected token display / manual input */}
+                            <div className="flex items-center gap-2">
+                                {form.toSymbol ? (
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <span className="text-sm font-bold text-surface-100">{form.toSymbol}</span>
+                                        <span className="text-[9px] text-surface-200/25 font-mono truncate">{form.toTokenAddress.slice(0, 10)}...{form.toTokenAddress.slice(-6)}</span>
+                                        <button onClick={() => { setForm(f => ({ ...f, toTokenAddress: '', toSymbol: '' })); setShowToTokenSelector(true); }}
+                                            className="ml-auto text-surface-200/30 hover:text-red-400 transition-colors p-0.5"><X size={12} /></button>
+                                    </div>
+                                ) : (
+                                    <input type="text" value={form.toTokenAddress}
+                                        placeholder={t('dashboard.dca.toTokenPlaceholder', '0x... or search by name')}
+                                        onChange={e => setForm(f => ({ ...f, toTokenAddress: e.target.value }))}
+                                        onFocus={() => setShowToTokenSelector(true)}
+                                        className="w-full bg-transparent text-sm text-surface-100 font-mono outline-none placeholder:text-surface-200/15" />
+                                )}
+                                <button onClick={() => setShowToTokenSelector(!showToTokenSelector)}
+                                    className={`p-1.5 rounded-lg transition-all flex-shrink-0 ${showToTokenSelector ? 'bg-violet-500/15 text-violet-400' : 'text-surface-200/25 hover:text-violet-400'}`}>
+                                    <Search size={13} />
+                                </button>
+                            </div>
+
+                            {/* Token selector dropdown */}
+                            {showToTokenSelector && (
+                                <div className="mt-3 space-y-2 animate-fadeIn">
+                                    {/* Search input */}
+                                    <div className="flex items-center gap-2 bg-surface-800/80 rounded-xl px-3 py-2 border border-white/[0.06]">
+                                        <Search size={12} className="text-surface-200/25 flex-shrink-0" />
+                                        <input type="text" value={toTokenSearch}
+                                            onChange={e => handleToTokenSearchChange(e.target.value)}
+                                            placeholder={t('dashboard.dca.searchToken', 'Search token name or symbol...')}
+                                            className="w-full bg-transparent text-xs text-surface-100 outline-none placeholder:text-surface-200/20" />
+                                        {toTokenSearching && <Loader2 size={12} className="animate-spin text-violet-400 flex-shrink-0" />}
+                                    </div>
+
+                                    {/* Wallet tokens section */}
+                                    {walletTokens.length > 0 && !toTokenSearch && (
+                                        <div>
+                                            <p className="text-[9px] text-surface-200/25 uppercase tracking-wider font-semibold mb-1">{t('dashboard.dca.walletTokens', 'Wallet Tokens')}</p>
+                                            <div className="max-h-[140px] overflow-y-auto space-y-0.5 rounded-lg">
+                                                {walletTokens.filter(wt => {
+                                                    const sym = (wt.symbol || wt.tokenSymbol || '').toUpperCase();
+                                                    return sym !== form.fromSymbol; // exclude the FROM token
+                                                }).map((wt, i) => {
+                                                    const sym = (wt.symbol || wt.tokenSymbol || '?').toUpperCase();
+                                                    const logo = wt.logoUrl || wt.tokenLogoUrl || '';
+                                                    const addr = wt.tokenContractAddress || wt.address || '';
+                                                    const bal = Number(wt.balance || 0);
+                                                    const isSelected = form.toTokenAddress === addr;
+                                                    return (
+                                                        <button key={i} onClick={() => selectToToken(addr, sym)}
+                                                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all ${isSelected
+                                                                ? 'bg-violet-500/15 text-violet-400 font-bold'
+                                                                : 'text-surface-200/60 hover:bg-white/[0.04] hover:text-surface-100'
+                                                            }`}>
+                                                            {logo ? <img src={logo} alt="" width={18} height={18} className="rounded-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
+                                                                : <div className="w-[18px] h-[18px] rounded-full bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center text-[8px]">{sym[0]}</div>}
+                                                            <span className="font-semibold flex-1 text-left">{sym}</span>
+                                                            {bal > 0 && <span className="text-[9px] text-surface-200/25 font-mono">{parseFloat(bal.toFixed(4))}</span>}
+                                                            {isSelected && <Check size={12} className="text-violet-400" />}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Search results */}
+                                    {toTokenSearch && toTokenSearchResults.length > 0 && (
+                                        <div>
+                                            <p className="text-[9px] text-surface-200/25 uppercase tracking-wider font-semibold mb-1">{t('dashboard.dca.searchResults', 'Search Results')}</p>
+                                            <div className="max-h-[180px] overflow-y-auto space-y-0.5 rounded-lg">
+                                                {toTokenSearchResults.slice(0, 15).map((tkn, i) => {
+                                                    const sym = (tkn.tokenSymbol || tkn.symbol || '?').toUpperCase();
+                                                    const name = tkn.tokenName || tkn.name || '';
+                                                    const addr = tkn.tokenContractAddress || tkn.address || '';
+                                                    const logo = tkn.logoUrl || tkn.tokenLogoUrl || '';
+                                                    return (
+                                                        <button key={i} onClick={() => selectToToken(addr, sym)}
+                                                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-surface-200/60 hover:bg-white/[0.04] hover:text-surface-100 transition-all">
+                                                            {logo ? <img src={logo} alt="" width={18} height={18} className="rounded-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
+                                                                : <div className="w-[18px] h-[18px] rounded-full bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center text-[8px]">{sym[0]}</div>}
+                                                            <div className="flex-1 text-left min-w-0">
+                                                                <span className="font-semibold">{sym}</span>
+                                                                {name && <span className="text-surface-200/30 ml-1.5">{name}</span>}
+                                                                <p className="text-[9px] text-surface-200/15 font-mono truncate">{addr}</p>
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* No results */}
+                                    {toTokenSearch && !toTokenSearching && toTokenSearchResults.length === 0 && toTokenSearch.length >= 2 && (
+                                        <p className="text-[10px] text-surface-200/20 text-center py-2">{t('dashboard.dca.noResults', 'No tokens found. You can paste contract address above.')}</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1958,6 +2169,34 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                         </div>
                     </div>
 
+                    {/* #2 Estimated Cost */}
+                    {estimatedCost && (
+                        <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-violet-500/5 border border-violet-500/10 animate-fadeIn">
+                            <BarChart3 size={12} className="text-violet-400/60 flex-shrink-0" />
+                            <span className="text-[10px] text-surface-200/40">
+                                {t('dashboard.dca.estimatedCost', 'Est. cost')}:
+                                <span className="text-surface-100 font-semibold ml-1">~{estimatedCost.perWeek} {form.fromSymbol}/{t('dashboard.dca.week', 'week')}</span>
+                                <span className="text-surface-200/20 mx-1">•</span>
+                                <span className="text-surface-100 font-semibold">~{estimatedCost.perMonth} {form.fromSymbol}/{t('dashboard.dca.month', 'month')}</span>
+                            </span>
+                        </div>
+                    )}
+
+                    {/* #1 Quick Presets */}
+                    {QUICK_PRESETS.length > 0 && !form.toTokenAddress && (
+                        <div>
+                            <p className="text-[9px] text-surface-200/25 uppercase tracking-wider font-semibold mb-1.5">{t('dashboard.dca.quickPresets', 'Quick Presets')}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {QUICK_PRESETS.map((p, i) => (
+                                    <button key={i} onClick={() => applyPreset(p)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-surface-800/40 text-surface-200/50 border border-white/[0.06] hover:border-violet-500/30 hover:text-violet-400 hover:bg-violet-500/10 transition-all">
+                                        <Zap size={9} className="text-amber-400" /> {p.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Confirmation step — like Transfer widget */}
                     {showConfirm ? (
                         <div className="space-y-2 animate-fadeIn bg-surface-900/60 rounded-xl p-3 border border-white/[0.06]">
@@ -1967,6 +2206,9 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                                 <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.dca.pair', 'Pair')}</span><span className="text-surface-100 font-bold">{form.fromSymbol} → {form.toSymbol || form.toTokenAddress.slice(0, 8) + '...'}</span></div>
                                 <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.trading.amount', 'Amount')}</span><span className="text-surface-100 font-bold">{form.amount} {form.fromSymbol}</span></div>
                                 <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.interval', 'Interval')}</span><span className="text-surface-100">{selectedInterval?.label || '24h'}</span></div>
+                                {estimatedCost && (
+                                    <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.dca.estimatedCost', 'Est. cost')}</span><span className="text-violet-400 font-semibold">~{estimatedCost.perWeek} {form.fromSymbol}/{t('dashboard.dca.week', 'week')}</span></div>
+                                )}
                                 {form.stopLossPct && <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.stopLoss', 'Stop Loss')}</span><span className="text-red-400">-{form.stopLossPct}%</span></div>}
                                 {form.takeProfitPct && <div className="flex justify-between"><span className="text-surface-200/40">{t('dashboard.tradingUx.takeProfit', 'Take Profit')}</span><span className="text-emerald-400">+{form.takeProfitPct}%</span></div>}
                             </div>
@@ -2015,6 +2257,8 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                         const isActive = task.status === 'active';
                         const isPaused = task.status === 'paused';
                         const isExpanded = expandedTask === task.id;
+                        const isEditing = editingTask === task.id;
+                        const isDeleteConfirm = deleteConfirmId === task.id;
                         const nextRun = task.nextRunAt ? new Date(task.nextRunAt).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
                         return (
                             <div key={task.id} className="group">
@@ -2028,36 +2272,76 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                                             {task.fromSymbol} → {task.toSymbol}
                                             <span className="text-[9px] text-surface-200/25 bg-surface-800/60 px-1.5 py-0.5 rounded-md">{fmtInterval(task.intervalMs)}</span>
                                             <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? 'bg-emerald-500/15 text-emerald-400' : isPaused ? 'bg-amber-500/15 text-amber-400' : 'bg-surface-200/10 text-surface-200/30'}`}>
-                                                {isActive ? '● ACTIVE' : isPaused ? '◼ PAUSED' : '● STOPPED'}
+                                                {isActive ? `● ${t('dashboard.dca.statusActive', 'ACTIVE')}` : isPaused ? `◼ ${t('dashboard.dca.statusPaused', 'PAUSED')}` : `● ${t('dashboard.dca.statusStopped', 'STOPPED')}`}
                                             </span>
                                         </p>
                                         <p className="text-[10px] text-surface-200/30">
                                             {task.amount} {task.fromSymbol} {t('dashboard.dca.perSwap', 'per swap')}
-                                            {isActive && <span className="text-emerald-400/60 ml-1">• Next: {nextRun}</span>}
+                                            {isActive && <span className="text-emerald-400/60 ml-1">• {t('dashboard.dca.next', 'Next')}: {nextRun}</span>}
                                         </p>
                                     </div>
                                     <div className="flex gap-1 flex-shrink-0">
                                         {isActive && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleAction(task.id, 'pause'); }} className="p-1.5 rounded-lg hover:bg-amber-500/15 text-surface-200/30 hover:text-amber-400 transition-all" title="Pause">
+                                            <button onClick={(e) => { e.stopPropagation(); handleAction(task.id, 'pause'); }} className="p-1.5 rounded-lg hover:bg-amber-500/15 text-surface-200/30 hover:text-amber-400 transition-all" title={t('dashboard.dca.pause', 'Pause')}>
                                                 <Pause size={12} />
                                             </button>
                                         )}
                                         {isPaused && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleAction(task.id, 'resume'); }} className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-surface-200/30 hover:text-emerald-400 transition-all" title="Resume">
+                                            <button onClick={(e) => { e.stopPropagation(); handleAction(task.id, 'resume'); }} className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-surface-200/30 hover:text-emerald-400 transition-all" title={t('dashboard.dca.resume', 'Resume')}>
                                                 <Play size={12} />
                                             </button>
                                         )}
-                                        <button onClick={(e) => { e.stopPropagation(); handleAction(task.id, 'delete'); }} className="p-1.5 rounded-lg hover:bg-red-500/15 text-surface-200/30 hover:text-red-400 transition-all" title="Delete">
+                                        {/* #6 Edit button */}
+                                        <button onClick={(e) => { e.stopPropagation(); startEdit(task); setExpandedTask(task.id); }} className="p-1.5 rounded-lg hover:bg-violet-500/15 text-surface-200/30 hover:text-violet-400 transition-all" title={t('dashboard.dca.edit', 'Edit')}>
+                                            <Settings size={12} />
+                                        </button>
+                                        {/* #5 Duplicate button */}
+                                        <button onClick={(e) => { e.stopPropagation(); handleDuplicate(task); }} className="p-1.5 rounded-lg hover:bg-blue-500/15 text-surface-200/30 hover:text-blue-400 transition-all" title={t('dashboard.dca.duplicate', 'Duplicate')}>
+                                            <Copy size={12} />
+                                        </button>
+                                        {/* #3 Delete with confirmation */}
+                                        <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(isDeleteConfirm ? null : task.id); }}
+                                            className={`p-1.5 rounded-lg transition-all ${isDeleteConfirm ? 'bg-red-500/20 text-red-400' : 'hover:bg-red-500/15 text-surface-200/30 hover:text-red-400'}`}
+                                            title={t('dashboard.dca.delete', 'Delete')}>
                                             <Trash2 size={12} />
                                         </button>
                                         <ChevronDown size={12} className={`text-surface-200/20 transition-transform mt-1.5 ${isExpanded ? 'rotate-180' : ''}`} />
                                     </div>
                                 </div>
+
+                                {/* #3 Delete confirmation inline */}
+                                {isDeleteConfirm && (
+                                    <div className="px-4 pb-2 animate-fadeIn">
+                                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/15">
+                                            <AlertTriangle size={11} className="text-red-400 flex-shrink-0" />
+                                            <span className="text-[10px] text-red-400 flex-1">{t('dashboard.dca.deleteConfirmMsg', 'Delete this schedule? This cannot be undone.')}</span>
+                                            <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }}
+                                                className="text-[10px] px-2 py-1 rounded-lg bg-surface-800/60 text-surface-200/50 hover:text-surface-100 transition-colors">{t('dashboard.common.cancel', 'Cancel')}</button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}
+                                                className="text-[10px] px-2 py-1 rounded-lg bg-red-500/20 text-red-400 font-bold hover:bg-red-500/30 transition-colors">{t('dashboard.dca.confirmDelete', 'Delete')}</button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Expanded details */}
-                                {isExpanded && (
+                                {isExpanded && !isDeleteConfirm && (
                                     <div className="px-4 pb-3 animate-fadeIn">
                                         <div className="bg-surface-900/40 rounded-xl p-3 space-y-1.5 text-[10px]">
-                                            <div className="flex justify-between"><span className="text-surface-200/30">Chain</span><span className="text-surface-100">{CHAINS[task.chainIndex]?.name || task.chainIndex}</span></div>
+                                            <div className="flex justify-between"><span className="text-surface-200/30">{t('dashboard.dca.chain', 'Chain')}</span><span className="text-surface-100">{CHAINS[task.chainIndex]?.name || task.chainIndex}</span></div>
+
+                                            {/* #4 Last swap result */}
+                                            {task.lastResult && (
+                                                <div className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg ${task.lastResult === 'success' ? 'bg-emerald-500/10 border border-emerald-500/10' : 'bg-red-500/10 border border-red-500/10'}`}>
+                                                    {task.lastResult === 'success'
+                                                        ? <Check size={10} className="text-emerald-400" />
+                                                        : <X size={10} className="text-red-400" />}
+                                                    <span className={task.lastResult === 'success' ? 'text-emerald-400' : 'text-red-400'}>
+                                                        {task.lastResult === 'success' ? t('dashboard.dca.lastSwapSuccess', 'Last swap succeeded') : t('dashboard.dca.lastSwapFailed', 'Last swap failed')}
+                                                    </span>
+                                                    {task.lastResultPrice && <span className="ml-auto text-surface-200/30">{t('dashboard.dca.atPrice', 'at')} {task.lastResultPrice}</span>}
+                                                </div>
+                                            )}
+
                                             {(task.executionCount > 0 || task.totalVolume) && (
                                                 <>
                                                     <div className="flex justify-between"><span className="text-surface-200/30">{t('dashboard.dca.executions', 'Executions')}</span><span className="text-surface-100 font-semibold">{task.executionCount || 0}</span></div>
@@ -2067,6 +2351,52 @@ function DcaWidget({ chainIndex, wallets: sharedWallets = [] }) {
                                             )}
                                             {task.stopLossPct && <div className="flex justify-between"><span className="text-surface-200/30">{t('dashboard.tradingUx.stopLoss', 'Stop Loss')}</span><span className="text-red-400 font-semibold">-{task.stopLossPct}%</span></div>}
                                             {task.takeProfitPct && <div className="flex justify-between"><span className="text-surface-200/30">{t('dashboard.tradingUx.takeProfit', 'Take Profit')}</span><span className="text-emerald-400 font-semibold">+{task.takeProfitPct}%</span></div>}
+
+                                            {/* #6 Inline Edit Form */}
+                                            {isEditing && (
+                                                <div className="mt-2 pt-2 border-t border-white/[0.06] space-y-2 animate-fadeIn">
+                                                    <p className="text-[9px] text-violet-400 font-semibold uppercase tracking-wider">{t('dashboard.dca.editSchedule', 'Edit Schedule')}</p>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <label className="text-[9px] text-surface-200/25 mb-0.5 block">{t('dashboard.tradingUx.amount', 'Amount')}</label>
+                                                            <input type="number" value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))}
+                                                                className="w-full bg-surface-800/60 rounded-lg px-2.5 py-1.5 text-xs text-surface-100 outline-none border border-white/[0.08] focus:border-violet-500/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] text-surface-200/25 mb-0.5 block">{t('dashboard.tradingUx.interval', 'Interval')}</label>
+                                                            <div className="grid grid-cols-3 gap-0.5">
+                                                                {INTERVALS.map(itv => (
+                                                                    <button key={itv.ms} onClick={() => setEditForm(f => ({ ...f, interval: String(itv.ms) }))}
+                                                                        className={`py-1 rounded text-[8px] font-semibold transition-all ${String(itv.ms) === editForm.interval
+                                                                            ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+                                                                            : 'bg-surface-800/40 text-surface-200/30 border border-white/[0.04] hover:border-white/[0.1]'}`}>
+                                                                        {itv.short}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <label className="text-[9px] text-surface-200/25 mb-0.5 block flex items-center gap-0.5"><ArrowDownRight size={7} className="text-red-400" /> SL %</label>
+                                                            <input type="number" value={editForm.stopLossPct} placeholder="—" onChange={e => setEditForm(f => ({ ...f, stopLossPct: e.target.value }))}
+                                                                className="w-full bg-surface-800/60 rounded-lg px-2.5 py-1.5 text-xs text-surface-100 outline-none border border-white/[0.08] focus:border-red-500/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] text-surface-200/25 mb-0.5 block flex items-center gap-0.5"><ArrowUpRight size={7} className="text-emerald-400" /> TP %</label>
+                                                            <input type="number" value={editForm.takeProfitPct} placeholder="—" onChange={e => setEditForm(f => ({ ...f, takeProfitPct: e.target.value }))}
+                                                                className="w-full bg-surface-800/60 rounded-lg px-2.5 py-1.5 text-xs text-surface-100 outline-none border border-white/[0.08] focus:border-emerald-500/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => setEditingTask(null)} className="flex-1 py-1.5 rounded-lg bg-surface-800/60 border border-white/[0.06] text-[10px] text-surface-200/50 hover:text-surface-100 transition-colors">{t('dashboard.common.cancel', 'Cancel')}</button>
+                                                        <button onClick={() => handleEditSave(task.id)} disabled={editSaving}
+                                                            className="flex-1 py-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-[10px] font-bold disabled:opacity-40 transition-all flex items-center justify-center gap-1">
+                                                            {editSaving ? <Loader2 size={10} className="animate-spin" /> : <><Check size={10} /> {t('dashboard.dca.saveChanges', 'Save')}</>}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}

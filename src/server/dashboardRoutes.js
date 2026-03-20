@@ -1474,12 +1474,12 @@ function createDashboardRoutes() {
         }
     });
 
-    // Pause / Resume DCA task
+    // Pause / Resume / Edit DCA task
     router.patch('/user/dca/:id', async (req, res) => {
         try {
             const userId = String(req.dashboardUser.userId);
             const taskId = req.params.id;
-            const { action } = req.body; // 'pause' or 'resume'
+            const { action } = req.body; // 'pause', 'resume', or 'edit'
             const task = await dcaDbGet("SELECT * FROM ai_scheduled_tasks WHERE id = ? AND userId = ? AND type = 'dca_swap'", [taskId, userId]);
             if (!task) return res.status(404).json({ error: 'Task not found' });
 
@@ -1487,8 +1487,19 @@ function createDashboardRoutes() {
                 await dcaDbRun("UPDATE ai_scheduled_tasks SET enabled = 2 WHERE id = ?", [taskId]);
             } else if (action === 'resume') {
                 await dcaDbRun("UPDATE ai_scheduled_tasks SET enabled = 1, nextRunAt = ? WHERE id = ?", [Date.now() + task.intervalMs, taskId]);
+            } else if (action === 'edit') {
+                const { amount, intervalMs, stopLossPct, takeProfitPct } = req.body;
+                const params = JSON.parse(task.params || '{}');
+                if (amount !== undefined) params.amount = amount;
+                if (stopLossPct !== undefined) params.stopLossPct = stopLossPct ? Number(stopLossPct) : null;
+                if (takeProfitPct !== undefined) params.takeProfitPct = takeProfitPct ? Number(takeProfitPct) : null;
+                const newIntervalMs = intervalMs ? Number(intervalMs) : task.intervalMs;
+                await dcaDbRun(
+                    "UPDATE ai_scheduled_tasks SET params = ?, intervalMs = ?, nextRunAt = ? WHERE id = ?",
+                    [JSON.stringify(params), newIntervalMs, Date.now() + newIntervalMs, taskId]
+                );
             } else {
-                return res.status(400).json({ error: 'Invalid action. Use pause or resume.' });
+                return res.status(400).json({ error: 'Invalid action. Use pause, resume, or edit.' });
             }
             log.info(`Dashboard DCA ${action}: ${taskId} by user ${userId}`);
             res.json({ success: true });

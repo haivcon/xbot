@@ -35,16 +35,18 @@ module.exports = {
 
             // --- Phase 4 Proactive Security Check ---
             const isNativeTo = toTokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
-            if (!isNativeTo && typeof onchainos.getTokenSecurity === 'function') {
+            if (!isNativeTo && typeof onchainos.tokenScan === 'function') {
                 try {
-                    const secData = await onchainos.getTokenSecurity(chainIndex, toTokenAddress);
-                    if (secData && secData.length > 0) {
-                        const sec = secData[0];
-                        const isHoneypot = sec.isHoneypot === '1' || sec.is_honeypot === '1' || sec.is_honeypot === true;
+                    const secData = await onchainos.tokenScan([{ chainId: chainIndex, contractAddress: toTokenAddress }]);
+                    const secList = Array.isArray(secData) ? secData : (secData?.data || []);
+                    if (secList && secList.length > 0) {
+                        const sec = secList[0];
+                        // tokenScan format: isRiskToken, buyTaxes, sellTaxes (+ legacy compat)
+                        const isHoneypot = sec.isRiskToken === '1' || sec.isHoneypot === '1' || sec.is_honeypot === '1';
                         const cannotBuy = sec.cannotBuy === '1' || sec.cannot_buy === '1';
                         const cannotSell = sec.cannotSell === '1' || sec.cannot_sell === '1';
-                        const buyTax = Number(sec.buyTax || sec.buy_tax || '0');
-                        const sellTax = Number(sec.sellTax || sec.sell_tax || '0');
+                        const buyTax = Number(sec.buyTaxes || sec.buyTax || sec.buy_tax || '0');
+                        const sellTax = Number(sec.sellTaxes || sec.sellTax || sec.sell_tax || '0');
 
                         if (isHoneypot || buyTax > 0.1 || sellTax > 0.1 || cannotBuy || cannotSell) {
                             let scamLang = context?.lang || 'en';

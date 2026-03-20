@@ -319,11 +319,12 @@ class ApiClient {
     getWallets() { return this.get('/market/wallets'); }
     createWallet(name) { return this.post('/market/wallets/create', { name }); }
     importWallet(keys) { return this.post('/market/wallets/import', { keys }); }
-    getWalletBalance(id) { return this.get(`/market/wallets/${id}/balance`); }
+    getWalletBalance(id, chainIndex) { return this.get(`/market/wallets/${id}/balance${chainIndex ? '?chainIndex=' + chainIndex : ''}`); }
     deleteWallet(id) { return this.delete(`/market/wallets/${id}`); }
     setDefaultWallet(id) { return this.post(`/market/wallets/${id}/set-default`); }
     renameWallet(id, name) { return this.put(`/market/wallets/${id}/rename`, { name }); }
     exportWalletKey(id, pin) { return this.post(`/market/wallets/${id}/export-key`, { pin }); }
+    bulkExportKeys(walletIds, pin) { return this.post('/market/wallets/bulk-export', { walletIds, pin }); }
     updateWalletTags(id, tags) { return this.put(`/market/wallets/${id}/tags`, { tags }); }
     // PIN
     getPinStatus() { return this.get('/market/wallets/pin/status'); }
@@ -332,6 +333,7 @@ class ApiClient {
     removePin(currentPin) { return this.post('/market/wallets/pin/remove', { currentPin }); }
     // Portfolio
     getPortfolioHistory(days = 30) { return this.get(`/market/wallets/portfolio-history?days=${days}`); }
+    savePortfolioSnapshot(totalUsd) { return this.post('/market/wallets/portfolio-snapshot', { totalUsd }); }
     // Admin
     setUserWalletLimit(userId, limit) { return this.put(`/market/admin/users/${userId}/wallet-limit`, { limit }); }
 
@@ -371,10 +373,11 @@ class ApiClient {
     getDcaTasks() { return this.get('/user/dca'); }
     createDca(data) { return this.post('/user/dca', data); }
     updateDca(id, data) { return this.request(`/user/dca/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }); }
+    editDca(id, data) { return this.request(`/user/dca/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ action: 'edit', ...data }) }); }
     deleteDca(id) { return this.delete(`/user/dca/${encodeURIComponent(id)}`); }
 
     // === Extended Market APIs ===
-    getHotTokens(chainIndex = '196') { return this.get(`/market/token/top?chains=${chainIndex}&sortBy=2&timeFrame=4`); }
+    getHotTokens(chainIndex, limit = '20') { return this.get(`/market/token/hot-tokens?${chainIndex ? 'chainIndex=' + chainIndex + '&' : ''}limit=${limit}`); }
     getMarketPrice(chainIndex, tokenAddr) { return this.post('/market/token/price', { tokens: [{ chainIndex, tokenContractAddress: tokenAddr }] }); }
 
     // === Portfolio APIs ===
@@ -385,6 +388,14 @@ class ApiClient {
     // === Token Advanced APIs ===
     getTopTraders(chainIndex = '196', tokenContractAddress) { return this.get(`/market/token/top-traders?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}`); }
     getTopLiquidity(chainIndex = '196', tokenContractAddress) { return this.get(`/market/token/top-liquidity?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}`); }
+
+    // === New OnchainOS APIs ===
+    getAddressTracker(trackerType = '1', chainIndex, limit = '20') { return this.get(`/market/address-tracker?trackerType=${trackerType}${chainIndex ? '&chainIndex=' + chainIndex : ''}&limit=${limit}`); }
+    getLeaderboard(chainIndex = '1', timeFrame = '2', opts = {}) { return this.get(`/market/leaderboard?chainIndex=${chainIndex}&timeFrame=${timeFrame}${opts.traderType ? '&traderType=' + opts.traderType : ''}&limit=${opts.limit || '20'}`); }
+    getLeaderboardChains() { return this.get('/market/leaderboard-chains'); }
+    tokenScan(tokens) { return this.post('/market/security/token-scan', { tokens }); }
+    getClusterInfo(chainIndex, tokenContractAddress, mode = 'overview') { return this.get(`/market/token/cluster?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}&mode=${mode}`); }
+    getWalletApprovals(address, chains) { return this.get(`/market/wallet/approvals?${address ? 'address=' + address : ''}${chains ? '&chains=' + chains : ''}`); }
 
     // === Memepump APIs ===
     getMemepumpList(chainIndex = '196', stage = '1') { return this.get(`/market/memepump/list?chainIndex=${chainIndex}&stage=${stage}`); }
