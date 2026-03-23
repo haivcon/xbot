@@ -1850,19 +1850,21 @@ function createPriceAlerts(deps) {
         // Format values (no trailing zeros, full precision)
         const formatValue = (val, opts = {}) => {
             if (val === null || val === undefined) return t(lang, 'price_metric_missing');
-            return formatNumberWithCommas(val, opts);
+            let num = Number(val);
+            if (opts.maxDecimals !== undefined && Number.isFinite(num)) {
+                const factor = Math.pow(10, opts.maxDecimals);
+                num = Math.trunc(num * factor) / factor;
+            }
+            return formatNumberWithCommas(num, opts);
         };
 
-        // Format 24h change with emoji color indicator
-        const change24h = Number(snapshot?.change24h);
-        let changeDisplay;
-        if (!Number.isFinite(change24h)) {
-            changeDisplay = `⚪ ${t(lang, 'price_table_change_24h')}: ${t(lang, 'price_metric_missing')}`;
-        } else if (change24h >= 0) {
-            changeDisplay = `📈 ${t(lang, 'price_table_change_24h')}: <b>+${Math.abs(change24h).toFixed(2)}%</b> 🟢`;
-        } else {
-            changeDisplay = `📉 ${t(lang, 'price_table_change_24h')}: <b>-${Math.abs(change24h).toFixed(2)}%</b> 🔴`;
-        }
+        // Format change with emoji color indicator
+        const formatChange = (val) => {
+            const num = Number(val);
+            if (!Number.isFinite(num)) return null;
+            if (num >= 0) return `<b>+${Math.abs(num).toFixed(2)}%</b> 🟢`;
+            return `<b>-${Math.abs(num).toFixed(2)}%</b> 🔴`;
+        };
 
         // Get chain name from chainIndex
         const chainIndex = snapshot?.chainIndex || token?.chainIndex;
@@ -1881,19 +1883,44 @@ function createPriceAlerts(deps) {
             '',
             // ═══ MARKET SECTION ═══
             `<b>━━━ 📊 ${t(lang, 'price_section_market')} ━━━</b>`,
-            `💎 ${t(lang, 'price_table_market_cap')}: <code>${formatValue(snapshot?.marketCap, { prefix: '$' })}</code>`,
-            `💧 ${t(lang, 'price_table_liquidity')}: <code>${formatValue(snapshot?.liquidity, { prefix: '$' })}</code>`,
-            `🔄 ${t(lang, 'price_table_circ_supply')}: <code>${formatValue(snapshot?.circSupply)}</code>`,
+            `💎 ${t(lang, 'price_table_market_cap')}: <code>${formatValue(snapshot?.marketCap, { prefix: '$', maxDecimals: 4 })}</code>`,
+            `💧 ${t(lang, 'price_table_liquidity')}: <code>${formatValue(snapshot?.liquidity, { prefix: '$', maxDecimals: 4 })}</code>`,
+            `🔄 ${t(lang, 'price_table_circ_supply')}: <code>${formatValue(snapshot?.circSupply, { maxDecimals: 4 })}${snapshot?.tokenSymbol ? ' ' + escapeHtml(snapshot.tokenSymbol) : ''}</code>`,
+            Number.isFinite(snapshot?.lpBurnedPercent) ? `🔥 ${t(lang, 'price_table_lp_burned')}: <code>${Number(snapshot.lpBurnedPercent).toFixed(2)}%</code>` : null,
+            '',
+            // ═══ 24H RANGE ═══
+            (Number.isFinite(snapshot?.minPrice) && Number.isFinite(snapshot?.maxPrice))
+                ? `📊 ${t(lang, 'price_table_24h_range')}: <code>${formatValue(snapshot.minPrice, { prefix: '$', maxDecimals: 4 })} – ${formatValue(snapshot.maxPrice, { prefix: '$', maxDecimals: 4 })}</code>`
+                : null,
             '',
             // ═══ ACTIVITY SECTION ═══
             `<b>━━━ 📈 ${t(lang, 'price_section_activity')} ━━━</b>`,
-            `👥 ${t(lang, 'price_table_holders')}: <code>${formatValue(snapshot?.holders)}</code>`,
-            `📊 ${t(lang, 'price_table_volume_24h')}: <code>${formatValue(snapshot?.volume24H, { prefix: '$' })}</code>`,
-            `🔀 ${t(lang, 'price_table_txs_24h')}: <code>${formatValue(snapshot?.txs24H)}</code>`,
-            `📝 ${t(lang, 'price_table_trade_num')}: <code>${formatValue(snapshot?.tradeNum)}</code>`,
+            `👥 ${t(lang, 'price_table_holders')}: <code>${formatValue(snapshot?.holders, { maxDecimals: 4 })}</code>`,
+            '',
+            `📊 ${t(lang, 'price_table_volume')}:`,
+            `  5m: <code>${formatValue(snapshot?.volume5M, { prefix: '$', maxDecimals: 4 })}</code> │ 1h: <code>${formatValue(snapshot?.volume1H, { prefix: '$', maxDecimals: 4 })}</code>`,
+            `  4h: <code>${formatValue(snapshot?.volume4H, { prefix: '$', maxDecimals: 4 })}</code> │ 24h: <code>${formatValue(snapshot?.volume24H, { prefix: '$', maxDecimals: 4 })}</code>`,
+            '',
+            `🔀 ${t(lang, 'price_table_txs')}:`,
+            `  5m: <code>${formatValue(snapshot?.txs5M, { maxDecimals: 4 })}</code> │ 1h: <code>${formatValue(snapshot?.txs1H, { maxDecimals: 4 })}</code>`,
+            `  4h: <code>${formatValue(snapshot?.txs4H, { maxDecimals: 4 })}</code> │ 24h: <code>${formatValue(snapshot?.txs24H, { maxDecimals: 4 })}</code>`,
+            '',
+            `📝 ${t(lang, 'price_table_trade_num')}: <code>${formatValue(snapshot?.tradeNum, { maxDecimals: 4 })}${snapshot?.tokenSymbol ? ' ' + escapeHtml(snapshot.tokenSymbol) : ''}</code>`,
             '',
             // ═══ PERFORMANCE ═══
-            changeDisplay,
+            `<b>━━━ 📉 ${t(lang, 'price_section_performance')} ━━━</b>`,
+            (() => {
+                const c5 = formatChange(snapshot?.priceChange5M);
+                const c1 = formatChange(snapshot?.priceChange1H);
+                const c4 = formatChange(snapshot?.priceChange4H);
+                const c24 = formatChange(snapshot?.change24h);
+                const parts = [];
+                if (c5) parts.push(`5m: ${c5}`);
+                if (c1) parts.push(`1h: ${c1}`);
+                if (c4) parts.push(`4h: ${c4}`);
+                if (c24) parts.push(`24h: ${c24}`);
+                return parts.length > 0 ? parts.join(' │ ') : `⚪ ${t(lang, 'price_metric_missing')}`;
+            })(),
             '',
             // ═══ TOKEN INFO ═══
             `<b>━━━ 🔗 ${t(lang, 'price_section_info')} ━━━</b>`,
@@ -1913,7 +1940,13 @@ function createPriceAlerts(deps) {
                 return `🕐 ${t(lang, 'price_table_time')}: <code>${new Date(snapshot.fetchedAt).toLocaleString(locale, { timeZone: tz })}</code>`;
             })() : null,
             `📍 ${t(lang, 'price_table_address')}:`,
-            `<code>${escapeHtml(address)}</code>`
+            (() => {
+                const slugMap = { '196': 'xlayer', '1': 'eth', '56': 'bsc', '42161': 'arbitrum', '8453': 'base', '137': 'polygon', '501': 'solana' };
+                const ci = String(chainIndex || token?.chainIndex || '196');
+                const slug = slugMap[ci] || 'xlayer';
+                const explorerUrl = `https://www.okx.com/web3/explorer/${slug}/token/${address}`;
+                return `<a href="${explorerUrl}">${escapeHtml(address)}</a>`;
+            })()
         ];
         return lines.filter(Boolean).join('\n');
     };

@@ -1961,6 +1961,29 @@ function createOkxService(config) {
         const txs24H = pickOkxNumeric(priceInfoEntry, ['txs24H', 'txs24h', 'transactions24h', 'txCount24h']);
         const tradeNum = pickOkxNumeric(priceInfoEntry, ['tradeNum', 'totalTrades', 'trades', 'tradeCount']);
 
+        // Multi-timeframe data (already in price-info response)
+        const maxPrice = pickOkxNumeric(priceInfoEntry, ['maxPrice']);
+        const minPrice = pickOkxNumeric(priceInfoEntry, ['minPrice']);
+        const priceChange5M = pickOkxNumeric(priceInfoEntry, ['priceChange5M', 'priceChange5m']);
+        const priceChange1H = pickOkxNumeric(priceInfoEntry, ['priceChange1H', 'priceChange1h']);
+        const priceChange4H = pickOkxNumeric(priceInfoEntry, ['priceChange4H', 'priceChange4h']);
+        const volume5M = pickOkxNumeric(priceInfoEntry, ['volume5M', 'volume5m']);
+        const volume1H = pickOkxNumeric(priceInfoEntry, ['volume1H', 'volume1h']);
+        const volume4H = pickOkxNumeric(priceInfoEntry, ['volume4H', 'volume4h']);
+        const txs5M = pickOkxNumeric(priceInfoEntry, ['txs5M', 'txs5m']);
+        const txs1H = pickOkxNumeric(priceInfoEntry, ['txs1H', 'txs1h']);
+        const txs4H = pickOkxNumeric(priceInfoEntry, ['txs4H', 'txs4h']);
+
+        // LP Burned % from advanced-info (optional, non-critical)
+        let lpBurnedPercent = null;
+        try {
+            const advQuery = { chainIndex: baseQuery.chainIndex, tokenContractAddress: normalizedAddress };
+            const advPayload = await callOkxDexEndpoint('/api/v6/dex/market/token/advanced-info', advQuery, { method: 'GET' });
+            const advData = typeof advPayload === 'object' && advPayload !== null ? advPayload : {};
+            const advEntry = advData.data && typeof advData.data === 'object' && !Array.isArray(advData.data) ? advData.data : unwrapOkxFirst(advPayload);
+            lpBurnedPercent = pickOkxNumeric(advEntry, ['lpBurnedPercent']);
+        } catch (_advErr) { /* non-critical, silently ignore */ }
+
         return {
             chainIndex: baseQuery.chainIndex,
             chainShortName: baseQuery.chainShortName,
@@ -1984,6 +2007,18 @@ function createOkxService(config) {
             circSupply: normalizeNumeric(circSupply),
             txs24H: normalizeNumeric(txs24H),
             tradeNum: normalizeNumeric(tradeNum),
+            maxPrice: normalizeNumeric(maxPrice),
+            minPrice: normalizeNumeric(minPrice),
+            priceChange5M: normalizeNumeric(priceChange5M),
+            priceChange1H: normalizeNumeric(priceChange1H),
+            priceChange4H: normalizeNumeric(priceChange4H),
+            volume5M: normalizeNumeric(volume5M),
+            volume1H: normalizeNumeric(volume1H),
+            volume4H: normalizeNumeric(volume4H),
+            txs5M: normalizeNumeric(txs5M),
+            txs1H: normalizeNumeric(txs1H),
+            txs4H: normalizeNumeric(txs4H),
+            lpBurnedPercent: normalizeNumeric(lpBurnedPercent),
             fetchedAt: Date.now(),
             tokenPrices,
             raw: { priceInfoEntry, basicInfoEntry }
