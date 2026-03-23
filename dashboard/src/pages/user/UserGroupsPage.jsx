@@ -15,6 +15,15 @@ import {
 const LANG_FLAGS = { en: '🇺🇸', vi: '🇻🇳', zh: '🇨🇳', ko: '🇰🇷', ru: '🇷🇺', id: '🇮🇩' };
 const LANG_LABELS = { en: 'English', vi: 'Tiếng Việt', zh: '中文', ko: '한국어', ru: 'Русский', id: 'Indonesia' };
 const WELCOME_ACTIONS = ['kick', 'ban', 'mute'];
+const PA_CHAINS = [
+    { chainIndex: '196', shortName: 'xlayer', label: 'X Layer' },
+    { chainIndex: '1', shortName: 'eth', label: 'Ethereum' },
+    { chainIndex: '56', shortName: 'bsc', label: 'BSC' },
+    { chainIndex: '137', shortName: 'polygon', label: 'Polygon' },
+    { chainIndex: '42161', shortName: 'arbitrum', label: 'Arbitrum' },
+    { chainIndex: '8453', shortName: 'base', label: 'Base' },
+    { chainIndex: '501', shortName: 'solana', label: 'Solana' },
+];
 
 function timeAgo(ts, t) {
     if (!ts) return '—';
@@ -94,7 +103,7 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
     const [paTarget, setPaTarget] = useState(null);
     const [paLoading, setPaLoading] = useState(false);
     const [paAdding, setPaAdding] = useState(false);
-    const [paForm, setPaForm] = useState({ tokenAddress: '', tokenLabel: '', intervalSeconds: 3600 });
+    const [paForm, setPaForm] = useState({ tokenAddress: '', tokenLabel: '', intervalSeconds: 3600, chainIndex: '196', chainShortName: 'xlayer' });
     const [paEditing, setPaEditing] = useState(null);
     const [paSaving, setPaSaving] = useState(false);
     const [paTitles, setPaTitles] = useState([]);
@@ -339,7 +348,7 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
         try {
             await api.addPriceAlert(group.chatId, paForm);
             toast.success(t('dashboard.common.saved') || 'Token added!');
-            setPaForm({ tokenAddress: '', tokenLabel: '', intervalSeconds: 3600 });
+            setPaForm({ tokenAddress: '', tokenLabel: '', intervalSeconds: 3600, chainIndex: '196', chainShortName: 'xlayer' });
             const r = await api.getPriceAlerts(group.chatId);
             setPaTokens(r?.tokens || []);
         } catch (e) { toast.error(e?.message || 'Failed to add'); }
@@ -1330,6 +1339,18 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
                                                                 <button key={opt.value} onClick={() => setPaForm(p => ({ ...p, intervalSeconds: opt.value }))}
                                                                     className={`px-2 py-1 rounded text-[10px] ${paForm.intervalSeconds === opt.value ? 'bg-emerald-500/20 text-emerald-400' : 'bg-surface-800/30 text-surface-200/40'}`}>
                                                                     {opt.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    {/* Chain Selector */}
+                                                    <div>
+                                                        <label className="text-[10px] text-surface-200/40 mb-1 block">{t('dashboard.userGroups.chain') || 'Chain'}</label>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {PA_CHAINS.map(ch => (
+                                                                <button key={ch.chainIndex} onClick={() => setPaForm(p => ({ ...p, chainIndex: ch.chainIndex, chainShortName: ch.shortName }))}
+                                                                    className={`px-2 py-1 rounded text-[10px] ${paForm.chainIndex === ch.chainIndex ? 'bg-brand-500/20 text-brand-400' : 'bg-surface-800/30 text-surface-200/40'}`}>
+                                                                    {ch.label}
                                                                 </button>
                                                             ))}
                                                         </div>
