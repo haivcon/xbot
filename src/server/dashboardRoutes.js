@@ -1767,6 +1767,7 @@ function createDashboardRoutes() {
     });
 
     // Get welcome verification settings (user-level)
+    // Returns: enabled, timeLimitSeconds, maxAttempts, action, questionWeights, titleTemplate
     router.get('/user/groups/:chatId/welcome', userGroupGuard, async (req, res) => {
         try {
             const chatId = req.groupChatId;
@@ -1777,6 +1778,15 @@ function createDashboardRoutes() {
                 timeLimitSeconds: welcome.timeLimitSeconds || 60,
                 maxAttempts: welcome.maxAttempts || 3,
                 action: welcome.action || 'kick',
+                // Question type weights (percentages, must sum > 0)
+                questionWeights: {
+                    math: welcome.mathWeight ?? 50,
+                    physics: welcome.physicsWeight ?? 0,
+                    chemistry: welcome.chemistryWeight ?? 0,
+                    okx: welcome.okxWeight ?? 25,
+                    crypto: welcome.cryptoWeight ?? 25,
+                },
+                titleTemplate: welcome.titleTemplate || '',
             });
         } catch (err) {
             res.status(500).json({ error: err.message });
@@ -1784,15 +1794,29 @@ function createDashboardRoutes() {
     });
 
     // Update welcome verification settings (user-level)
+    // Accepts: enabled, timeLimitSeconds, maxAttempts, action, questionWeights, titleTemplate
     router.put('/user/groups/:chatId/welcome', userGroupGuard, async (req, res) => {
         try {
             const chatId = req.groupChatId;
-            const { enabled, timeLimitSeconds, maxAttempts, action } = req.body;
+            const { enabled, timeLimitSeconds, maxAttempts, action, questionWeights, titleTemplate } = req.body;
             const welcomeSettings = {};
             if (enabled !== undefined) welcomeSettings.enabled = !!enabled;
             if (timeLimitSeconds !== undefined) welcomeSettings.timeLimitSeconds = Math.max(15, Math.min(300, Number(timeLimitSeconds) || 60));
             if (maxAttempts !== undefined) welcomeSettings.maxAttempts = Math.max(1, Math.min(10, Number(maxAttempts) || 3));
             if (action !== undefined && ['kick', 'ban', 'mute'].includes(action)) welcomeSettings.action = action;
+            // Question weights — sanitize each to 0-100
+            if (questionWeights && typeof questionWeights === 'object') {
+                const clamp = (v) => Math.max(0, Math.min(100, Number(v) || 0));
+                welcomeSettings.mathWeight = clamp(questionWeights.math);
+                welcomeSettings.physicsWeight = clamp(questionWeights.physics);
+                welcomeSettings.chemistryWeight = clamp(questionWeights.chemistry);
+                welcomeSettings.okxWeight = clamp(questionWeights.okx);
+                welcomeSettings.cryptoWeight = clamp(questionWeights.crypto);
+            }
+            // Title template — max 180 chars
+            if (titleTemplate !== undefined) {
+                welcomeSettings.titleTemplate = (titleTemplate || '').trim().slice(0, 180);
+            }
             await db.updateGroupBotSettings?.(chatId, { welcomeVerification: welcomeSettings });
             log.info(`Dashboard: User ${req.dashboardUser.userId} updated welcome for ${chatId}`);
             logGroupActivity(chatId, 'welcome_update', `Welcome verification updated by user`, req.dashboardUser.userId);
@@ -1816,6 +1840,332 @@ function createDashboardRoutes() {
             log.info(`Dashboard: User ${req.dashboardUser.userId} set group ${chatId} language to ${lang}`);
             logGroupActivity(chatId, 'language_change', `Language set to ${lang}`, req.dashboardUser.userId);
             res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ==================
+    // USER GROUP: MODERATION
+    // ==================
+
+    // Get group members (via Telegram getChatAdministrators + stored data)
+    router.get('/user/groups/:chatId/members', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { bot } = require('../core/bot');
+            const admins = await bot.getChatAdministrators(chatId);
+            const members = admins.map(m => ({
+                userId: String(m.user.id),
+                firstName: m.user.first_name || '',
+                lastName: m.user.last_name || '',
+                username: m.user.username || '',
+                isBot: !!m.user.is_bot,
+                status: m.status, // creator, administrator
+            }));
+            const memberCount = await bot.getChatMemberCount(chatId).catch(() => null);
+            res.json({ members, memberCount, adminCount: members.length });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Ban a member
+    router.post('/user/groups/:chatId/moderation/ban', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { userId } = req.body;
+            if (!userId) return res.status(400).json({ error: 'userId required' });
+            if (String(userId) === String(req.dashboardUser.userId)) return res.status(400).json({ error: 'Cannot ban yourself' });
+            const { bot } = require('../core/bot');
+            const me = await bot.getMe();
+            if (String(userId) === String(me.id)) return res.status(400).json({ error: 'Cannot ban the bot' });
+            await bot.banChatMember(chatId, userId);
+            log.info(`Dashboard: User ${req.dashboardUser.userId} banned ${userId} in ${chatId}`);
+            logGroupActivity(chatId, 'ban', `Banned user ${userId}`, req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Kick a member (ban + unban)
+    router.post('/user/groups/:chatId/moderation/kick', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { userId } = req.body;
+            if (!userId) return res.status(400).json({ error: 'userId required' });
+            if (String(userId) === String(req.dashboardUser.userId)) return res.status(400).json({ error: 'Cannot kick yourself' });
+            const { bot } = require('../core/bot');
+            await bot.banChatMember(chatId, userId);
+            await bot.unbanChatMember(chatId, userId, { only_if_banned: true });
+            log.info(`Dashboard: User ${req.dashboardUser.userId} kicked ${userId} from ${chatId}`);
+            logGroupActivity(chatId, 'kick', `Kicked user ${userId}`, req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Mute a member
+    router.post('/user/groups/:chatId/moderation/mute', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { userId, duration } = req.body; // duration in seconds, 0 = forever
+            if (!userId) return res.status(400).json({ error: 'userId required' });
+            if (String(userId) === String(req.dashboardUser.userId)) return res.status(400).json({ error: 'Cannot mute yourself' });
+            const { bot } = require('../core/bot');
+            const opts = { permissions: { can_send_messages: false } };
+            if (duration && Number(duration) > 0) opts.until_date = Math.floor(Date.now() / 1000) + Number(duration);
+            await bot.restrictChatMember(chatId, userId, opts);
+            log.info(`Dashboard: User ${req.dashboardUser.userId} muted ${userId} in ${chatId} for ${duration || 'forever'}s`);
+            logGroupActivity(chatId, 'mute', `Muted user ${userId}${duration ? ` for ${duration}s` : ' forever'}`, req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Unmute a member
+    router.post('/user/groups/:chatId/moderation/unmute', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { userId } = req.body;
+            if (!userId) return res.status(400).json({ error: 'userId required' });
+            const { bot } = require('../core/bot');
+            await bot.restrictChatMember(chatId, userId, {
+                permissions: { can_send_messages: true, can_send_media_messages: true, can_send_other_messages: true, can_add_web_page_previews: true },
+            });
+            log.info(`Dashboard: User ${req.dashboardUser.userId} unmuted ${userId} in ${chatId}`);
+            logGroupActivity(chatId, 'unmute', `Unmuted user ${userId}`, req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Warn a member
+    router.post('/user/groups/:chatId/moderation/warn', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { userId, reason } = req.body;
+            if (!userId) return res.status(400).json({ error: 'userId required' });
+            // Store warning in DB
+            const ts = Math.floor(Date.now() / 1000);
+            await db.dbRun(
+                `CREATE TABLE IF NOT EXISTS group_warnings (id INTEGER PRIMARY KEY AUTOINCREMENT, chatId TEXT, userId TEXT, reason TEXT, warnedBy TEXT, createdAt INTEGER)`
+            );
+            await db.dbRun(
+                `INSERT INTO group_warnings (chatId, userId, reason, warnedBy, createdAt) VALUES (?, ?, ?, ?, ?)`,
+                [chatId, userId, reason || '', req.dashboardUser.userId, ts]
+            );
+            // Count total warnings
+            const rows = await db.dbAll(
+                `SELECT COUNT(*) as count FROM group_warnings WHERE chatId = ? AND userId = ?`,
+                [chatId, userId]
+            );
+            const warnCount = rows?.[0]?.count || 1;
+            log.info(`Dashboard: User ${req.dashboardUser.userId} warned ${userId} in ${chatId} (${warnCount} total)`);
+            logGroupActivity(chatId, 'warn', `Warned user ${userId}: ${reason || 'no reason'} (${warnCount} total)`, req.dashboardUser.userId);
+            // Auto-ban at 3 warnings
+            if (warnCount >= 3) {
+                try {
+                    const { bot } = require('../core/bot');
+                    await bot.banChatMember(chatId, userId);
+                    logGroupActivity(chatId, 'auto_ban', `User ${userId} auto-banned after ${warnCount} warnings`, req.dashboardUser.userId);
+                } catch { /* ignore ban failure */ }
+            }
+            res.json({ success: true, warnCount });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Get warnings for a group (optionally filtered by userId)
+    router.get('/user/groups/:chatId/moderation/warnings', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { userId } = req.query;
+            await db.dbRun(
+                `CREATE TABLE IF NOT EXISTS group_warnings (id INTEGER PRIMARY KEY AUTOINCREMENT, chatId TEXT, userId TEXT, reason TEXT, warnedBy TEXT, createdAt INTEGER)`
+            );
+            let warnings;
+            if (userId) {
+                warnings = await db.dbAll(
+                    `SELECT * FROM group_warnings WHERE chatId = ? AND userId = ? ORDER BY createdAt DESC LIMIT 50`,
+                    [chatId, userId]
+                ) || [];
+            } else {
+                warnings = await db.dbAll(
+                    `SELECT * FROM group_warnings WHERE chatId = ? ORDER BY createdAt DESC LIMIT 100`,
+                    [chatId]
+                ) || [];
+            }
+            res.json({ warnings });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Update lock settings (links, files) and antiflood
+    router.put('/user/groups/:chatId/moderation/locks', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { lockLinks, lockFiles, antifloodLimit } = req.body;
+            const updates = {};
+            if (lockLinks !== undefined) updates.lockLinks = !!lockLinks;
+            if (lockFiles !== undefined) updates.lockFiles = !!lockFiles;
+            if (antifloodLimit !== undefined) updates.antifloodLimit = Math.max(0, Math.min(50, Number(antifloodLimit) || 0));
+            if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No settings provided' });
+            await db.updateGroupBotSettings?.(chatId, updates);
+            log.info(`Dashboard: User ${req.dashboardUser.userId} updated moderation locks for ${chatId}: ${JSON.stringify(updates)}`);
+            logGroupActivity(chatId, 'locks_update', `Moderation settings: ${JSON.stringify(updates)}`, req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ==================
+    // USER GROUP: PRICE ALERTS
+    // ==================
+
+    // List price alert tokens for a group
+    router.get('/user/groups/:chatId/price-alerts', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const tokens = await db.listPriceAlertTokens(chatId);
+            const target = await db.getPriceAlertTarget(chatId);
+            // Enrich with title/media counts
+            const enriched = await Promise.all(tokens.map(async t => {
+                const [titleCount, mediaCount] = await Promise.all([
+                    db.countPriceAlertTitles(t.id, chatId).catch(() => 0),
+                    db.countPriceAlertMedia(t.id, chatId).catch(() => 0),
+                ]);
+                return { ...t, titleCount, mediaCount };
+            }));
+            res.json({ tokens: enriched, target });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Add a new price alert token
+    router.post('/user/groups/:chatId/price-alerts', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { tokenAddress, tokenLabel, chainIndex, chainShortName, intervalSeconds } = req.body;
+            if (!tokenAddress) return res.status(400).json({ error: 'tokenAddress required' });
+            // Check limit (max 3 tokens per group)
+            const existing = await db.listPriceAlertTokens(chatId);
+            if (existing.length >= 3) return res.status(400).json({ error: 'Maximum 3 tokens per group' });
+            const token = await db.upsertPriceAlertToken(chatId, {
+                tokenAddress, tokenLabel, chainIndex: chainIndex || 196, chainShortName: chainShortName || 'xlayer', intervalSeconds: intervalSeconds || 3600,
+            });
+            log.info(`Dashboard: User ${req.dashboardUser.userId} added price alert token ${tokenAddress} in ${chatId}`);
+            logGroupActivity(chatId, 'price_alert_add', `Added token ${tokenLabel || tokenAddress}`, req.dashboardUser.userId);
+            res.json({ success: true, token });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Set price alert target topic — MUST be before /:tokenId routes
+    router.put('/user/groups/:chatId/price-alerts/target', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { topicId } = req.body;
+            const target = await db.setPriceAlertTarget(chatId, topicId !== undefined ? topicId : null);
+            log.info(`Dashboard: User ${req.dashboardUser.userId} set price alert target in ${chatId} to topic ${topicId}`);
+            res.json({ success: true, target });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Delete a custom title — MUST be before /:tokenId routes (has /titles/ static segment)
+    router.delete('/user/groups/:chatId/price-alerts/titles/:titleId', userGroupGuard, async (req, res) => {
+        try {
+            const deleted = await db.deletePriceAlertTitle(req.params.titleId);
+            if (!deleted) return res.status(404).json({ error: 'Title not found' });
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Update a price alert token
+    router.put('/user/groups/:chatId/price-alerts/:tokenId', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const tokenId = req.params.tokenId;
+            const patch = req.body;
+            const token = await db.updatePriceAlertToken(chatId, tokenId, patch);
+            if (!token) return res.status(404).json({ error: 'Token not found' });
+            log.info(`Dashboard: User ${req.dashboardUser.userId} updated price alert token ${tokenId} in ${chatId}`);
+            logGroupActivity(chatId, 'price_alert_update', `Updated token #${tokenId}`, req.dashboardUser.userId);
+            res.json({ success: true, token });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Delete a price alert token
+    router.delete('/user/groups/:chatId/price-alerts/:tokenId', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const tokenId = req.params.tokenId;
+            const deleted = await db.deletePriceAlertToken(chatId, tokenId);
+            if (!deleted) return res.status(404).json({ error: 'Token not found' });
+            // Also clean up associated media and titles
+            await db.deleteAllPriceAlertMedia(tokenId, chatId).catch(() => {});
+            await db.deleteAllPriceAlertTitles(tokenId, chatId).catch(() => {});
+            log.info(`Dashboard: User ${req.dashboardUser.userId} deleted price alert token ${tokenId} in ${chatId}`);
+            logGroupActivity(chatId, 'price_alert_delete', `Deleted token #${tokenId}`, req.dashboardUser.userId);
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // List custom titles for a token
+    router.get('/user/groups/:chatId/price-alerts/:tokenId/titles', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const titles = await db.listPriceAlertTitles(req.params.tokenId, chatId);
+            res.json({ titles });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Add a custom title
+    router.post('/user/groups/:chatId/price-alerts/:tokenId/titles', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { title } = req.body;
+            if (!title?.trim()) return res.status(400).json({ error: 'title required' });
+            const count = await db.countPriceAlertTitles(req.params.tokenId, chatId);
+            if (count >= 44) return res.status(400).json({ error: 'Maximum 44 titles' });
+            const result = await db.addPriceAlertTitle(req.params.tokenId, chatId, title.trim());
+            res.json({ success: true, title: result });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Trigger immediate price alert send
+    router.post('/user/groups/:chatId/price-alerts/:tokenId/send-now', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const tokenId = req.params.tokenId;
+            const token = await db.getPriceAlertToken(chatId, tokenId);
+            if (!token) return res.status(404).json({ error: 'Token not found' });
+            // Set nextRunAt to now so the scheduler picks it up immediately
+            await db.updatePriceAlertToken(chatId, tokenId, { nextRunAt: Date.now() - 1000 });
+            log.info(`Dashboard: User ${req.dashboardUser.userId} triggered send-now for token ${tokenId} in ${chatId}`);
+            logGroupActivity(chatId, 'price_alert_send', `Triggered immediate alert for token #${tokenId}`, req.dashboardUser.userId);
+            res.json({ success: true, message: 'Alert will be sent shortly' });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }

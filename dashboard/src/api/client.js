@@ -442,6 +442,27 @@ class ApiClient {
     updateUserGroupWelcome(chatId, data) { return this.put(`/user/groups/${encodeURIComponent(chatId)}/welcome`, data); }
     updateUserGroupLanguage(chatId, lang) { return this.put(`/user/groups/${encodeURIComponent(chatId)}/language`, { lang }); }
 
+    // === User Group Moderation APIs ===
+    getUserGroupMembers(chatId) { return this.get(`/user/groups/${encodeURIComponent(chatId)}/members`); }
+    moderateBan(chatId, userId) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/moderation/ban`, { userId }); }
+    moderateKick(chatId, userId) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/moderation/kick`, { userId }); }
+    moderateMute(chatId, userId, duration = 0) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/moderation/mute`, { userId, duration }); }
+    moderateUnmute(chatId, userId) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/moderation/unmute`, { userId }); }
+    moderateWarn(chatId, userId, reason = '') { return this.post(`/user/groups/${encodeURIComponent(chatId)}/moderation/warn`, { userId, reason }); }
+    getGroupWarnings(chatId, userId) { return this.get(`/user/groups/${encodeURIComponent(chatId)}/moderation/warnings${userId ? '?userId=' + userId : ''}`); }
+    updateGroupLocks(chatId, data) { return this.put(`/user/groups/${encodeURIComponent(chatId)}/moderation/locks`, data); }
+
+    // === User Group Price Alerts APIs ===
+    getPriceAlerts(chatId) { return this.get(`/user/groups/${encodeURIComponent(chatId)}/price-alerts`); }
+    addPriceAlert(chatId, data) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/price-alerts`, data); }
+    updatePriceAlert(chatId, tokenId, data) { return this.put(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/${tokenId}`, data); }
+    deletePriceAlert(chatId, tokenId) { return this.delete(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/${tokenId}`); }
+    setPriceAlertTarget(chatId, topicId) { return this.put(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/target`, { topicId }); }
+    getPriceAlertTitles(chatId, tokenId) { return this.get(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/${tokenId}/titles`); }
+    addPriceAlertTitle(chatId, tokenId, title) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/${tokenId}/titles`, { title }); }
+    deletePriceAlertTitle(chatId, titleId) { return this.delete(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/titles/${titleId}`); }
+    sendPriceAlertNow(chatId, tokenId) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/${tokenId}/send-now`); }
+
     // === Owner Broadcast to Users ===
     broadcastToUsers(text) { return this.post('/owner/broadcast-users', { text }); }
 }

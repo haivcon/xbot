@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -8,6 +8,8 @@ import {
     Shield, ChevronRight, Loader2, Bell, BellOff, FileText, Ban, Zap,
     Gamepad2, TrendingUp, Clock, Globe, CalendarCheck, UserCheck,
     Trophy, Target, BarChart3, Save, ChevronDown, AlertCircle,
+    Volume2, VolumeX, Link, File, AlertTriangle, Plus, Trash2, Play,
+    Hash, Timer, Tag,
 } from 'lucide-react';
 
 const LANG_FLAGS = { en: '🇺🇸', vi: '🇻🇳', zh: '🇨🇳', ko: '🇰🇷', ru: '🇷🇺', id: '🇮🇩' };
@@ -62,7 +64,7 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
     const [lbLoading, setLbLoading] = useState(false);
 
     // Welcome state
-    const [welcome, setWelcome] = useState({ enabled: false, timeLimitSeconds: 60, maxAttempts: 3, action: 'kick' });
+    const [welcome, setWelcome] = useState({ enabled: false, timeLimitSeconds: 60, maxAttempts: 3, action: 'kick', questionWeights: { math: 50, physics: 0, chemistry: 0, okx: 25, crypto: 25 }, titleTemplate: '' });
     const [welcomeLoading, setWelcomeLoading] = useState(false);
     const [savingWelcome, setSavingWelcome] = useState(false);
 
@@ -73,6 +75,34 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
     // Subscription state
     const [subEnabled, setSubEnabled] = useState(false);
     const [subLang, setSubLang] = useState('en');
+
+    // Moderation state
+    const [modMembers, setModMembers] = useState([]);
+    const [modLoading, setModLoading] = useState(false);
+    const [modSearch, setModSearch] = useState('');
+    const [modAction, setModAction] = useState(null); // { type, userId, firstName }
+    const [modMuteDuration, setModMuteDuration] = useState(3600);
+    const [modWarnReason, setModWarnReason] = useState('');
+    const [modActing, setModActing] = useState(false);
+    const [modWarnings, setModWarnings] = useState([]);
+    const [modLocks, setModLocks] = useState({ lockLinks: false, lockFiles: false, antifloodLimit: 0 });
+    const [modSavingLocks, setModSavingLocks] = useState(false);
+
+    // Price Alerts state
+    const [paTokens, setPaTokens] = useState([]);
+    const [paTarget, setPaTarget] = useState(null);
+    const [paLoading, setPaLoading] = useState(false);
+    const [paAdding, setPaAdding] = useState(false);
+    const [paForm, setPaForm] = useState({ tokenAddress: '', tokenLabel: '', intervalSeconds: 3600 });
+    const [paEditing, setPaEditing] = useState(null);
+    const [paSaving, setPaSaving] = useState(false);
+    const [paTitles, setPaTitles] = useState([]);
+    const [paTitleInput, setPaTitleInput] = useState('');
+    const [paSelectedToken, setPaSelectedToken] = useState(null);
+
+    // Auto-sync state — keeps dashboard in sync with Telegram commands
+    const [lastSynced, setLastSynced] = useState(null);
+    const syncTimerRef = useRef(null);
 
     const loadDetail = useCallback(async () => {
         setLoading(true);
@@ -106,16 +136,77 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
         }
     }, [tab, group.chatId]);
 
+    // Reusable welcome loader for auto-sync
+    const loadWelcomeData = useCallback(async (showLoading = true) => {
+        if (showLoading) setWelcomeLoading(true);
+        try {
+            const r = await api.getUserGroupWelcome(group.chatId);
+            setWelcome(r || { enabled: false, timeLimitSeconds: 60, maxAttempts: 3, action: 'kick', questionWeights: { math: 50, physics: 0, chemistry: 0, okx: 25, crypto: 25 }, titleTemplate: '' });
+            setLastSynced(Date.now());
+        } catch { /* silent */ }
+        if (showLoading) setWelcomeLoading(false);
+    }, [group.chatId]);
+
     // Load welcome when tab changes
     useEffect(() => {
-        if (tab === 'welcome') {
-            setWelcomeLoading(true);
-            api.getUserGroupWelcome(group.chatId)
-                .then(r => setWelcome(r || { enabled: false, timeLimitSeconds: 60, maxAttempts: 3, action: 'kick' }))
-                .catch(() => {})
-                .finally(() => setWelcomeLoading(false));
-        }
+        if (tab === 'welcome') loadWelcomeData(true);
     }, [tab, group.chatId]);
+
+    // Reusable loaders for auto-sync
+    const loadModData = useCallback(async (showLoading = true) => {
+        if (showLoading) setModLoading(true);
+        try {
+            const [membersRes, warningsRes] = await Promise.all([
+                api.getUserGroupMembers(group.chatId).catch(() => ({ members: [] })),
+                api.getGroupWarnings(group.chatId).catch(() => ({ warnings: [] })),
+            ]);
+            setModMembers(membersRes?.members || []);
+            setModWarnings(warningsRes?.warnings || []);
+            if (detail?.settings) {
+                setModLocks({
+                    lockLinks: !!detail.settings.lockLinks,
+                    lockFiles: !!detail.settings.lockFiles,
+                    antifloodLimit: detail.settings.antifloodLimit || 0,
+                });
+            }
+            setLastSynced(Date.now());
+        } catch { /* silent */ }
+        if (showLoading) setModLoading(false);
+    }, [group.chatId, detail]);
+
+    const loadPaData = useCallback(async (showLoading = true) => {
+        if (showLoading) setPaLoading(true);
+        try {
+            const r = await api.getPriceAlerts(group.chatId);
+            setPaTokens(r?.tokens || []);
+            setPaTarget(r?.target || null);
+            setLastSynced(Date.now());
+        } catch { /* silent */ }
+        if (showLoading) setPaLoading(false);
+    }, [group.chatId]);
+
+    // Load moderation data when tab changes
+    useEffect(() => {
+        if (tab === 'moderation') loadModData(true);
+    }, [tab, group.chatId, detail]);
+
+    // Load price alerts when tab changes
+    useEffect(() => {
+        if (tab === 'pricealerts') loadPaData(true);
+    }, [tab, group.chatId]);
+
+    // Auto-sync: poll every 30s when on moderation, pricealerts, or welcome tab
+    useEffect(() => {
+        if (syncTimerRef.current) clearInterval(syncTimerRef.current);
+        if (tab === 'moderation') {
+            syncTimerRef.current = setInterval(() => loadModData(false), 30_000);
+        } else if (tab === 'pricealerts') {
+            syncTimerRef.current = setInterval(() => loadPaData(false), 30_000);
+        } else if (tab === 'welcome') {
+            syncTimerRef.current = setInterval(() => loadWelcomeData(false), 30_000);
+        }
+        return () => { if (syncTimerRef.current) clearInterval(syncTimerRef.current); };
+    }, [tab, loadModData, loadPaData, loadWelcomeData]);
 
     const saveSettings = async () => {
         setSaving(true);
@@ -205,8 +296,127 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
         { id: 'welcome', icon: UserCheck, label: t('dashboard.userGroups.welcome') || 'Welcome' },
         { id: 'language', icon: Globe, label: t('dashboard.userGroups.language') || 'Language' },
         { id: 'subscription', icon: Bell, label: t('dashboard.groupDetail.subscription') || 'Signals' },
+        { id: 'moderation', icon: Shield, label: t('dashboard.userGroups.moderation') || 'Moderation' },
+        { id: 'pricealerts', icon: TrendingUp, label: t('dashboard.userGroups.priceAlerts') || 'Price Alerts' },
         { id: 'message', icon: Send, label: t('dashboard.groupDetail.sendMessage') || 'Message' },
     ];
+
+    const INTERVAL_OPTIONS = [
+        { value: 60, label: '1m' },
+        { value: 300, label: '5m' },
+        { value: 900, label: '15m' },
+        { value: 1800, label: '30m' },
+        { value: 3600, label: '1h' },
+        { value: 7200, label: '2h' },
+        { value: 14400, label: '4h' },
+        { value: 28800, label: '8h' },
+        { value: 43200, label: '12h' },
+        { value: 86400, label: '24h' },
+    ];
+
+    const addPriceAlertToken = async () => {
+        if (!paForm.tokenAddress.trim()) return;
+        setPaAdding(true);
+        try {
+            await api.addPriceAlert(group.chatId, paForm);
+            toast.success(t('dashboard.common.saved') || 'Token added!');
+            setPaForm({ tokenAddress: '', tokenLabel: '', intervalSeconds: 3600 });
+            const r = await api.getPriceAlerts(group.chatId);
+            setPaTokens(r?.tokens || []);
+        } catch (e) { toast.error(e?.message || 'Failed to add'); }
+        setPaAdding(false);
+    };
+
+    const updatePaToken = async (tokenId, patch) => {
+        setPaSaving(true);
+        try {
+            await api.updatePriceAlert(group.chatId, tokenId, patch);
+            toast.success(t('dashboard.common.saved') || 'Saved!');
+            setPaEditing(null);
+            const r = await api.getPriceAlerts(group.chatId);
+            setPaTokens(r?.tokens || []);
+        } catch (e) { toast.error(e?.message || 'Failed'); }
+        setPaSaving(false);
+    };
+
+    const deletePaToken = async (tokenId) => {
+        try {
+            await api.deletePriceAlert(group.chatId, tokenId);
+            toast.success(t('dashboard.common.saved') || 'Deleted!');
+            setPaTokens(prev => prev.filter(tk => tk.id !== tokenId));
+            if (paSelectedToken === tokenId) { setPaSelectedToken(null); setPaTitles([]); }
+        } catch (e) { toast.error(e?.message || t('dashboard.common.toastError')); }
+    };
+
+    const sendNow = async (tokenId) => {
+        try {
+            await api.sendPriceAlertNow(group.chatId, tokenId);
+            toast.success(t('dashboard.common.saved') || 'Alert queued!');
+        } catch (e) { toast.error(e?.message || t('dashboard.common.toastError')); }
+    };
+
+    const loadTitles = async (tokenId) => {
+        setPaSelectedToken(tokenId);
+        try {
+            const r = await api.getPriceAlertTitles(group.chatId, tokenId);
+            setPaTitles(r?.titles || []);
+        } catch { setPaTitles([]); }
+    };
+
+    const addTitle = async () => {
+        if (!paTitleInput.trim() || !paSelectedToken) return;
+        try {
+            await api.addPriceAlertTitle(group.chatId, paSelectedToken, paTitleInput.trim());
+            setPaTitleInput('');
+            const r = await api.getPriceAlertTitles(group.chatId, paSelectedToken);
+            setPaTitles(r?.titles || []);
+        } catch (e) { toast.error(e?.message || t('dashboard.common.toastError')); }
+    };
+
+    const deleteTitle = async (titleId) => {
+        try {
+            await api.deletePriceAlertTitle(group.chatId, titleId);
+            setPaTitles(prev => prev.filter(tl => tl.id !== titleId));
+        } catch (e) { toast.error(e?.message || t('dashboard.common.toastError')); }
+    };
+
+    const MUTE_DURATIONS = [
+        { value: 300, label: '5m' },
+        { value: 3600, label: '1h' },
+        { value: 86400, label: '24h' },
+        { value: 604800, label: '7d' },
+        { value: 0, label: '∞' },
+    ];
+
+    const handleModAction = async () => {
+        if (!modAction) return;
+        setModActing(true);
+        try {
+            const { type, userId } = modAction;
+            if (type === 'ban') await api.moderateBan(group.chatId, userId);
+            else if (type === 'kick') await api.moderateKick(group.chatId, userId);
+            else if (type === 'mute') await api.moderateMute(group.chatId, userId, modMuteDuration);
+            else if (type === 'unmute') await api.moderateUnmute(group.chatId, userId);
+            else if (type === 'warn') await api.moderateWarn(group.chatId, userId, modWarnReason);
+            toast.success(t('dashboard.common.saved') || `${type} success!`);
+            setModAction(null);
+            setModWarnReason('');
+            setLastSynced(Date.now());
+            // Refresh warnings
+            api.getGroupWarnings(group.chatId).then(r => setModWarnings(r?.warnings || [])).catch(() => {});
+        } catch (e) { toast.error(e?.message || t('dashboard.common.toastError')); }
+        setModActing(false);
+    };
+
+    const saveModLocks = async () => {
+        setModSavingLocks(true);
+        try {
+            await api.updateGroupLocks(group.chatId, modLocks);
+            toast.success(t('dashboard.common.saved') || 'Saved!');
+            setLastSynced(Date.now());
+        } catch (e) { toast.error(e?.message || t('dashboard.common.toastError')); }
+        setModSavingLocks(false);
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -439,7 +649,15 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
                                         <div className="flex items-center justify-center py-8"><Loader2 size={20} className="animate-spin text-brand-400" /></div>
                                     ) : (
                                         <>
+                                            {lastSynced && (
+                                                <div className="flex items-center gap-2 text-[10px] text-emerald-400/70 -mb-2">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                    ⚡ Synced with Telegram · {new Date(lastSynced).toLocaleTimeString()}
+                                                    <span className="text-surface-200/30">· auto-refresh 30s</span>
+                                                </div>
+                                            )}
                                             <p className="text-xs text-surface-200/40">{t('dashboard.userGroups.welcomeDesc') || 'Configure new member verification (anti-bot protection)'}</p>
+                                            <p className="text-[9px] text-surface-200/25 font-mono -mt-2">{t('dashboard.userGroups.welcomeHint')}</p>
 
                                             {/* Enable toggle */}
                                             <div className="flex items-center justify-between p-3 bg-white/[0.02] rounded-xl">
@@ -452,6 +670,7 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
                                                     <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all ${welcome.enabled ? 'left-[1.375rem]' : 'left-0.5'}`} />
                                                 </button>
                                             </div>
+                                            <p className="text-[9px] text-surface-200/25 font-mono -mt-2">Telegram: /welcome → toggle</p>
 
                                             {welcome.enabled && (
                                                 <div className="space-y-3">
@@ -483,6 +702,73 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
                                                                     {action === 'kick' ? '👢 Kick' : action === 'ban' ? '🔨 Ban' : '🔇 Mute'}
                                                                 </button>
                                                             ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Question Weights */}
+                                                    <div className="p-3 bg-white/[0.02] rounded-xl space-y-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <label className="text-xs text-surface-200/40">{t('dashboard.userGroups.questionWeights') || 'Question Types'}</label>
+                                                            <span className="text-[9px] text-surface-200/25 font-mono">Telegram: /welcome → weights</span>
+                                                        </div>
+                                                        <p className="text-[9px] text-surface-200/25">{t('dashboard.userGroups.questionWeightsDesc')}</p>
+                                                        {(() => {
+                                                            const w = welcome.questionWeights || {};
+                                                            const totalW = Object.values(w).reduce((s, v) => s + (Number(v) || 0), 0);
+                                                            return (
+                                                                <>
+                                                                    {totalW <= 0 && (
+                                                                        <div className="flex items-center gap-1.5 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                                                                            <AlertTriangle size={12} className="text-red-400 shrink-0" />
+                                                                            <span className="text-[10px] text-red-400">⚠ All weights are 0 — verification questions will not be generated!</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {[{ key: 'math', label: t('dashboard.userGroups.questionMath') || '🧮 Math' },
+                                                                      { key: 'physics', label: t('dashboard.userGroups.questionPhysics') || '🔬 Physics' },
+                                                                      { key: 'chemistry', label: t('dashboard.userGroups.questionChemistry') || '⚗️ Chemistry' },
+                                                                      { key: 'okx', label: t('dashboard.userGroups.questionOkx') || '💱 OKX/DeFi' },
+                                                                      { key: 'crypto', label: t('dashboard.userGroups.questionCrypto') || '₿ Crypto' },
+                                                                    ].map(q => {
+                                                                        const safeTotal = totalW || 1;
+                                                                        const pct = Math.round(((Number(w[q.key]) || 0) / safeTotal) * 100);
+                                                                        return (
+                                                                            <div key={q.key} className="flex items-center gap-2">
+                                                                                <span className="text-[10px] text-surface-100 w-24 truncate">{q.label}</span>
+                                                                                <input type="range" min="0" max="100" value={w[q.key] || 0}
+                                                                                    onChange={e => setWelcome(prev => ({ ...prev, questionWeights: { ...prev.questionWeights, [q.key]: Number(e.target.value) } }))}
+                                                                                    className="flex-1 accent-brand-400 h-1" />
+                                                                                <span className={`text-[10px] font-mono w-8 text-right ${totalW <= 0 ? 'text-red-400' : 'text-brand-400'}`}>{pct}%</span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </>
+                                                            );
+                                                        })()}
+                                                    </div>
+
+                                                    {/* Title Template */}
+                                                    <div className="p-3 bg-white/[0.02] rounded-xl space-y-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <label className="text-xs text-surface-200/40">{t('dashboard.userGroups.titleTemplate') || 'Verification Title'}</label>
+                                                            <span className="text-[9px] text-surface-200/25 font-mono">Telegram: /welcome → title</span>
+                                                        </div>
+                                                        <p className="text-[9px] text-surface-200/25">{t('dashboard.userGroups.titleTemplateDesc')}</p>
+                                                        <input type="text" maxLength={180} value={welcome.titleTemplate || ''}
+                                                            onChange={e => setWelcome(prev => ({ ...prev, titleTemplate: e.target.value }))}
+                                                            placeholder={t('dashboard.userGroups.titleTemplatePlaceholder') || 'e.g. Welcome to {group}! Solve to enter...'}
+                                                            className="input-field !py-2 !text-xs w-full" />
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-[9px] text-surface-200/25">{(welcome.titleTemplate || '').length}/180</span>
+                                                            {welcome.titleTemplate && (
+                                                                <button onClick={() => {
+                                                                    if (window.confirm(t('dashboard.userGroups.titleTemplateResetConfirm') || 'Reset title to default?')) {
+                                                                        setWelcome(prev => ({ ...prev, titleTemplate: '' }));
+                                                                    }
+                                                                }}
+                                                                    className="text-[9px] text-red-400/60 hover:text-red-400">
+                                                                    {t('dashboard.userGroups.titleTemplateReset') || 'Reset to default'}
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -549,6 +835,333 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
                                         Telegram: {'<b> <i> <u> <s> <code> <pre> <a> <blockquote>'}
                                     </p>
                                     {msgSent && <p className="text-xs text-emerald-400">✅ {t('dashboard.groupDetail.msgSent') || 'Message sent!'}</p>}
+                                </div>
+                            )}
+
+                            {/* Moderation Tab */}
+                            {tab === 'moderation' && (
+                                <div className="space-y-4">
+                                    {/* Sync indicator */}
+                                    {lastSynced && (
+                                        <div className="flex items-center gap-2 text-[10px] text-emerald-400/70">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                            ⚡ Synced with Telegram · {new Date(lastSynced).toLocaleTimeString()}
+                                            <span className="text-surface-200/30">· auto-refresh 30s</span>
+                                        </div>
+                                    )}
+                                    {modLoading ? (
+                                        <div className="flex items-center justify-center py-8"><Loader2 size={20} className="animate-spin text-red-400" /></div>
+                                    ) : (
+                                        <>
+                                            {/* Lock & Antiflood Settings */}
+                                            <div className="space-y-2">
+                                                <h4 className="text-xs font-bold text-surface-100 flex items-center gap-1.5">
+                                                    <Shield size={12} className="text-red-400" /> {t('dashboard.userGroups.modSettings') || 'Protection Settings'}
+                                                </h4>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div className="p-3 bg-white/[0.02] rounded-xl space-y-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <Link size={14} className={modLocks.lockLinks ? 'text-red-400' : 'text-surface-200/30'} />
+                                                                <span className="text-xs text-surface-100">{t('dashboard.userGroups.lockLinks') || 'Lock Links'}</span>
+                                                            </div>
+                                                            <button onClick={() => setModLocks(p => ({ ...p, lockLinks: !p.lockLinks }))}
+                                                                className={`w-9 h-4.5 rounded-full transition-all relative ${modLocks.lockLinks ? 'bg-red-500' : 'bg-surface-700'}`}>
+                                                                <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-all ${modLocks.lockLinks ? 'left-[1.125rem]' : 'left-0.5'}`} />
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-[9px] text-surface-200/25 font-mono">/locklinks</p>
+                                                    </div>
+                                                    <div className="p-3 bg-white/[0.02] rounded-xl space-y-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <File size={14} className={modLocks.lockFiles ? 'text-red-400' : 'text-surface-200/30'} />
+                                                                <span className="text-xs text-surface-100">{t('dashboard.userGroups.lockFiles') || 'Lock Files'}</span>
+                                                            </div>
+                                                            <button onClick={() => setModLocks(p => ({ ...p, lockFiles: !p.lockFiles }))}
+                                                                className={`w-9 h-4.5 rounded-full transition-all relative ${modLocks.lockFiles ? 'bg-red-500' : 'bg-surface-700'}`}>
+                                                                <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-all ${modLocks.lockFiles ? 'left-[1.125rem]' : 'left-0.5'}`} />
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-[9px] text-surface-200/25 font-mono">/lockfiles</p>
+                                                    </div>
+                                                </div>
+                                                <div className="p-3 bg-white/[0.02] rounded-xl">
+                                                    <label className="text-xs text-surface-200/40 block mb-1.5">{t('dashboard.userGroups.antiflood') || 'Anti-Flood Limit'} ({modLocks.antifloodLimit || 'Off'})</label>
+                                                    <input type="range" min="0" max="20" value={modLocks.antifloodLimit} onChange={e => setModLocks(p => ({ ...p, antifloodLimit: Number(e.target.value) }))}
+                                                        className="w-full accent-red-400" />
+                                                    <p className="text-[9px] text-surface-200/25 mt-1 font-mono">/antiflood {modLocks.antifloodLimit || 0} — {t('dashboard.userGroups.antifloodHint')}</p>
+                                                </div>
+                                                <button onClick={saveModLocks} disabled={modSavingLocks} className="btn-primary !text-xs !px-3 !py-1.5 flex items-center gap-1">
+                                                    {modSavingLocks ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} {t('dashboard.common.save') || 'Save'}
+                                                </button>
+                                            </div>
+
+                                            {/* Members */}
+                                            <div className="space-y-2">
+                                                <h4 className="text-xs font-bold text-surface-100 flex items-center gap-1.5">
+                                                    <UsersIcon size={12} className="text-brand-400" /> {t('dashboard.userGroups.modMembers') || 'Admins & Members'}
+                                                    <span className="text-[9px] text-surface-200/25 font-mono font-normal">/ban /kick /mute /unmute /warn</span>
+                                                </h4>
+                                                <input type="text" value={modSearch} onChange={e => setModSearch(e.target.value)}
+                                                    placeholder={t('dashboard.userGroups.modSearchPlaceholder') || 'Search by name or ID...'}
+                                                    className="input-field !py-1.5 !text-xs w-full" />
+                                                <div className="space-y-1 max-h-48 overflow-y-auto">
+                                                    {modMembers
+                                                        .filter(m => !m.isBot && (
+                                                            !modSearch || m.firstName.toLowerCase().includes(modSearch.toLowerCase()) ||
+                                                            m.username.toLowerCase().includes(modSearch.toLowerCase()) ||
+                                                            m.userId.includes(modSearch)
+                                                        ))
+                                                        .map(m => (
+                                                            <div key={m.userId} className="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-800/30 hover:bg-surface-800/50 transition-colors">
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <span className="text-xs text-surface-200/60 truncate">
+                                                                        {m.firstName}{m.username ? ` @${m.username}` : ''}
+                                                                    </span>
+                                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded ${m.status === 'creator' ? 'bg-amber-500/15 text-amber-400' : 'bg-brand-500/10 text-brand-400'}`}>
+                                                                        {m.status}
+                                                                    </span>
+                                                                </div>
+                                                                {m.status !== 'creator' && (
+                                                                    <div className="flex gap-1">
+                                                                        {[{ type: 'warn', icon: '⚠️', tip: '/warn', label: t('dashboard.userGroups.modActionWarn') || 'Warn' }, { type: 'mute', icon: '🔇', tip: '/mute', label: t('dashboard.userGroups.modActionMute') || 'Mute' }, { type: 'kick', icon: '👢', tip: '/kick', label: t('dashboard.userGroups.modActionKick') || 'Kick' }, { type: 'ban', icon: '🔨', tip: '/ban', label: t('dashboard.userGroups.modActionBan') || 'Ban' }].map(a => (
+                                                                            <button key={a.type} title={`${a.label} — Telegram: ${a.tip}`}
+                                                                                onClick={() => setModAction({ type: a.type, userId: m.userId, firstName: m.firstName })}
+                                                                                className="px-1.5 py-0.5 rounded text-[10px] hover:bg-white/10 transition-colors">
+                                                                                {a.icon}
+                                                                            </button>
+                                                                        ))}
+                                                                        <button title={`${t('dashboard.userGroups.modActionUnmute') || 'Unmute'} — Telegram: /unmute`} onClick={() => setModAction({ type: 'unmute', userId: m.userId, firstName: m.firstName })}
+                                                                            className="px-1.5 py-0.5 rounded text-[10px] hover:bg-white/10 transition-colors">🔊</button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Action Confirmation Dialog */}
+                                            {modAction && (
+                                                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 space-y-2">
+                                                    <p className="text-xs text-red-400">
+                                                        <AlertTriangle size={12} className="inline mr-1" />
+                                                        {modAction.type.toUpperCase()} <b>{modAction.firstName}</b> ({modAction.userId})?
+                                                    </p>
+                                                    <p className="text-[9px] text-surface-200/25 font-mono">Telegram: /{modAction.type} {modAction.type === 'mute' ? '<duration>' : ''}</p>
+                                                    {modAction.type === 'mute' && (
+                                                        <div className="flex gap-1">
+                                                            {MUTE_DURATIONS.map(d => (
+                                                                <button key={d.value} onClick={() => setModMuteDuration(d.value)}
+                                                                    className={`px-2 py-1 rounded text-[10px] ${modMuteDuration === d.value ? 'bg-red-500/20 text-red-400' : 'bg-surface-800/30 text-surface-200/40'}`}>
+                                                                    {d.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {modAction.type === 'warn' && (
+                                                        <input value={modWarnReason} onChange={e => setModWarnReason(e.target.value)}
+                                                            placeholder="Reason (optional)" className="input-field !py-1.5 !text-xs w-full" />
+                                                    )}
+                                                    <div className="flex gap-2">
+                                                        <button onClick={handleModAction} disabled={modActing}
+                                                            className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1">
+                                                            {modActing ? <Loader2 size={12} className="animate-spin" /> : null} Confirm
+                                                        </button>
+                                                        <button onClick={() => setModAction(null)}
+                                                            className="px-3 py-1.5 rounded-lg bg-surface-800/60 text-surface-200/50 text-xs">Cancel</button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Recent Warnings */}
+                                            {modWarnings.length > 0 && (
+                                                <div className="space-y-1">
+                                                    <h4 className="text-xs font-bold text-surface-100 flex items-center gap-1.5">
+                                                        <AlertTriangle size={12} className="text-amber-400" /> {t('dashboard.userGroups.modWarnings') || 'Recent Warnings'}
+                                                        <span className="text-[9px] text-surface-200/25 font-mono font-normal">/warn — auto-ban @ 3</span>
+                                                    </h4>
+                                                    {modWarnings.slice(0, 10).map(w => (
+                                                        <div key={w.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-surface-800/30 text-xs">
+                                                            <span className="text-surface-200/50 font-mono">{w.userId}</span>
+                                                            <span className="text-surface-200/40">{w.reason || '—'}</span>
+                                                            <span className="text-[10px] text-surface-200/25">{timeAgo(w.createdAt, t)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Price Alerts Tab */}
+                            {tab === 'pricealerts' && (
+                                <div className="space-y-4">
+                                    {paLoading ? (
+                                        <div className="flex items-center justify-center py-8"><Loader2 size={20} className="animate-spin text-amber-400" /></div>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs text-surface-200/40">{t('dashboard.userGroups.priceAlertsDesc') || 'Manage automated price alerts for this group (max 3 tokens).'}</p>
+                                                {lastSynced && (
+                                                    <span className="flex items-center gap-1 text-[10px] text-emerald-400/70 whitespace-nowrap">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                        ⚡ {new Date(lastSynced).toLocaleTimeString()}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-[10px] text-surface-200/25 -mt-2">{t('dashboard.userGroups.priceAlertsHint')}</p>
+
+                                            {/* Token List */}
+                                            {paTokens.length > 0 ? (
+                                                <div className="space-y-2">
+                                                    <h4 className="text-xs font-bold text-surface-100 flex items-center gap-1.5">
+                                                        <TrendingUp size={12} className="text-emerald-400" /> {t('dashboard.userGroups.priceAlerts')} ({paTokens.length}/3)
+                                                        <span className="text-[9px] text-surface-200/25 font-mono font-normal">/listtokens</span>
+                                                    </h4>
+                                                    {paTokens.map(tk => (
+                                                        <div key={tk.id} className={`p-3 rounded-xl border transition-all ${tk.enabled ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-white/[0.02] border-white/5'}`}>
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <TrendingUp size={14} className={tk.enabled ? 'text-emerald-400' : 'text-surface-200/30'} />
+                                                                    <span className="text-sm font-semibold text-surface-100 truncate">{tk.tokenLabel || tk.tokenAddress.slice(0, 10) + '...'}</span>
+                                                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-surface-800/40 text-surface-200/40">{tk.chainShortName || 'xlayer'}</span>
+                                                                </div>
+                                                                <button onClick={() => updatePaToken(tk.id, { enabled: !tk.enabled })}
+                                                                    className={`w-9 h-4.5 rounded-full transition-all relative ${tk.enabled ? 'bg-emerald-500' : 'bg-surface-700'}`}>
+                                                                    <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-all ${tk.enabled ? 'left-[1.125rem]' : 'left-0.5'}`} />
+                                                                </button>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-800/40 text-surface-200/40 flex items-center gap-1">
+                                                                    <Timer size={9} /> {INTERVAL_OPTIONS.find(o => o.value === tk.intervalSeconds)?.label || `${tk.intervalSeconds}s`}
+                                                                </span>
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-800/40 text-surface-200/40 flex items-center gap-1">
+                                                                    <Tag size={9} /> {tk.titleCount || 0} titles
+                                                                </span>
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-800/40 text-surface-200/40 flex items-center gap-1">
+                                                                    📷 {tk.mediaCount || 0} media
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[10px] text-surface-200/30 font-mono truncate mb-2">{tk.tokenAddress}</p>
+                                                            <div className="flex gap-1">
+                                                                <button onClick={() => setPaEditing(paEditing === tk.id ? null : tk.id)} title="Edit token label & interval"
+                                                                    className="px-2 py-1 rounded text-[10px] bg-brand-500/10 text-brand-400 hover:bg-brand-500/20">✏️ {t('dashboard.userGroups.editToken')}</button>
+                                                                <button onClick={() => loadTitles(tk.id)} title={t('dashboard.userGroups.titlesHint')}
+                                                                    className="px-2 py-1 rounded text-[10px] bg-amber-500/10 text-amber-400 hover:bg-amber-500/20">📝 {t('dashboard.userGroups.manageTitles')}</button>
+                                                                <button onClick={() => sendNow(tk.id)} title="Trigger immediate price alert — updates nextRunAt"
+                                                                    className="px-2 py-1 rounded text-[10px] bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 flex items-center gap-0.5">
+                                                                    <Play size={9} /> {t('dashboard.userGroups.sendNow')}
+                                                                </button>
+                                                                <button onClick={() => deletePaToken(tk.id)} title="Telegram: /rmtoken — Remove this token"
+                                                                    className="px-2 py-1 rounded text-[10px] bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center gap-0.5">
+                                                                    <Trash2 size={9} /> {t('dashboard.userGroups.deleteToken')}
+                                                                </button>
+                                                            </div>
+
+                                                            {/* Edit Form */}
+                                                            {paEditing === tk.id && (
+                                                                <div className="mt-2 p-2 bg-surface-800/40 rounded-lg space-y-2">
+                                                                    <div>
+                                                                        <label className="text-[10px] text-surface-200/40">Label</label>
+                                                                        <input defaultValue={tk.tokenLabel || ''} id={`pa-label-${tk.id}`}
+                                                                            className="input-field !py-1 !text-xs w-full" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-[10px] text-surface-200/40">Interval</label>
+                                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                                            {INTERVAL_OPTIONS.map(opt => (
+                                                                                <button key={opt.value} id={`pa-int-${tk.id}-${opt.value}`}
+                                                                                    onClick={() => {
+                                                                                        document.querySelectorAll(`[id^="pa-int-${tk.id}-"]`).forEach(b => b.classList.remove('!bg-brand-500/20', '!text-brand-400'));
+                                                                                        document.getElementById(`pa-int-${tk.id}-${opt.value}`)?.classList.add('!bg-brand-500/20', '!text-brand-400');
+                                                                                    }}
+                                                                                    className={`px-2 py-1 rounded text-[10px] ${tk.intervalSeconds === opt.value ? '!bg-brand-500/20 !text-brand-400' : 'bg-surface-800/30 text-surface-200/40'}`}>
+                                                                                    {opt.label}
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                    <button onClick={() => {
+                                                                        const label = document.getElementById(`pa-label-${tk.id}`)?.value;
+                                                                        const activeInt = document.querySelector(`[id^="pa-int-${tk.id}-"].\\!bg-brand-500\\/20`);
+                                                                        const interval = activeInt ? Number(activeInt.id.split('-').pop()) : tk.intervalSeconds;
+                                                                        updatePaToken(tk.id, { tokenLabel: label, intervalSeconds: interval });
+                                                                    }} disabled={paSaving}
+                                                                        className="px-3 py-1.5 rounded-lg bg-brand-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1">
+                                                                        {paSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-surface-200/30 text-center py-4">{t('dashboard.userGroups.noPriceAlerts') || 'No price alerts configured. Add a token below.'}</p>
+                                            )}
+
+                                            {/* Add Token Form */}
+                                            {paTokens.length < 3 && (
+                                                <div className="bg-surface-800/30 rounded-xl p-3 space-y-2">
+                                                    <h4 className="text-xs font-bold text-surface-100 flex items-center gap-1.5">
+                                                        <Plus size={12} className="text-emerald-400" /> {t('dashboard.userGroups.addToken') || 'Add Token'}
+                                                        <span className="text-[9px] text-surface-200/25 font-mono font-normal">/addtoken {'<address>'}</span>
+                                                    </h4>
+                                                    <input value={paForm.tokenAddress} onChange={e => setPaForm(p => ({ ...p, tokenAddress: e.target.value }))}
+                                                        placeholder={t('dashboard.userGroups.tokenAddress') || 'Token contract address'} className="input-field !py-1.5 !text-xs w-full" />
+                                                    <input value={paForm.tokenLabel} onChange={e => setPaForm(p => ({ ...p, tokenLabel: e.target.value }))}
+                                                        placeholder={t('dashboard.userGroups.tokenLabel') || 'Label (e.g. BANMAO)'} className="input-field !py-1.5 !text-xs w-full" />
+                                                    <div>
+                                                        <label className="text-[10px] text-surface-200/40 mb-1 block">Interval</label>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {INTERVAL_OPTIONS.map(opt => (
+                                                                <button key={opt.value} onClick={() => setPaForm(p => ({ ...p, intervalSeconds: opt.value }))}
+                                                                    className={`px-2 py-1 rounded text-[10px] ${paForm.intervalSeconds === opt.value ? 'bg-emerald-500/20 text-emerald-400' : 'bg-surface-800/30 text-surface-200/40'}`}>
+                                                                    {opt.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={addPriceAlertToken} disabled={paAdding || !paForm.tokenAddress.trim()}
+                                                        className="btn-primary !text-xs !px-3 !py-1.5 flex items-center gap-1 disabled:opacity-30">
+                                                        {paAdding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Add Token
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {/* Custom Titles Manager */}
+                                            {paSelectedToken && (
+                                                <div className="bg-surface-800/30 rounded-xl p-3 space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="text-xs font-bold text-surface-100 flex items-center gap-1.5">
+                                                            <Tag size={12} className="text-amber-400" /> {t('dashboard.userGroups.manageTitles')} (#{paSelectedToken})
+                                                            <span className="text-[9px] text-surface-200/25 font-mono font-normal">/title</span>
+                                                        </h4>
+                                                        <button onClick={() => { setPaSelectedToken(null); setPaTitles([]); }}
+                                                            className="text-surface-200/30 hover:text-surface-200"><X size={12} /></button>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <input value={paTitleInput} onChange={e => setPaTitleInput(e.target.value)}
+                                                            onKeyDown={e => e.key === 'Enter' && addTitle()}
+                                                            placeholder="Enter custom title..." className="input-field !py-1.5 !text-xs flex-1" />
+                                                        <button onClick={addTitle} className="btn-primary !text-xs !px-2 !py-1.5">+</button>
+                                                    </div>
+                                                    {paTitles.length > 0 && (
+                                                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                            {paTitles.map(title => (
+                                                                <div key={title.id} className="flex items-center justify-between px-2 py-1 rounded bg-surface-800/30 text-xs">
+                                                                    <span className="text-surface-200/60 truncate">{title.title}</span>
+                                                                    <button onClick={() => deleteTitle(title.id)} className="text-red-400/50 hover:text-red-400"><X size={10} /></button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    <p className="text-[10px] text-surface-200/25">{paTitles.length}/44 titles — {t('dashboard.userGroups.titlesHint')}</p>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </>
