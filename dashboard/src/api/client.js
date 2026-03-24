@@ -462,6 +462,9 @@ class ApiClient {
     addPriceAlertTitle(chatId, tokenId, title) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/${tokenId}/titles`, { title }); }
     deletePriceAlertTitle(chatId, titleId) { return this.delete(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/titles/${titleId}`); }
     sendPriceAlertNow(chatId, tokenId) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/${tokenId}/send-now`); }
+    getPriceAlertMedia(chatId, tokenId) { return this.get(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/${tokenId}/media`); }
+    addPriceAlertMedia(chatId, tokenId, mediaType, fileId) { return this.post(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/${tokenId}/media`, { mediaType, fileId }); }
+    deletePriceAlertMedia(chatId, mediaId) { return this.delete(`/user/groups/${encodeURIComponent(chatId)}/price-alerts/media/${mediaId}`); }
 
     // === Owner Broadcast to Users ===
     broadcastToUsers(text) { return this.post('/owner/broadcast-users', { text }); }

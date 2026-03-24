@@ -2171,6 +2171,42 @@ function createDashboardRoutes() {
         }
     });
 
+    // List media for a token
+    router.get('/user/groups/:chatId/price-alerts/:tokenId/media', userGroupGuard, async (req, res) => {
+        try {
+            const media = await db.listPriceAlertMedia(req.params.tokenId, req.groupChatId);
+            res.json({ media });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Add media attachment (fileId or URL)
+    router.post('/user/groups/:chatId/price-alerts/:tokenId/media', userGroupGuard, async (req, res) => {
+        try {
+            const chatId = req.groupChatId;
+            const { mediaType, fileId } = req.body;
+            if (!fileId?.trim()) return res.status(400).json({ error: 'fileId required' });
+            const count = await db.countPriceAlertMedia(req.params.tokenId, chatId);
+            if (count >= 44) return res.status(400).json({ error: 'Maximum 44 media items' });
+            const result = await db.addPriceAlertMedia(req.params.tokenId, chatId, mediaType || 'photo', fileId.trim());
+            res.json({ success: true, media: result });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Delete a single media item — MUST be before /:tokenId routes
+    router.delete('/user/groups/:chatId/price-alerts/media/:mediaId', userGroupGuard, async (req, res) => {
+        try {
+            const deleted = await db.deletePriceAlertMedia(req.params.mediaId);
+            if (!deleted) return res.status(404).json({ error: 'Media not found' });
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // ==================
     // OWNER: BROADCAST TO ALL USERS (DM)
     // ==================
