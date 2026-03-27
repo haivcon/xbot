@@ -75,7 +75,8 @@ export default function AiTraderPage() {
     const [showSetup, setShowSetup] = useState(false);
     const [setupStep, setSetupStep] = useState(1); // Wizard: 1=Mode, 2=Chain+Token, 3=Risk+Config
     const [expandedPlan, setExpandedPlan] = useState(null);
-    const [planFilter, setPlanFilter] = useState('all');
+    const [planFilter, setPlanFilter] = useState('pending'); // #6 default to pending
+    const [showDisableConfirm, setShowDisableConfirm] = useState(false); // #9 confirmation dialog
     const [statusMsg, setStatusMsg] = useState(null);
     const [positions, setPositions] = useState([]);
     const [showGuide, setShowGuide] = useState(false);
@@ -249,9 +250,13 @@ export default function AiTraderPage() {
     useEffect(() => {
         setLoading(true);
         Promise.all([refreshStatus(), refreshPlans(), refreshWallets(), refreshPositions()]).finally(() => setLoading(false));
-        const interval = setInterval(() => { refreshStatus(); refreshPlans(); refreshPositions(); }, 30000);
+        // #10 Skip positions refresh when in paper mode (no real positions)
+        const interval = setInterval(() => {
+            refreshStatus(); refreshPlans();
+            if (!paperMode) refreshPositions();
+        }, 30000);
         return () => clearInterval(interval);
-    }, [refreshStatus, refreshPlans, refreshWallets, refreshPositions]);
+    }, [refreshStatus, refreshPlans, refreshWallets, refreshPositions, paperMode]);
 
     // Fetch selected wallet balance + tokens (dedicated, with retry)
     useEffect(() => {
@@ -306,7 +311,8 @@ export default function AiTraderPage() {
 
     const showToast = useCallback((type, text) => {
         setStatusMsg({ type, text });
-        setTimeout(() => setStatusMsg(null), 3500);
+        // #8 Longer display for errors so user can read
+        setTimeout(() => setStatusMsg(null), type === 'error' ? 6000 : 3500);
     }, []);
 
     const handleEnable = async () => {
@@ -314,20 +320,26 @@ export default function AiTraderPage() {
         try {
             await api.request('/ai/agent/enable', {
                 method: 'POST',
-                body: JSON.stringify({ riskLevel, maxAmountUsd: maxPerTrade, totalBudgetUsd: budget, profitTargetPct: profitTarget, stopLossPct: stopLoss, takeProfitPct: profitTarget, chains: selectedChains.join(','), autoApprove, walletId: selectedWalletId, paperMode, selectedTokens: selectedTokens.length > 0 ? selectedTokens.join(',') : '', aiModel, tokenBudgets: Object.keys(tokenBudgets).length > 0 ? JSON.stringify(tokenBudgets) : '' }),
+                // #2 Don't send walletId in paper mode
+                body: JSON.stringify({ riskLevel, maxAmountUsd: maxPerTrade, totalBudgetUsd: budget, profitTargetPct: profitTarget, stopLossPct: stopLoss, takeProfitPct: profitTarget, chains: selectedChains.join(','), autoApprove, walletId: paperMode ? null : selectedWalletId, paperMode, selectedTokens: selectedTokens.length > 0 ? selectedTokens.join(',') : '', aiModel, tokenBudgets: Object.keys(tokenBudgets).length > 0 ? JSON.stringify(tokenBudgets) : '' }),
             });
             setShowSetup(false);
             setSetupStep(1);
             await refreshStatus();
             showToast('success', `✅ ${p('agentStarted')}`);
+            // #3 Immediate refresh: poll plans after 3s so user sees first scan results quickly
+            setTimeout(() => { refreshPlans(); refreshStatus(); }, 3000);
+            setTimeout(() => { refreshPlans(); }, 8000);
         } catch (err) { showToast('error', `❌ ${err.message || p('failedEnable')}`); }
         setActionLoading(null);
     };
 
+    // #9 Disable with confirmation dialog
     const handleDisable = async () => {
         setActionLoading('disable');
         try { await api.request('/ai/agent/disable', { method: 'POST' }); await refreshStatus(); await refreshPlans(); showToast('success', `🔴 ${p('agentStopped')}`); } catch (err) { showToast('error', `❌ ${err.message}`); }
         setActionLoading(null);
+        setShowDisableConfirm(false);
     };
 
     const handlePause = async (pause) => {
@@ -420,6 +432,32 @@ export default function AiTraderPage() {
                     statusMsg.type === 'success' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' : 'bg-red-500/15 border-red-500/30 text-red-400'
                 }`}>
                     {statusMsg.text}
+                </div>
+            )}
+            {/* #9 Disable Confirmation Dialog */}
+            {showDisableConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-surface-800 border border-surface-700/40 rounded-2xl p-6 max-w-sm mx-4 space-y-4 shadow-2xl">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center">
+                                <Power size={20} className="text-red-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-surface-100">{p('confirmDisableTitle')}</h3>
+                                <p className="text-[11px] text-surface-200/50">{p('confirmDisableDesc')}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 justify-end">
+                            <button onClick={() => setShowDisableConfirm(false)}
+                                className="px-4 py-2 rounded-lg text-xs font-medium text-surface-200/60 hover:text-surface-100 bg-surface-700/30 hover:bg-surface-700/50 transition-colors">
+                                {p('cancel')}
+                            </button>
+                            <button onClick={handleDisable} disabled={actionLoading === 'disable'}
+                                className="px-4 py-2 rounded-lg text-xs font-medium text-red-400 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 transition-colors">
+                                {actionLoading === 'disable' ? '...' : p('confirmDisableBtn')}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
             {/* Header */}
@@ -648,7 +686,7 @@ export default function AiTraderPage() {
                                                     } catch {}
                                                 }
                                                 setRefreshingWallet(false);
-                                            }} className="p-1 rounded-md hover:bg-brand-500/10 transition-colors" title="Làm mới">
+                                                }} className="p-1 rounded-md hover:bg-brand-500/10 transition-colors" title={t('common.refresh') || 'Refresh'}>
                                                 <RefreshCw size={12} className={`text-surface-200/40 hover:text-brand-400 ${refreshingWallet ? 'animate-spin' : ''}`} />
                                             </button>
                                         </div>
@@ -674,7 +712,7 @@ export default function AiTraderPage() {
                                                             <div className="min-w-0 flex-1">
                                                                 <div className="text-[11px] font-semibold text-surface-100 flex items-center gap-1">
                                                                     {w.walletName || `Wallet`}
-                                                                    {w.isDefault && <span className="text-[8px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">Mặc định</span>}
+                                                                    {w.isDefault && <span className="text-[8px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">{p('defaultWallet')}</span>}
                                                                 </div>
                                                                 <div className="text-[10px] font-mono text-surface-200/40 mt-0.5">
                                                                     {w.address?.slice(0,6)}...{w.address?.slice(-4)}
@@ -684,7 +722,7 @@ export default function AiTraderPage() {
                                                                 <div className="text-[11px] font-bold text-surface-100">
                                                                     {bal !== undefined ? `$${Number(bal).toFixed(2)}` : <div className="animate-pulse w-12 h-3 bg-surface-700/30 rounded" />}
                                                                 </div>
-                                                                <div className="text-[8px] text-surface-200/30 mt-0.5">Số dư</div>
+                                                                <div className="text-[8px] text-surface-200/30 mt-0.5">{p('balance')}</div>
                                                             </div>
                                                             {isSelected && <Check size={14} className="text-brand-400 shrink-0" />}
                                                         </button>
@@ -751,7 +789,7 @@ export default function AiTraderPage() {
                                                         setWalletTokens(toks);
                                                     } catch {}
                                                     setRefreshingWallet(false);
-                                                }} className="p-1 rounded-md hover:bg-brand-500/10 transition-colors" title="Làm mới">
+                                                    }} className="p-1 rounded-md hover:bg-brand-500/10 transition-colors" title={t('common.refresh') || 'Refresh'}>
                                                     <RefreshCw size={12} className={`text-brand-400/60 hover:text-brand-400 ${refreshingWallet ? 'animate-spin' : ''}`} />
                                                 </button>
                                             </div>
@@ -761,7 +799,7 @@ export default function AiTraderPage() {
                                     {/* Wallet tokens section */}
                                     {walletTokens.length > 0 && !tokenSearch && (
                                         <div className="mb-2">
-                                            <div className="text-[9px] text-surface-200/30 uppercase tracking-wider mb-1.5 font-semibold">💰 Token trong ví ({walletTokens.length})</div>
+                                            <div className="text-[9px] text-surface-200/30 uppercase tracking-wider mb-1.5 font-semibold">💰 {p('walletTokensLabel')} ({walletTokens.length})</div>
                                             <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
                                                 {walletTokens.map(tok => {
                                                     const isSelected = selectedTokens.includes(tok.symbol);
@@ -790,7 +828,7 @@ export default function AiTraderPage() {
 
                                     {/* Preset tokens header */}
                                     {walletTokens.length > 0 && !tokenSearch && (
-                                        <div className="text-[9px] text-surface-200/30 uppercase tracking-wider font-semibold">📋 Preset tokens</div>
+                                        <div className="text-[9px] text-surface-200/30 uppercase tracking-wider font-semibold">📋 {p('presetTokensLabel')}</div>
                                     )}
 
                                     <div className="flex items-center justify-between">
@@ -1102,14 +1140,23 @@ export default function AiTraderPage() {
                                         <span className="text-surface-200/40">{p('risk')}</span><span className="text-surface-100 text-right capitalize">{riskLevel}</span>
                                         <span className="text-surface-200/40">{p('budget')}</span><span className="text-surface-100 text-right">${budget}</span>
                                         <span className="text-surface-200/40">{p('stopLossLabel')}/{p('takeProfitLabel')}</span><span className="text-surface-100 text-right">-{stopLoss}% / +{profitTarget}%</span>
-                                        <span className="text-surface-200/40">🤖 Mô hình</span><span className="text-surface-100 text-right capitalize">{aiModel === 'auto' ? '⚡ Auto' : aiModel === 'conservative' ? '🛡️ Thận trọng' : '🎯 Sniper'}</span>
+                                        <span className="text-surface-200/40">🤖 {p('aiModelLabel')}</span><span className="text-surface-100 text-right capitalize">{aiModel === 'auto' ? '⚡ Auto' : aiModel === 'conservative' ? `🛡️ ${p('riskConservative')}` : '🎯 Sniper'}</span>
                                         {selectedTokens.length > 0 && <><span className="text-surface-200/40">🪙 Token</span><span className="text-surface-100 text-right">{selectedTokens.length} token</span></>}
                                     </div>
+                                    {/* #4 Warning when no tokens selected → AI scans ALL */}
+                                    {selectedTokens.length === 0 && (
+                                        <div className="mt-3 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                            <div className="flex items-center gap-2">
+                                                <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                                                <span className="text-[10px] text-amber-400">{p('noTokensWarning')}</span>
+                                            </div>
+                                        </div>
+                                    )}
                                     {/* Wallet info for live mode */}
                                     {!paperMode && selectedWalletId && (
                                         <div className="mt-3 pt-3 border-t border-brand-500/10">
                                             <div className="flex items-center justify-between text-[11px]">
-                                                <span className="text-surface-200/40">👛 Ví</span>
+                                                <span className="text-surface-200/40">👛 {p('walletLabel')}</span>
                                                 <span className="text-surface-100 font-mono">
                                                     {(() => { const w = wallets.find(w => w.id === selectedWalletId); return w ? `${w.address?.slice(0,6)}...${w.address?.slice(-4)}` : ''; })()}
                                                     {walletBalances[selectedWalletId] && <span className="ml-1.5 text-emerald-400 font-semibold">(${Number(walletBalances[selectedWalletId]).toFixed(2)})</span>}
@@ -1167,7 +1214,7 @@ export default function AiTraderPage() {
                                     ) : (
                                         <button onClick={() => handlePause(true)} className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"><Pause size={14} /></button>
                                     )}
-                                    <button onClick={handleDisable} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Power size={14} /></button>
+                                    <button onClick={() => setShowDisableConfirm(true)} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Power size={14} /></button>
                                     <a href={`/api/ai/agent/export`} download="trade_history.csv"
                                        className="p-1.5 rounded-lg bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 text-xs" title={p('exportCsv')}>📥</a>
                                 </div>

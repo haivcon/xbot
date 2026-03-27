@@ -372,6 +372,9 @@ async function getTradePlans(userId, status = null, limit = 20) {
  * Create a trade plan (called by signal polling)
  */
 async function createTradePlan(userId, planData) {
+    // #7 Wrap budget check + insert in execution lock to prevent race conditions
+    // when 2 signals arrive simultaneously and both pass the budget check
+    return withExecutionLock(userId, async () => {
     await initDB();
     const { dbRun, dbGet } = require('../../db/core');
 
@@ -380,7 +383,7 @@ async function createTradePlan(userId, planData) {
     if (agentConfig) {
         const { dbGet: dbGet2 } = require('../../db/core');
         const spent = await dbGet2(
-            "SELECT COALESCE(SUM(COALESCE(modifiedAmountUsd, suggestedAmountUsd)), 0) as totalSpent FROM auto_trading_plans WHERE userId = ? AND status IN ('approved', 'executed')",
+            "SELECT COALESCE(SUM(COALESCE(modifiedAmountUsd, suggestedAmountUsd)), 0) as totalSpent FROM auto_trading_plans WHERE userId = ? AND status IN ('approved', 'executed', 'pending')",
             [userId]
         );
         const totalSpent = Number(spent?.totalSpent || 0);
@@ -430,6 +433,7 @@ async function createTradePlan(userId, planData) {
     }
 
     return { created: true, planId };
+    }); // end withExecutionLock
 }
 
 /**
