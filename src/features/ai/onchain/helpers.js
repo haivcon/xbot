@@ -163,4 +163,26 @@ async function checkTokenBalance(provider, walletAddress, tokenAddress, required
     }
 }
 
-module.exports = { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken, detectPromptLanguage, rpcRetry, createNonceManager, checkTokenBalance };
+// ─── Shared chain display names ───
+const CHAIN_NAMES = {
+    '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon',
+    '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana', '43114': 'Avalanche',
+    '10': 'Optimism', '324': 'zkSync', '59144': 'Linea'
+};
+
+// ─── Shared formatters ───
+function formatUsd(val) {
+    const n = Number(val || 0);
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1e9) return sign + '$' + (abs / 1e9).toFixed(2) + 'B';
+    if (abs >= 1e6) return sign + '$' + (abs / 1e6).toFixed(2) + 'M';
+    if (abs >= 1e3) return sign + '$' + (abs / 1e3).toFixed(1) + 'K';
+    return sign + '$' + abs.toFixed(2);
+}
+
+function formatApy(rate) {
+    return (Number(rate || 0) * 100).toFixed(2) + '%';
+}
+
+module.exports = { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, CHAIN_NAMES, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken, detectPromptLanguage, rpcRetry, createNonceManager, checkTokenBalance, formatUsd, formatApy };

@@ -11,11 +11,15 @@ const { ONCHAIN_TOOLS } = require('./onchain/declarations');
 const walletTools = require('./onchain/walletTools');
 const tradingTools = require('./onchain/tradingTools');
 const marketTools = require('./onchain/marketTools');
+const defiTools = require('./onchain/defiTools');
+const agenticWalletTools = require('./onchain/agenticWalletTools');
 
 const toolHandlers = {
     ...walletTools,
     ...tradingTools,
-    ...marketTools
+    ...marketTools,
+    ...defiTools,
+    ...agenticWalletTools
 };
 
 // ═══════════════════════════════════════════════════════
@@ -85,6 +89,32 @@ MEME PUMP SCANNER:
 - Get detailed meme token info (use get_meme_detail)
 - Check meme developer reputation & rug history (use get_meme_dev_info)
 - Find similar meme tokens (use get_similar_memes)
+
+DEFI INVEST & PORTFOLIO:
+- Search DeFi products by token, platform, chain (use defi_search — supports Aave, Lido, Compound, PancakeSwap, etc.)
+- Get DeFi product details with APY breakdown (use defi_detail)
+- Deposit into DeFi protocols: staking, lending, liquidity pools (use defi_deposit)
+- Withdraw/exit DeFi positions (use defi_redeem)
+- Claim DeFi rewards: staking rewards, LP fees, bonus (use defi_claim)
+- View all DeFi positions across protocols and chains (use defi_positions)
+- Get detailed position info per protocol with health rate (use defi_position_detail)
+
+DEFI INVEST FLOW:
+1. User asks about yield/staking → call defi_search to find products
+2. User picks a product → call defi_detail for details
+3. User wants to invest → call defi_deposit (generates calldata steps)
+4. Each calldata step must be signed and broadcast via okx-onchain-gateway
+5. To exit → call defi_redeem. To claim rewards → call defi_claim
+⚠️ ALWAYS call defi_positions first before defi_redeem to get the investmentId and platformId
+
+AGENTIC WALLET (TEE-based, coexists with trading wallets):
+- Login with email+OTP (use aw_login, then aw_verify_otp)
+- Check agentic wallet balance (use aw_balance — NOT get_trading_wallet_balance)
+- Send tokens from agentic wallet (use aw_send)
+- Call smart contracts with TEE signing (use aw_contract_call)
+- View agentic wallet transaction history (use aw_history)
+- Sign messages EIP-191/EIP-712 (use aw_sign_message)
+⚠️ "ví agentic"/"TEE wallet" → use aw_* tools. "ví giao dịch"/"trading wallet" → use existing manage_trading_wallet/get_trading_wallet_balance
 
 PORTFOLIO & PnL ANALYSIS:
 - On-chain portfolio overview for ANY wallet: PnL, win rate, stats (use get_portfolio_overview)

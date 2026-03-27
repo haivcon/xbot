@@ -1518,6 +1518,58 @@ function createMarketRoutes() {
         }
     });
 
+    // ════════════════════════════════════════
+    // DeFi Portfolio Endpoints
+    // ════════════════════════════════════════
+
+    /**
+     * GET /defi/search?token=USDC&platform=Aave&chainIndex=1&productGroup=SINGLE_EARN
+     */
+    router.get('/defi/search', async (req, res) => {
+        try {
+            const { token, platform, chainIndex, productGroup, pageNum } = req.query;
+            const data = await onchainos.defiSearch({
+                tokenSymbol: token, platformName: platform,
+                chainIndex, productGroup: productGroup || 'SINGLE_EARN',
+                pageNum: pageNum ? parseInt(pageNum) : undefined
+            });
+            res.json({ data: data || [] });
+        } catch (err) {
+            log.error('defi/search error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /**
+     * GET /defi/positions?address=0x...&chains=1,56,196
+     */
+    router.get('/defi/positions', async (req, res) => {
+        try {
+            const { address, chains } = req.query;
+            if (!address) return res.status(400).json({ error: 'address required' });
+            const data = await onchainos.defiPositions(address, chains || '1,56,196,137,42161,8453,501');
+            res.json({ data: data || [] });
+        } catch (err) {
+            log.error('defi/positions error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
+    /**
+     * GET /defi/position-detail?address=0x...&chainIndex=1&platformId=xxx
+     */
+    router.get('/defi/position-detail', async (req, res) => {
+        try {
+            const { address, chainIndex, platformId } = req.query;
+            if (!address || !chainIndex || !platformId) return res.status(400).json({ error: 'address, chainIndex, platformId required' });
+            const data = await onchainos.defiPositionDetail(address, chainIndex, platformId);
+            res.json({ data: data || [] });
+        } catch (err) {
+            log.error('defi/position-detail error:', err.msg || err.message);
+            res.status(500).json({ error: err.msg || err.message });
+        }
+    });
+
     return router;
 }
 

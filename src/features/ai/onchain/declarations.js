@@ -917,6 +917,85 @@ module.exports.ONCHAIN_TOOLS = [
                 name: 'get_holder_cluster',
                 description: 'Analyze holder clusters/concentration for a token — identifies related wallets, dev holdings, and whale groups. Vietnamese: "phân tích holder", "ai đang nắm giữ", "dev còn hold không", "cluster holder". English: "holder analysis", "holder clusters", "who holds this token".',
                 parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Chain ID' }, tokenContractAddress: { type: 'string', description: 'Token contract address or symbol' }, mode: { type: 'string', description: '"overview" (summary), "top_holders" (biggest holders), "clusters" (related groups). Default "overview"' } }, required: ['chainIndex', 'tokenContractAddress'] }
+            },
+            // ══════════════════════════════════════════
+            // DeFi Invest Tools
+            // ══════════════════════════════════════════
+            {
+                name: 'defi_search',
+                description: 'Search DeFi products (earn, pools, lending) across protocols. Vietnamese: "tìm sản phẩm DeFi", "kiếm lãi USDC", "yield farming", "staking ETH". English: "DeFi products", "best yield", "earn USDC", "staking".',
+                parameters: { type: 'object', properties: { token: { type: 'string', description: 'Token symbol(s), comma-separated (e.g. "USDC", "ETH,USDC")' }, platform: { type: 'string', description: 'Platform(s) (e.g. "Aave", "Lido", "Compound", "PancakeSwap")' }, chainIndex: { type: 'string', description: 'Chain ID (1=ETH, 56=BSC, 501=SOL)' }, productGroup: { type: 'string', description: '"SINGLE_EARN" (default), "DEX_POOL", "LENDING"' }, pageNum: { type: 'number', description: 'Page number (default 1)' } }, required: [] }
+            },
+            {
+                name: 'defi_detail',
+                description: 'Get detailed info about a DeFi product (APY breakdown, supported tokens, investability). Vietnamese: "chi tiết DeFi", "thông tin sản phẩm DeFi". English: "DeFi product detail", "DeFi info".',
+                parameters: { type: 'object', properties: { investmentId: { type: 'string', description: 'Investment product ID from defi_search results' } }, required: ['investmentId'] }
+            },
+            {
+                name: 'defi_deposit',
+                description: 'Deposit/invest into a DeFi protocol (Aave, Lido, PancakeSwap, Compound). Vietnamese: "gửi tiền vào Aave", "stake ETH", "deposit USDC vào DeFi". English: "deposit into DeFi", "stake tokens", "add liquidity".',
+                parameters: { type: 'object', properties: { investmentId: { type: 'string', description: 'Product ID' }, address: { type: 'string', description: 'User wallet address' }, userInputList: { type: 'array', items: { type: 'object', properties: { tokenAddress: { type: 'string' }, chainIndex: { type: 'string' }, coinAmount: { type: 'string' }, tokenPrecision: { type: 'string' } } }, description: 'Tokens to deposit [{tokenAddress, chainIndex, coinAmount, tokenPrecision}]' }, slippage: { type: 'string', description: 'Slippage (e.g. "0.01"=1%). Default "0.01"' }, tokenId: { type: 'string', description: 'V3 NFT tokenId (for existing V3 positions)' }, tickLower: { type: 'string', description: 'V3 lower tick' }, tickUpper: { type: 'string', description: 'V3 upper tick' } }, required: ['investmentId', 'address', 'userInputList'] }
+            },
+            {
+                name: 'defi_redeem',
+                description: 'Withdraw/exit from a DeFi position (redeem, remove liquidity, repay). Vietnamese: "rút khỏi Aave", "withdraw DeFi", "unstake", "rút thanh khoản". English: "withdraw DeFi", "exit position", "remove liquidity", "unstake".',
+                parameters: { type: 'object', properties: { investmentId: { type: 'string', description: 'Product ID' }, address: { type: 'string', description: 'User wallet address' }, chainIndex: { type: 'string', description: 'Chain ID' }, ratio: { type: 'string', description: '"1"=100% exit, "0.5"=50%. For full exit.' }, userInputList: { type: 'array', items: { type: 'object' }, description: 'Token input for partial exit/repay' }, tokenId: { type: 'string', description: 'V3 NFT tokenId' }, slippage: { type: 'string', description: 'Slippage tolerance. Default "0.01"' } }, required: ['investmentId', 'address'] }
+            },
+            {
+                name: 'defi_claim',
+                description: 'Claim DeFi rewards (staking rewards, LP fees, bonus). Vietnamese: "nhận thưởng DeFi", "claim rewards", "thu phí LP". English: "claim DeFi rewards", "collect fees", "harvest yield".',
+                parameters: { type: 'object', properties: { address: { type: 'string', description: 'User wallet address' }, rewardType: { type: 'string', description: '"REWARD_PLATFORM", "REWARD_INVESTMENT", "V3_FEE", "REWARD_OKX_BONUS", "UNLOCKED_PRINCIPAL"' }, investmentId: { type: 'string', description: 'Product ID' }, platformId: { type: 'string', description: 'Protocol platform ID' }, chainIndex: { type: 'string', description: 'Chain ID' }, tokenId: { type: 'string', description: 'V3 NFT tokenId (for V3_FEE)' }, expectOutputList: { type: 'array', items: { type: 'object' }, description: 'Expected output tokens (from position-detail rewardDefiTokenInfo)' } }, required: ['address', 'rewardType'] }
+            },
+            // ══════════════════════════════════════════
+            // DeFi Portfolio Tools
+            // ══════════════════════════════════════════
+            {
+                name: 'defi_positions',
+                description: 'View DeFi holdings/positions across all protocols and chains. Vietnamese: "vị thế DeFi", "xem DeFi holdings", "portfolio DeFi", "tôi đang stake ở đâu". English: "DeFi positions", "my DeFi holdings", "DeFi portfolio".',
+                parameters: { type: 'object', properties: { address: { type: 'string', description: 'Wallet address to check' }, chains: { type: 'string', description: 'Comma-separated chain IDs (default: all major chains)' } }, required: ['address'] }
+            },
+            {
+                name: 'defi_position_detail',
+                description: 'View detailed DeFi position for a specific protocol (APY, health rate, pending rewards). Vietnamese: "chi tiết vị thế DeFi", "xem chi tiết Aave", "position detail". English: "DeFi position detail", "protocol holdings detail".',
+                parameters: { type: 'object', properties: { address: { type: 'string', description: 'Wallet address' }, chainIndex: { type: 'string', description: 'Chain ID' }, platformId: { type: 'string', description: 'Protocol platform ID (from defi_positions results)' } }, required: ['address', 'chainIndex', 'platformId'] }
+            },
+            // ══════════════════════════════════════════
+            // Agentic Wallet Tools (TEE-based)
+            // ══════════════════════════════════════════
+            {
+                name: 'aw_login',
+                description: 'Login to OKX Agentic Wallet (TEE-based, email+OTP). Vietnamese: "đăng nhập ví agentic", "login TEE wallet", "kết nối ví OKX". English: "login agentic wallet", "connect TEE wallet".',
+                parameters: { type: 'object', properties: { email: { type: 'string', description: 'Email for OTP login. Omit for silent API key login.' }, locale: { type: 'string', description: 'Email language: "en-US", "zh-CN", "ja-JP"' } }, required: [] }
+            },
+            {
+                name: 'aw_verify_otp',
+                description: 'Verify OTP code for Agentic Wallet login. Vietnamese: "xác thực OTP", "nhập mã OTP". English: "verify OTP", "enter OTP code".',
+                parameters: { type: 'object', properties: { otp: { type: 'string', description: '6-digit OTP code from email' } }, required: ['otp'] }
+            },
+            {
+                name: 'aw_balance',
+                description: 'Check Agentic Wallet balance (TEE wallet, not trading wallet). Vietnamese: "số dư ví agentic", "balance ví TEE", "xem ví OKX". English: "agentic wallet balance", "TEE wallet balance".',
+                parameters: { type: 'object', properties: { all: { type: 'boolean', description: 'Show all accounts (default: active only)' }, chainIndex: { type: 'string', description: 'Filter by chain ID' }, tokenAddress: { type: 'string', description: 'Filter by token address' } }, required: [] }
+            },
+            {
+                name: 'aw_send',
+                description: 'Send tokens from Agentic Wallet (TEE-signed). Vietnamese: "gửi token từ ví agentic", "chuyển ETH từ ví TEE". English: "send from agentic wallet", "TEE wallet transfer".',
+                parameters: { type: 'object', properties: { amount: { type: 'string', description: 'Amount in minimal units (wei)' }, toAddress: { type: 'string', description: 'Recipient address' }, chainIndex: { type: 'string', description: 'Chain ID' }, fromAddress: { type: 'string', description: 'Sender address (optional, defaults to active account)' }, contractToken: { type: 'string', description: 'Token contract address (omit for native token)' }, force: { type: 'boolean', description: 'Skip confirmation (default false)' } }, required: ['amount', 'toAddress', 'chainIndex'] }
+            },
+            {
+                name: 'aw_contract_call',
+                description: 'Call a smart contract from Agentic Wallet (TEE-signed, auto-broadcast). Vietnamese: "gọi hợp đồng từ ví agentic", "contract call TEE". English: "contract call from agentic wallet", "execute contract TEE".',
+                parameters: { type: 'object', properties: { toAddress: { type: 'string', description: 'Contract address' }, chainIndex: { type: 'string', description: 'Chain ID' }, amount: { type: 'string', description: 'Native token amount (minimal units). Default "0"' }, inputData: { type: 'string', description: 'EVM calldata hex (0x...)' }, unsignedTx: { type: 'string', description: 'Solana unsigned tx (base58)' }, gasLimit: { type: 'string', description: 'Gas limit override' }, fromAddress: { type: 'string', description: 'Sender address' }, mevProtection: { type: 'boolean', description: 'Enable MEV protection' }, force: { type: 'boolean', description: 'Skip confirmation' } }, required: ['toAddress', 'chainIndex'] }
+            },
+            {
+                name: 'aw_history',
+                description: 'View Agentic Wallet transaction history. Vietnamese: "lịch sử ví agentic", "xem giao dịch ví TEE". English: "agentic wallet history", "TEE wallet transactions".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Filter by chain ID' }, limit: { type: 'string', description: 'Page size (default 10)' }, cursor: { type: 'string', description: 'Pagination cursor' }, txHash: { type: 'string', description: 'Specific tx hash for detail view' }, address: { type: 'string', description: 'Wallet address (required for tx detail)' } }, required: [] }
+            },
+            {
+                name: 'aw_sign_message',
+                description: 'Sign a message using Agentic Wallet (EIP-191 or EIP-712). Vietnamese: "ký tin nhắn ví agentic", "sign message TEE". English: "sign message agentic wallet".',
+                parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Chain ID' }, message: { type: 'string', description: 'Message to sign (or EIP-712 typed data JSON)' }, fromAddress: { type: 'string', description: 'Signer address' }, type: { type: 'string', description: '"personal" (default) or "eip712"' } }, required: ['chainIndex', 'message', 'fromAddress'] }
             }
         ]
     }

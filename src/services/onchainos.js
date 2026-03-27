@@ -840,6 +840,182 @@ async function getAddressTrackerActivities(params) {
     return okxFetch('GET', path);
 }
 
+// ═══════════════════════════════════════════════════════
+// DeFi Invest API  (/api/v5/defi)
+// ═══════════════════════════════════════════════════════
+
+async function defiSearch(params = {}) {
+    const payload = {
+        tokenSymbol: params.tokenSymbol,
+        platformName: params.platformName,
+        chainIndex: params.chainIndex,
+        productGroup: params.productGroup || 'SINGLE_EARN',
+        pageNum: params.pageNum || 1
+    };
+    const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    return okxFetch('POST', '/api/v5/defi/explore/product/list', clean);
+}
+
+async function defiDetail(investmentId) {
+    const path = buildGetPath('/api/v5/defi/explore/product/detail', { investmentId });
+    return okxFetch('GET', path);
+}
+
+async function defiPrepare(investmentId) {
+    const path = buildGetPath('/api/v5/defi/invest/pre-transaction-info', { investmentId });
+    return okxFetch('GET', path);
+}
+
+async function defiDeposit(params) {
+    const payload = {
+        investmentId: params.investmentId,
+        address: params.address,
+        userInputList: params.userInputList,
+        slippage: params.slippage || '0.01',
+        tokenId: params.tokenId,
+        tickLower: params.tickLower,
+        tickUpper: params.tickUpper
+    };
+    const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    return okxFetch('POST', '/api/v5/defi/invest/transaction-data', clean);
+}
+
+async function defiRedeem(params) {
+    const payload = {
+        investmentId: params.investmentId,
+        address: params.address,
+        chainIndex: params.chainIndex,
+        ratio: params.ratio,
+        userInputList: params.userInputList,
+        tokenId: params.tokenId,
+        slippage: params.slippage || '0.01'
+    };
+    const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    return okxFetch('POST', '/api/v5/defi/invest/redeem-data', clean);
+}
+
+async function defiClaim(params) {
+    const payload = {
+        address: params.address,
+        rewardType: params.rewardType,
+        investmentId: params.investmentId,
+        analysisPlatformId: params.analysisPlatformId,
+        chainIndex: params.chainIndex,
+        tokenId: params.tokenId,
+        expectOutputList: params.expectOutputList
+    };
+    const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    return okxFetch('POST', '/api/v5/defi/invest/claim-data', clean);
+}
+
+async function defiCalculateEntry(params) {
+    const payload = {
+        investmentId: params.investmentId,
+        address: params.address,
+        inputToken: params.inputToken,
+        inputAmount: params.inputAmount,
+        tokenDecimal: params.tokenDecimal,
+        tickLower: params.tickLower,
+        tickUpper: params.tickUpper
+    };
+    const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    return okxFetch('POST', '/api/v5/defi/invest/calculate-entry', clean);
+}
+
+// ═══════════════════════════════════════════════════════
+// DeFi Portfolio API  (/api/v5/defi/user)
+// ═══════════════════════════════════════════════════════
+
+async function defiPositions(address, chains) {
+    const path = buildGetPath('/api/v5/defi/user/asset-overview', {
+        address: address.toLowerCase(),
+        chains
+    });
+    return okxFetch('GET', path);
+}
+
+async function defiPositionDetail(address, chainIndex, analysisPlatformId) {
+    const path = buildGetPath('/api/v5/defi/user/investment/asset-detail', {
+        address: address.toLowerCase(),
+        chainIndex,
+        analysisPlatformId
+    });
+    return okxFetch('GET', path);
+}
+
+// ═══════════════════════════════════════════════════════
+// Agentic Wallet API  (/api/v5/waas)
+// ═══════════════════════════════════════════════════════
+
+async function awLogin(email, locale) {
+    const payload = {};
+    if (email) payload.email = email;
+    if (locale) payload.locale = locale;
+    return okxFetch('POST', '/api/v5/waas/wallet/login', payload);
+}
+
+async function awVerifyOtp(otp) {
+    return okxFetch('POST', '/api/v5/waas/wallet/verify', { otp });
+}
+
+async function awGetStatus() {
+    return okxFetch('GET', '/api/v5/waas/wallet/status');
+}
+
+async function awGetBalance(options = {}) {
+    const params = {};
+    if (options.all) params.all = 'true';
+    if (options.chainIndex) params.chainIndex = options.chainIndex;
+    if (options.tokenAddress) params.tokenAddress = options.tokenAddress;
+    const path = buildGetPath('/api/v5/waas/wallet/balance', params);
+    return okxFetch('GET', path);
+}
+
+async function awSend(params) {
+    const payload = {
+        amount: params.amount,
+        toAddress: params.toAddress,
+        chainIndex: params.chainIndex,
+        fromAddress: params.fromAddress,
+        contractToken: params.contractToken,
+        force: params.force
+    };
+    const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    return okxFetch('POST', '/api/v5/waas/wallet/send', clean);
+}
+
+async function awContractCall(params) {
+    const payload = {
+        toAddress: params.toAddress,
+        chainIndex: params.chainIndex,
+        amount: params.amount || '0',
+        inputData: params.inputData,
+        unsignedTx: params.unsignedTx,
+        gasLimit: params.gasLimit,
+        fromAddress: params.fromAddress,
+        mevProtection: params.mevProtection,
+        force: params.force
+    };
+    const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    return okxFetch('POST', '/api/v5/waas/wallet/contract-call', clean);
+}
+
+async function awGetHistory(params = {}) {
+    const clean = Object.fromEntries(Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
+    const path = buildGetPath('/api/v5/waas/wallet/history', clean);
+    return okxFetch('GET', path);
+}
+
+async function awSignMessage(params) {
+    const payload = {
+        chainIndex: params.chainIndex,
+        message: params.message,
+        fromAddress: params.fromAddress,
+        type: params.type || 'personal'
+    };
+    return okxFetch('POST', '/api/v5/waas/wallet/sign-message', payload);
+}
+
 /**
  * Get chains supported by portfolio PnL endpoints
  */
@@ -970,6 +1146,26 @@ module.exports = {
     txScan,
     sigScan,
     getApprovals,
+    // DeFi Invest
+    defiSearch,
+    defiDetail,
+    defiPrepare,
+    defiDeposit,
+    defiRedeem,
+    defiClaim,
+    defiCalculateEntry,
+    // DeFi Portfolio
+    defiPositions,
+    defiPositionDetail,
+    // Agentic Wallet
+    awLogin,
+    awVerifyOtp,
+    awGetStatus,
+    awGetBalance,
+    awSend,
+    awContractCall,
+    awGetHistory,
+    awSignMessage,
     // Helpers
     getBanmaoPrice,
     DEFAULT_CHAINS
