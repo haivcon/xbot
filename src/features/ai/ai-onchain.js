@@ -13,13 +13,19 @@ const tradingTools = require('./onchain/tradingTools');
 const marketTools = require('./onchain/marketTools');
 const defiTools = require('./onchain/defiTools');
 const agenticWalletTools = require('./onchain/agenticWalletTools');
+const treasuryTools = require('./onchain/treasuryTools');
+const smartCopyTools = require('./onchain/smartCopyTools');
+const tamagotchiTools = require('./onchain/tamagotchiTools');
 
 const toolHandlers = {
     ...walletTools,
     ...tradingTools,
     ...marketTools,
     ...defiTools,
-    ...agenticWalletTools
+    ...agenticWalletTools,
+    ...treasuryTools,
+    ...smartCopyTools,
+    ...tamagotchiTools
 };
 
 // ═══════════════════════════════════════════════════════

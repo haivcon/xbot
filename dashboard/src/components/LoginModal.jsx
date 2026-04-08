@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
-import { X, Bot, Send, Loader2 } from 'lucide-react';
+import { X, Send, Loader2, Shield, Sparkles, ArrowRight } from 'lucide-react';
 
 export default function LoginModal({ open, onClose }) {
     const { t } = useTranslation();
@@ -9,6 +9,16 @@ export default function LoginModal({ open, onClose }) {
     const [localError, setLocalError] = useState(null);
     const [botUsername, setBotUsername] = useState(null);
     const telegramWidgetRef = useRef(null);
+    const [animateIn, setAnimateIn] = useState(false);
+
+    // Animate in
+    useEffect(() => {
+        if (open) {
+            requestAnimationFrame(() => setAnimateIn(true));
+        } else {
+            setAnimateIn(false);
+        }
+    }, [open]);
 
     // Fetch bot username with retry
     useEffect(() => {
@@ -64,87 +74,109 @@ export default function LoginModal({ open, onClose }) {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            {/* Backdrop with blur */}
+            <div className={`absolute inset-0 bg-black/70 backdrop-blur-md transition-opacity duration-300 ${
+                animateIn ? 'opacity-100' : 'opacity-0'
+            }`} />
 
             {/* Modal */}
             <div
-                className="relative w-full max-w-md bg-surface-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden animate-[fadeIn_0.2s_ease]"
+                className={`relative w-full max-w-[420px] transition-all duration-500 ease-out ${
+                    animateIn ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'
+                }`}
                 onClick={e => e.stopPropagation()}
             >
-                {/* Decorative gradient */}
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-500 via-cyan-500 to-purple-500" />
+                {/* Glow behind card */}
+                <div className="absolute -inset-1 bg-gradient-to-br from-brand-500/20 via-transparent to-cyan-500/20 rounded-3xl blur-xl opacity-60" />
 
-                {/* Close button */}
-                <button
-                    onClick={onClose}
-                    className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-surface-200/50 hover:text-white transition-colors"
-                >
-                    <X size={18} />
-                </button>
+                <div className="relative bg-surface-900/95 backdrop-blur-2xl border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+                    {/* Close button */}
+                    <button
+                        onClick={onClose}
+                        className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.04] hover:bg-white/[0.1] text-surface-200/40 hover:text-white transition-all duration-200"
+                    >
+                        <X size={16} />
+                    </button>
 
-                <div className="p-8">
-                    {/* Header */}
-                    <div className="flex items-center gap-3 mb-6">
-                        <img src="/xbot-logo.png" alt="XBot" className="w-11 h-11 rounded-xl shadow-lg shadow-brand-500/25 object-cover" />
-                        <div>
-                            <h2 className="text-lg font-bold text-white">
-                                {t('dashboard.auth.loginBtn') || 'Login with Telegram'}
-                            </h2>
-                            <p className="text-xs text-surface-200/50">
-                                {t('dashboard.auth.loginHint') || 'Sign in using your Telegram account'}
-                            </p>
+                    <div className="p-8">
+                        {/* Header */}
+                        <div className="flex items-center gap-4 mb-7">
+                            <div className="relative">
+                                <img src="/xbot-logo.png" alt="XBot" className="w-14 h-14 rounded-2xl shadow-xl shadow-brand-500/20 object-cover ring-1 ring-white/10" />
+                                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-[3px] border-surface-900 flex items-center justify-center">
+                                    <Sparkles size={8} className="text-white" />
+                                </div>
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-white mb-0.5">
+                                    {t('dashboard.auth.loginBtn') || 'Login with Telegram'}
+                                </h2>
+                                <p className="text-xs text-surface-200/40">
+                                    {t('dashboard.auth.loginHint') || 'Sign in using your Telegram account'}
+                                </p>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Error */}
-                    {displayError && (
-                        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400 flex items-start gap-2">
-                            <span className="text-red-400 shrink-0">⚠️</span>
-                            {displayError}
-                        </div>
-                    )}
-
-                    {/* Telegram Login */}
-                    <div className="space-y-4">
-                        {/* Telegram Login Widget */}
-                        {botUsername && (
-                            <div ref={telegramWidgetRef} className="flex items-center justify-center min-h-[44px]" />
+                        {/* Error */}
+                        {displayError && (
+                            <div className="mb-5 p-3.5 bg-red-500/8 border border-red-500/15 rounded-xl text-sm text-red-400 flex items-start gap-2.5 animate-[fadeIn_0.2s_ease]">
+                                <span className="text-red-400 shrink-0 mt-0.5">⚠️</span>
+                                <span className="leading-snug">{displayError}</span>
+                            </div>
                         )}
 
-                        {/* Open bot in Telegram button — always shown */}
-                        <a
-                            href={botUsername ? `https://t.me/${botUsername}?start=dashboard_login` : '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-[#2AABEE] text-white rounded-xl font-semibold hover:bg-[#229ED9] transition-all duration-300 hover:scale-[1.01] no-underline text-sm ${!botUsername ? 'opacity-70 pointer-events-none' : ''}`}
-                        >
-                            {!botUsername ? (
-                                <Loader2 size={16} className="animate-spin" />
-                            ) : (
-                                <Send size={16} />
+                        {/* Telegram Login */}
+                        <div className="space-y-4">
+                            {/* Telegram Login Widget */}
+                            {botUsername && (
+                                <div ref={telegramWidgetRef} className="flex items-center justify-center min-h-[44px]" />
                             )}
-                            {t('dashboard.auth.loginBtn') || 'Login with Telegram'}
-                        </a>
 
-                        {/* Divider */}
-                        <div className="flex items-center gap-3">
-                            <div className="flex-1 h-px bg-white/5" />
-                            <span className="text-[10px] text-surface-200/30 uppercase tracking-wider">
-                                {t('dashboard.auth.autoLoginHint') || 'or type /dashboard in Telegram'}
-                            </span>
-                            <div className="flex-1 h-px bg-white/5" />
+                            {/* Open bot in Telegram button */}
+                            <a
+                                href={botUsername ? `https://t.me/${botUsername}?start=dashboard_login` : '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`group w-full flex items-center justify-center gap-2.5 px-4 py-3.5 bg-[#2AABEE] text-white rounded-xl font-bold hover:bg-[#1E9AD6] transition-all duration-300 hover:scale-[1.01] hover:shadow-lg hover:shadow-[#2AABEE]/20 no-underline text-sm ${!botUsername ? 'opacity-60 pointer-events-none' : ''}`}
+                            >
+                                {!botUsername ? (
+                                    <Loader2 size={17} className="animate-spin" />
+                                ) : (
+                                    <Send size={17} />
+                                )}
+                                <span>{t('dashboard.auth.loginBtn') || 'Login with Telegram'}</span>
+                                <ArrowRight size={15} className="opacity-60 group-hover:translate-x-0.5 group-hover:opacity-100 transition-all" />
+                            </a>
+
+                            {/* Divider */}
+                            <div className="flex items-center gap-4 py-1">
+                                <div className="flex-1 h-px bg-gradient-to-r from-transparent to-white/[0.06]" />
+                                <span className="text-[10px] text-surface-200/25 uppercase tracking-wider font-medium shrink-0">
+                                    {t('dashboard.auth.autoLoginHint') || 'or type /dashboard in Telegram'}
+                                </span>
+                                <div className="flex-1 h-px bg-gradient-to-l from-transparent to-white/[0.06]" />
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Hint */}
-                    <div className="mt-5 pt-4 border-t border-white/5">
-                        <p className="text-[11px] text-surface-200/30 text-center">
-                            🔒 {t('dashboard.auth.secureHint') || 'Your role (Owner/User) is verified via Telegram'}
-                        </p>
-                        <p className="text-[11px] text-surface-200/30 text-center mt-1">
-                            💡 Type <code className="px-1 py-0.5 bg-white/5 rounded text-surface-200/50">/dashboard</code> in Telegram for auto-login
-                        </p>
+                        {/* Trust signals */}
+                        <div className="mt-6 pt-5 border-t border-white/[0.04]">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                                    <Shield size={13} className="text-emerald-400" />
+                                </div>
+                                <p className="text-[11px] text-surface-200/35 leading-relaxed">
+                                    {t('dashboard.auth.secureHint') || 'Your role (Owner/User) is verified via Telegram'}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 rounded-lg bg-brand-500/10 flex items-center justify-center shrink-0">
+                                    <Sparkles size={13} className="text-brand-400" />
+                                </div>
+                                <p className="text-[11px] text-surface-200/35 leading-relaxed">
+                                    Type <code className="px-1.5 py-0.5 bg-white/[0.04] border border-white/[0.06] rounded-md text-surface-200/50 text-[10px] font-mono">/dashboard</code> in Telegram for auto-login
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

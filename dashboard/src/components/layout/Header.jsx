@@ -16,8 +16,8 @@ const ACTION_LABELS = {
 };
 
 const SEARCH_TARGETS = [
-    { key: 'searchUsers', path: '/owner/users', icon: '👤' },
-    { key: 'searchGroups', path: '/owner/groups', icon: '💬' },
+    { key: 'searchUsers', path: '/users', icon: '👤' },
+    { key: 'searchGroups', path: '/groups', icon: '💬' },
 ];
 
 function timeAgo(ts, t) {
@@ -96,7 +96,7 @@ export default function Header({ onMenuClick }) {
 
     const handleSearchKeyDown = (e) => {
         if (e.key === 'Enter' && searchQuery.trim()) {
-            handleSearch('/owner/users');
+            handleSearch('/users');
         }
         if (e.key === 'Escape') {
             setSearchOpen(false);

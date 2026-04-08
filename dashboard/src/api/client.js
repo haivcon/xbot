@@ -155,7 +155,7 @@ class ApiClient {
         return this.get('/user/stats');
     }
 
-    getLeaderboard(gameType = 'sudoku') {
+    getGameLeaderboard(gameType = 'sudoku') {
         return this.get(`/user/leaderboard?gameType=${gameType}`);
     }
 
@@ -196,19 +196,19 @@ class ApiClient {
         return this.delete(`/owner/alerts/${id}`);
     }
 
-    getPosts() {
+    getOwnerPosts() {
         return this.get('/owner/posts');
     }
 
-    createPost(data) {
+    createOwnerPost(data) {
         return this.post('/owner/posts', data);
     }
 
-    updatePost(id, data) {
+    updateOwnerPost(id, data) {
         return this.put(`/owner/posts/${id}`, data);
     }
 
-    deletePost(id) {
+    deleteOwnerPost(id) {
         return this.delete(`/owner/posts/${id}`);
     }
 
@@ -391,7 +391,7 @@ class ApiClient {
 
     // === New OnchainOS APIs ===
     getAddressTracker(trackerType = '1', chainIndex, limit = '20') { return this.get(`/market/address-tracker?trackerType=${trackerType}${chainIndex ? '&chainIndex=' + chainIndex : ''}&limit=${limit}`); }
-    getLeaderboard(chainIndex = '1', timeFrame = '2', opts = {}) { return this.get(`/market/leaderboard?chainIndex=${chainIndex}&timeFrame=${timeFrame}${opts.traderType ? '&traderType=' + opts.traderType : ''}&limit=${opts.limit || '20'}`); }
+    getMarketLeaderboard(chainIndex = '1', timeFrame = '2', opts = {}) { return this.get(`/market/leaderboard?chainIndex=${chainIndex}&timeFrame=${timeFrame}${opts.traderType ? '&traderType=' + opts.traderType : ''}&limit=${opts.limit || '20'}`); }
     getLeaderboardChains() { return this.get('/market/leaderboard-chains'); }
     tokenScan(tokens) { return this.post('/market/security/token-scan', { tokens }); }
     getClusterInfo(chainIndex, tokenContractAddress, mode = 'overview') { return this.get(`/market/token/cluster?chainIndex=${chainIndex}&tokenContractAddress=${tokenContractAddress}&mode=${mode}`); }

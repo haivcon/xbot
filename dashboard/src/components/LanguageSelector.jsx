@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Globe, ChevronDown, Check } from 'lucide-react';
 
@@ -19,9 +19,12 @@ export default function LanguageSelector({ variant = 'header' }) {
     const { i18n } = useTranslation();
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
-    const currentLang = i18n.language?.substring(0, 2) || 'en';
+
+    // Normalize language code — i18n.language can be 'en-US', 'zh-CN', etc.
+    const currentLang = (i18n.resolvedLanguage || i18n.language || 'en').substring(0, 2);
     const current = LANGUAGES.find(l => l.code === currentLang) || LANGUAGES[0];
 
+    // Close dropdown on outside click
     useEffect(() => {
         const close = (e) => {
             if (ref.current && !ref.current.contains(e.target)) setOpen(false);
@@ -29,6 +32,25 @@ export default function LanguageSelector({ variant = 'header' }) {
         document.addEventListener('mousedown', close);
         return () => document.removeEventListener('mousedown', close);
     }, []);
+
+    // Handle language change with proper persistence
+    const handleChange = useCallback((langCode) => {
+        // Prevent unnecessary re-renders if same language
+        if (langCode === currentLang) {
+            setOpen(false);
+            return;
+        }
+
+        // Change language — i18next-browser-languagedetector will persist to localStorage
+        i18n.changeLanguage(langCode).then(() => {
+            // Also explicitly store to ensure persistence
+            try { localStorage.setItem('xbot_dashboard_lang', langCode); } catch {}
+            // Force document lang attribute update
+            document.documentElement.lang = langCode;
+        });
+
+        setOpen(false);
+    }, [i18n, currentLang]);
 
     // ─── Style variants ─────────────────────────────────────────────
     const isLanding = variant === 'landing';
@@ -45,10 +67,11 @@ export default function LanguageSelector({ variant = 'header' }) {
         : 'absolute top-full right-0 mt-1.5 w-48';
 
     return (
-        <div ref={ref} className="relative">
+        <div ref={ref} className="relative z-50">
             <button
                 onClick={() => setOpen(!open)}
                 className={btnClass}
+                type="button"
             >
                 {isSidebar && <Globe size={15} className="text-surface-200/50" />}
                 <span className="text-base leading-none">{current.flag}</span>
@@ -57,11 +80,12 @@ export default function LanguageSelector({ variant = 'header' }) {
             </button>
 
             {open && (
-                <div className={`${dropdownPosition} bg-surface-800 border border-white/10 rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50 animate-[fadeIn_0.15s_ease]`}>
+                <div className={`${dropdownPosition} bg-surface-800 border border-white/10 rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-[60] animate-[fadeIn_0.15s_ease]`}>
                     {LANGUAGES.map((lang) => (
                         <button
                             key={lang.code}
-                            onClick={() => { i18n.changeLanguage(lang.code); setOpen(false); }}
+                            type="button"
+                            onClick={() => handleChange(lang.code)}
                             className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm transition-colors
                                 ${lang.code === currentLang
                                     ? 'bg-brand-500/10 text-brand-400'

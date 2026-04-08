@@ -996,6 +996,35 @@ module.exports.ONCHAIN_TOOLS = [
                 name: 'aw_sign_message',
                 description: 'Sign a message using Agentic Wallet (EIP-191 or EIP-712). Vietnamese: "ký tin nhắn ví agentic", "sign message TEE". English: "sign message agentic wallet".',
                 parameters: { type: 'object', properties: { chainIndex: { type: 'string', description: 'Chain ID' }, message: { type: 'string', description: 'Message to sign (or EIP-712 typed data JSON)' }, fromAddress: { type: 'string', description: 'Signer address' }, type: { type: 'string', description: '"personal" (default) or "eip712"' } }, required: ['chainIndex', 'message', 'fromAddress'] }
+            },
+            // ══════════════════════════════════════════
+            // Treasury Governor (AI-Managed Community Fund)
+            // ══════════════════════════════════════════
+            {
+                name: 'manage_treasury',
+                description: 'Manage the AI Treasury Governor — autonomous community fund that uses Onchain OS signals to trade BANMAO on X Layer. Actions: status, start, stop, config, history, run_cycle. Vietnamese: "quỹ cộng đồng", "thủ quỹ AI", "treasury", "quỹ banmao", "bật treasury", "tắt treasury". English: "treasury governor", "community fund", "AI treasury", "treasury status".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"status", "start", "stop", "config", "history", "run_cycle"' }, mode: { type: 'string', description: '"paper" (simulate) or "live" (real trades). Default "paper"' }, notifyGroupId: { type: 'string', description: 'Telegram group ID to send reports to' }, maxActionPct: { type: 'number', description: 'Max % of treasury per action (1-10). Default 5' }, riskLevel: { type: 'string', description: '"conservative", "moderate", "aggressive". Default "moderate"' } }, required: ['action'] }
+            },
+            {
+                name: 'treasury_status',
+                description: 'Quick check on AI Treasury Governor status — running state, last action, portfolio value. Vietnamese: "trạng thái quỹ", "treasury đang chạy không", "thủ quỹ thế nào". English: "treasury status", "fund status", "governor running?".',
+                parameters: { type: 'object', properties: {}, required: [] }
+            },
+            // ══════════════════════════════════════════
+            // Smart Copy Engine (Intent-based Copy-Trading)
+            // ══════════════════════════════════════════
+            {
+                name: 'smart_copy',
+                description: 'AI Smart Copy-Trader — automatically copies whale and Smart Money trades on X Layer. Actions: start, stop, status, leaders, discover. Vietnamese: "copy trade", "copy cá mập", "sao chép giao dịch", "theo dõi whale", "copy trade X Layer". English: "copy trade", "smart copy", "copy whale", "follow traders".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"start", "stop", "status", "leaders", "discover"' }, budgetUsd: { type: 'number', description: 'Total budget in USD (default 50)' }, maxPerTradeUsd: { type: 'number', description: 'Max amount per copy trade (default 10)' }, maxLeaders: { type: 'number', description: 'Number of leaders to track (default 5)' }, chainIndex: { type: 'string', description: 'Chain ID (default 196 = X Layer)' } }, required: ['action'] }
+            },
+            // ══════════════════════════════════════════
+            // Banmao Onchain Tamagotchi (AI Pet)
+            // ══════════════════════════════════════════
+            {
+                name: 'banmao_pet',
+                description: 'Banmao Onchain Tamagotchi — AI pet whose mood reacts to real on-chain data! Actions: status/mood, feed, play, pet, start, stop, check_mood. Vietnamese: "banmao thú cưng", "thú cưng AI", "cho banmao ăn", "chơi với banmao", "banmao vui không", "cảm xúc banmao". English: "banmao pet", "pet mood", "feed banmao", "play with banmao", "how is banmao".',
+                parameters: { type: 'object', properties: { action: { type: 'string', description: '"status", "mood", "feed", "play", "pet", "start", "stop", "check_mood"' }, groupId: { type: 'string', description: 'Telegram group ID for mood notifications (for start action)' } }, required: ['action'] }
             }
         ]
     }

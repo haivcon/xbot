@@ -36,6 +36,9 @@ import {
     ChevronRight,
     Sparkles,
     TrendingUp,
+    Building2,
+    Cat,
+    Copy,
 } from 'lucide-react';
 import useThemeStore from '@/stores/themeStore';
 
@@ -224,6 +227,8 @@ export default function Sidebar({ open, onClose }) {
                 { to: '/chat', icon: Bot, label: t('dashboard.sidebar.aiChat') || 'AI Chat' },
                 { to: '/ai-memory', icon: Brain, label: t('dashboard.sidebar.aiMemory') || 'AI Memory' },
                 { to: '/ai-trader', icon: TrendingUp, label: t('dashboard.sidebar.aiTrader') || 'AI Trader', badge: 'β' },
+                { to: '/treasury', icon: Building2, label: 'Treasury & Pet', badge: '★' },
+                { to: '/smart-copy', icon: Copy, label: 'Smart Copy', badge: '★' },
             ],
         },
         {
@@ -272,7 +277,7 @@ export default function Sidebar({ open, onClose }) {
                 ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                 bg-surface-850 dark:bg-surface-850 border-white/5 dark:border-white/5
             `}
-            style={document.documentElement.classList.contains('dark') ? {} : { background: '#fff', borderColor: 'rgba(226,232,240,0.6)' }}
+            style={theme !== 'dark' ? { background: '#fff', borderColor: 'rgba(226,232,240,0.6)' } : {}}
         >
             {/* Logo area */}
             <div className="flex items-center justify-between h-16 px-5 border-b border-white/5">

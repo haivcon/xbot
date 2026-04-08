@@ -140,6 +140,8 @@ function getStoredWatchlist() {
 /* ── #1 + #14 Watchlist with AbortController + Customizable ── */
 function WatchlistTokens({ tokens }) {
     const [prices, setPrices] = useState({});
+    // Stable dependency key to prevent infinite re-renders when parent re-renders with a new tokens array reference
+    const tokenKey = tokens.map(t => t.addr).join(',');
     useEffect(() => {
         if (!tokens.length) return;
         const controller = new AbortController();
@@ -162,7 +164,7 @@ function WatchlistTokens({ tokens }) {
         fetchPrices();
         iv = setInterval(fetchPrices, 30000);
         return () => { controller.abort(); clearInterval(iv); }; // #1: cleanup
-    }, [tokens]);
+    }, [tokenKey]);
 
     const fmtP = (p) => {
         if (!p) return '—';

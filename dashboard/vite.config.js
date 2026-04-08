@@ -19,10 +19,16 @@ function swVersionPlugin() {
         }
     };
 }
+// Read version from package.json for build-time injection
+const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'));
 
 export default defineConfig(({ mode }) => ({
     base: '/',
     plugins: [react(), swVersionPlugin()],
+    define: {
+        __APP_VERSION__: JSON.stringify(pkg.version),
+        __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    },
     resolve: {
         alias: {
             '@': path.resolve(__dirname, './src'),

@@ -2241,6 +2241,175 @@ function createDashboardRoutes() {
         }
     });
 
+    // ==========================================
+    // HACKATHON FEATURES API — Treasury / Smart Copy / Tamagotchi
+    // ==========================================
+
+    // --- Treasury Governor ---
+    router.get('/treasury/status', async (req, res) => {
+        try {
+            const treasury = require('../features/treasuryGovernor');
+            const status = await treasury.getStatus();
+            res.json(status);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/treasury/start', ownerGuard, async (req, res) => {
+        try {
+            const treasury = require('../features/treasuryGovernor');
+            const { mode, notifyGroupId, maxActionPct, riskLevel } = req.body;
+            if (mode) await treasury.updateConfig({ mode });
+            if (notifyGroupId) await treasury.updateConfig({ notifyGroupId });
+            if (maxActionPct) await treasury.updateConfig({ maxActionPct: Math.min(10, Math.max(1, Number(maxActionPct))) });
+            if (riskLevel) await treasury.updateConfig({ riskLevel });
+            await treasury.updateConfig({ enabled: 1 });
+            const result = await treasury.startGovernor();
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/treasury/stop', ownerGuard, async (req, res) => {
+        try {
+            const treasury = require('../features/treasuryGovernor');
+            treasury.stopGovernor();
+            await treasury.updateConfig({ enabled: 0 });
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/treasury/config', ownerGuard, async (req, res) => {
+        try {
+            const treasury = require('../features/treasuryGovernor');
+            await treasury.updateConfig(req.body);
+            const config = await treasury.getConfig();
+            res.json({ success: true, config });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/treasury/run-cycle', ownerGuard, async (req, res) => {
+        try {
+            const treasury = require('../features/treasuryGovernor');
+            await treasury.runCycle();
+            const status = await treasury.getStatus();
+            res.json({ success: true, lastCycle: status.lastCycle });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Smart Copy Engine ---
+    router.get('/smart-copy/status', async (req, res) => {
+        try {
+            const smartCopy = require('../features/smartCopyEngine');
+            const userId = req.dashboardUser.userId;
+            const status = await smartCopy.getSessionStatus(userId);
+            res.json(status);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/smart-copy/leaders', async (req, res) => {
+        try {
+            const smartCopy = require('../features/smartCopyEngine');
+            const leaders = await smartCopy.getLeaderboard();
+            res.json({ leaders });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/smart-copy/start', async (req, res) => {
+        try {
+            const smartCopy = require('../features/smartCopyEngine');
+            const userId = req.dashboardUser.userId;
+            const result = await smartCopy.startSession(userId, req.body);
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/smart-copy/stop', async (req, res) => {
+        try {
+            const smartCopy = require('../features/smartCopyEngine');
+            const userId = req.dashboardUser.userId;
+            const result = await smartCopy.stopSession(userId);
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/smart-copy/discover', async (req, res) => {
+        try {
+            const smartCopy = require('../features/smartCopyEngine');
+            const leaders = await smartCopy.discoverLeaders(req.body.chainIndex || '196');
+            res.json({ leaders });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Tamagotchi ---
+    router.get('/tamagotchi/status', async (req, res) => {
+        try {
+            const tamagotchi = require('../features/tamagotchi');
+            const status = await tamagotchi.getFullStatus();
+            res.json(status);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/tamagotchi/start', ownerGuard, async (req, res) => {
+        try {
+            const tamagotchi = require('../features/tamagotchi');
+            const result = await tamagotchi.startTamagotchi(req.body.groupId);
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/tamagotchi/stop', ownerGuard, async (req, res) => {
+        try {
+            const tamagotchi = require('../features/tamagotchi');
+            const result = tamagotchi.stopTamagotchi();
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/tamagotchi/interact', async (req, res) => {
+        try {
+            const tamagotchi = require('../features/tamagotchi');
+            const result = await tamagotchi.interact(req.body.action || 'pet');
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/tamagotchi/check-mood', async (req, res) => {
+        try {
+            const tamagotchi = require('../features/tamagotchi');
+            const result = await tamagotchi.checkMood();
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     return router;
 }
 
