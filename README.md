@@ -31,7 +31,8 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
-### 🎉 What's New in v1.1.0 (Professional Dashboard Release)
+### 🎉 What's New in v1.1.1 (Hotfix & Version Synchronization)
+- **Version Sync Fixes**: Ensured background Node.js processes properly export version payloads (`/health`) to match frontend displays.
 - **Cinematic Web Dashboard UX**: Full glassmorphism UI overhaul, dark/light mode toggle via `Zustand` store, and responsive Bento Grid layout.
 - **Real-Time Data Integration**: Dashboard now syncs live metrics directly from `/api/bot-info` and `/api/health` with automatic background polling.
 - **Dynamic Versioning & Localization Fixes**: Auto-injects `package.json` version securely via Vite build hooks. Full 6-language UI translations (`i18n`) for all dashboard statistics and modules.
