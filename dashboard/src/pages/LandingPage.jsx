@@ -894,6 +894,9 @@ export default function LandingPage({ onLogin }) {
                                                 {t('dashboard.landing.listYourToken', 'Want to feature your token & community here? Apply on X')}
                                                 <ExternalLink size={12} className="opacity-50" />
                                             </a>
+                                            <p className={`mt-3 text-[10px] sm:text-[11px] max-w-lg mx-auto ${isDark ? 'text-surface-400' : 'text-surface-500'}`}>
+                                                {t('dashboard.landing.autoListInstruction', 'Or simply add @XlayerAi_bot as an Admin to your Telegram Group to list it automatically.')}
+                                            </p>
                                         </div>
                                     )}
                                 </>

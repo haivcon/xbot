@@ -31,6 +31,11 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
+### 🚀 What's New in v1.2.1 (Ecosystem Auto-Discovery)
+- **Zero-Touch Community Listing**: Verified and documented the automated bot-integration pipeline. Telegram groups are instantly indexed and displayed on the Web Dashboard the moment `@XlayerAi_bot` is added as an administrator.
+- **Multilingual Onboarding UX**: Expanded the dashboard call-to-actions with detailed, 6-language (EN, VI, ZH, KO, RU, ID) typography instructing users on the automated bot-integration process.
+- **Real-Time Synergy**: Confirmed the dashboard's dynamic fetch-loops (member counts, avatars, and live integration statuses) operate synchronously with background Telegram Webhook events.
+
 ### 🚀 What's New in v1.2.0 (XLayer Ecosystem Hub)
 - **Live Token Intelligence**: Integrated OKX OnchainOS directly into the Web Dashboard to stream real-time prices, 24h volatility, and external explorer links for established XLayer ecosystem tokens.
 - **Secure Community Proxy**: Implemented a backend proxy router to securely relay Telegram Group Avatars (Logos) using the Bot Token, completely shielding sensitive credentials from public client-side.
