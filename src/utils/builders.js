@@ -22,7 +22,7 @@ function buildBanNotice(lang, userInfo = {}) {
         fullName: escapeHtml(fullName),
         telegramId: idLabel,
         username,
-        contact: 'x.com/haivcon'
+        contact: 'x.com/haivcon_X'
     });
 }
 

@@ -2144,7 +2144,7 @@ function CommunitiesView({ t, navigate, tokenAddresses, prices, priceLoading, to
                     </div>
 
                     <a
-                        href="https://x.com/haivcon"
+                        href="https://x.com/haivcon_X"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="group flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-xl shadow-brand-500/25 hover:shadow-brand-500/40 hover:scale-[1.03] active:scale-95 transition-all duration-300 whitespace-nowrap"

@@ -31,12 +31,12 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
-### 🎉 What's New in v1.1.1 (Hotfix & Version Synchronization)
-- **Version Sync Fixes**: Ensured background Node.js processes properly export version payloads (`/health`) to match frontend displays.
-- **Cinematic Web Dashboard UX**: Full glassmorphism UI overhaul, dark/light mode toggle via `Zustand` store, and responsive Bento Grid layout.
-- **Real-Time Data Integration**: Dashboard now syncs live metrics directly from `/api/bot-info` and `/api/health` with automatic background polling.
-- **Dynamic Versioning & Localization Fixes**: Auto-injects `package.json` version securely via Vite build hooks. Full 6-language UI translations (`i18n`) for all dashboard statistics and modules.
-- **Professional Footer Layout**: Streamlined dev branding, integrated GitHub open-source linking, and official social portals for immediate accessibility.
+### 🚀 What's New in v1.2.0 (XLayer Ecosystem Hub)
+- **Live Token Intelligence**: Integrated OKX OnchainOS directly into the Web Dashboard to stream real-time prices, 24h volatility, and external explorer links for established XLayer ecosystem tokens.
+- **Secure Community Proxy**: Implemented a backend proxy router to securely relay Telegram Group Avatars (Logos) using the Bot Token, completely shielding sensitive credentials from public client-side.
+- **Dynamic Member Sync**: The dashboard now automatically pulls live member counts and group invite links for registered Telegram Supergroups via the bot's background polling service.
+- **Multi-Language UI Expansion**: The entire Public Live Space, including all ecosystem metrics, CTA banners, and terminology, is now fully localized across 6 languages (EN, VI, ZH, KO, RU, ID).
+- **UX Form & Function Polish**: Dropped CSS rendering bugs (maskImage blur), replaced blocked creator handles (`@haivcon_X`), and implemented one-click token address copying for supreme user experience.
 
 ---
 

@@ -140,6 +140,11 @@ async function getUserRole(userId, username) {
 function createDashboardRoutes() {
     const router = Router();
 
+    let _cachedCommunities = null;
+    let _communitiesLastFetched = 0;
+    let _cachedTokens = null;
+    let _tokensLastFetched = 0;
+
     // --- Public Info (no auth required) ---
     router.get('/bot-info', async (req, res) => {
         let botUsername = (process.env.BOT_USERNAME || global._botUsername || '').replace(/^@+/, '');
@@ -156,10 +161,103 @@ function createDashboardRoutes() {
                 log.warn('bot-info: Failed to fetch bot username via getMe:', e.message);
             }
         }
+
+        // Fetch Rich Communities (Cache 1 hour)
+        if (!_cachedCommunities || Date.now() - _communitiesLastFetched > 3600000) {
+            try {
+                const { bot } = require('../core/bot');
+                const groups = await db.listGroupProfiles?.() || [];
+                let rich = [];
+                for(const g of groups) {
+                    if(!g.title || g.title.toLowerCase() === 'test') continue;
+                    try {
+                        const count = await bot.getChatMemberCount(g.chatId).catch(() => 0);
+                        let chatUsername = null;
+                        let chatInviteLink = null;
+                        try {
+                            const chat = await bot.getChat(g.chatId);
+                            chatUsername = chat.username || null;
+                            chatInviteLink = chat.invite_link || null;
+                        } catch(e) {}
+                        
+                        let link = chatInviteLink;
+                        if (!link && chatUsername) link = `https://t.me/${chatUsername}`;
+
+                        const finalCount = count > 0 ? count : (g.memberCount || 0);
+
+                        rich.push({
+                            chatId: g.chatId,
+                            title: g.title,
+                            memberCount: finalCount,
+                            type: g.type,
+                            link
+                        });
+                        
+                        if (count > 0 && typeof db.upsertGroupProfile === 'function') {
+                            db.upsertGroupProfile({ ...g, memberCount: count }).catch(() => {});
+                        }
+                    } catch (e) {}
+                }
+                _cachedCommunities = rich.sort((a, b) => b.memberCount - a.memberCount);
+                _communitiesLastFetched = Date.now();
+            } catch (e) {
+                log.warn('bot-info: Failed to fetch rich communities:', e.message);
+                if (!_cachedCommunities) _cachedCommunities = [];
+            }
+        }
+
+        // Fetch Tokens (Cache 1 minute)
+        if (!_cachedTokens || Date.now() - _tokensLastFetched > 60000) {
+            try {
+                const onchainos = require('../services/onchainos');
+                const watchTokens = [
+                    { chainIndex: '196', tokenContractAddress: '0x16d91d1615fc55b76d5f92365bd60c069b46ef78', symbol: 'BANMAO' },
+                    { chainIndex: '196', tokenContractAddress: '0x87669801a1fad6dad9db70d27ac752f452989667', symbol: 'NIUMA' },
+                    { chainIndex: '196', tokenContractAddress: '0xdcc83b32b6b4e95a61951bfcc9d71967515c0fca', symbol: 'XWIZARD' }
+                ];
+                const [prices, basics] = await Promise.all([
+                    onchainos.getTokenPriceInfo(watchTokens).catch(() => []),
+                    onchainos.getTokenBasicInfo(watchTokens).catch(() => [])
+                ]);
+                _cachedTokens = watchTokens.map(t => {
+                    const priceData = (prices || []).find(p => p.tokenContractAddress?.toLowerCase() === t.tokenContractAddress?.toLowerCase());
+                    const basicData = (basics || []).find(p => p.tokenContractAddress?.toLowerCase() === t.tokenContractAddress?.toLowerCase());
+                    return {
+                        symbol: t.symbol,
+                        address: t.tokenContractAddress,
+                        price: priceData?.price || '0',
+                        priceChange24h: priceData?.priceChange24h || '0',
+                        logoUrl: basicData?.tokenLogoUrl || basicData?.logoUrl || null
+                    };
+                });
+                _tokensLastFetched = Date.now();
+            } catch (e) {
+                log.warn('bot-info: Failed to fetch cached tokens:', e.message);
+                if (!_cachedTokens) _cachedTokens = [];
+            }
+        }
+
         res.json({
             botUsername: botUsername || null,
             dashboardUrl: `${req.protocol}://${req.get('host')}/dashboard/`,
+            communities: _cachedCommunities,
+            tokens: _cachedTokens,
         });
+    });
+
+    router.get('/community-logo/:chatId', async (req, res) => {
+        try {
+            const { bot } = require('../core/bot');
+            const chat = await bot.getChat(req.params.chatId);
+            if (!chat || !chat.photo || !chat.photo.small_file_id) {
+                return res.status(404).json({error: 'no photo'});
+            }
+            const fileStream = bot.getFileStream(chat.photo.small_file_id);
+            res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache image for 1 day
+            fileStream.pipe(res);
+        } catch(e) {
+            res.status(500).json({error: 'failed'});
+        }
     });
 
     // --- Auth: One-time token auto-login (from /dashboard bot command) ---
@@ -431,7 +529,7 @@ function createDashboardRoutes() {
                 uptimeSeconds: Math.round(process.uptime()),
                 startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
                 now: new Date().toISOString(),
-                version: process.env.npm_package_version || '1.0.0',
+                version: process.env.npm_package_version || require('../../package.json').version || '1.0.0',
                 node: process.version,
                 memory: {
                     rss: Math.round(mem.rss / 1024 / 1024) + 'MB',

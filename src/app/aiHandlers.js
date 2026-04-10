@@ -1314,7 +1314,7 @@ function createAiHandlers(deps) {
       const donateTitle = t(lang, 'ai_donate_title') || (lang === 'vi' ? 'Ủng hộ' : lang === 'zh' ? '支持' : lang === 'ko' ? '지원' : lang === 'ru' ? 'Поддержка' : lang === 'id' ? 'Dukung' : 'Support');
       const donateLabel = lang === 'vi' ? 'Ủng hộ phát triển' : lang === 'zh' ? '支持开发' : lang === 'ko' ? '개발 지원' : lang === 'ru' ? 'Поддержать разработку' : lang === 'id' ? 'Dukung pengembangan' : 'Support development';
       introLines.push(`\n━━━ 💝 ${donateTitle} ━━━`);
-      introLines.push(`${donateLabel}: https://x.com/haivcon`);
+      introLines.push(`${donateLabel}: https://x.com/haivcon_X`);
       const addressLabel = lang === 'vi' ? 'Địa chỉ' : lang === 'zh' ? '地址' : lang === 'ko' ? '주소' : lang === 'ru' ? 'Адрес' : lang === 'id' ? 'Alamat' : 'Address';
       introLines.push(`${addressLabel}: \`0x92809f2837f708163d375960063c8a3156fceacb\``);
 

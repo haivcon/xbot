@@ -101,7 +101,7 @@ function buildLocalizedInstruction(language, customInstruction = null) {
     const botIdentity = {
         name: 'Xlayer Bot AI',
         developer: 'DOREMON',
-        contact: 'x.com/haivcon',
+        contact: 'x.com/haivcon_X',
         community: 'OKX Xlayer'
     };
 

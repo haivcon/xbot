@@ -15,7 +15,7 @@ function createGameFunctions(deps) {
             const { msg } = context;
             const lang = await getLang(msg);
             const introduction = t(lang, 'aib_bot_introduction') ||
-                "I'm Xlayer Bot AI, a virtual assistant helping OKX's Xlayer community. Developed by DOREMON (x.com/haivcon)";
+                "I'm Xlayer Bot AI, a virtual assistant helping OKX's Xlayer community. Developed by DOREMON (x.com/haivcon_X)";
             return { success: true, introduction, message: introduction };
         } catch (error) {
             return { success: false, error: `Failed to get introduction: ${error.message}` };
