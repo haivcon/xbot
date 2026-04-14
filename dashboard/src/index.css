@@ -557,7 +557,7 @@
 
   /* === Chat Page Mobile Overrides === */
   @media (max-width: 767px) {
-    /* Full-bleed chat on mobile */
+    
     .chat-page-mobile {
       margin: -1rem !important;
       height: 100vh !important;

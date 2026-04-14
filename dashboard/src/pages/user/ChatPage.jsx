@@ -1838,7 +1838,7 @@ export default function ChatPage() {
 
     return (
         <>
-        <div className={`flex overflow-hidden bg-surface-900/50 ${isMobile ? 'chat-page-mobile h-[100dvh]' : 'h-full rounded-2xl border border-white/5'}`}>
+        <div className={`flex overflow-hidden bg-surface-900/50 ${isMobile ? 'h-full w-full' : 'h-full rounded-2xl border border-white/5'}`}>
             {/* Sidebar */}
             <div className={`${sidebarOpen ? (isMobile ? 'chat-sidebar-sheet bottom-sheet-enter' : 'translate-x-0') : (isMobile ? 'translate-y-full' : '-translate-x-full md:translate-x-0')}
                 ${isMobile ? 'fixed bottom-0 left-0 right-0 z-50 w-full max-h-[70vh] rounded-t-2xl' : 'fixed md:relative z-20 w-72 h-full'}
@@ -2490,7 +2490,7 @@ export default function ChatPage() {
                                 onKeyDown={handleKeyDown}
                                 placeholder={t('dashboard.chatPage.inputPlaceholder', 'Type / for commands or ask anything...')}
                                 rows={1}
-                                className={`w-full rounded-xl bg-surface-800/60 border
+                                className={`w-full rounded-xl bg-surface-800/60 border resize-none
                                     text-surface-100 placeholder:text-surface-200/25
                                     focus:outline-none focus:border-brand-500/30 focus:ring-1 focus:ring-brand-500/20
                                     resize-none transition-all ${isListening ? 'border-red-500/40 ring-1 ring-red-500/20' : 'border-white/5'}

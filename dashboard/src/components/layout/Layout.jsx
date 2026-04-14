@@ -42,7 +42,7 @@ export default function Layout() {
     }, [location.pathname]);
 
     return (
-        <div className={`flex h-[100dvh] overflow-hidden transition-colors duration-300 ${theme === 'light' ? 'bg-slate-50' : 'bg-surface-900'}`}>
+        <div className={`flex fixed inset-0 overflow-hidden transition-colors duration-300 ${theme === 'light' ? 'bg-slate-50' : 'bg-surface-900'}`}>
             {/* Onboarding Tour for first-time users */}
             <OnboardingTour />
 
