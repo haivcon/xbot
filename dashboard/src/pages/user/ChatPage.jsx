@@ -194,6 +194,7 @@ function parseToolResult(name, result) {
 
 /* ─── Rich tool call card with data previews & actions ─── */
 function ToolCallCard({ toolCall, onAction }) {
+    const { t } = useTranslation();
     const [expanded, setExpanded] = useState(false);
     const meta = getToolMeta(toolCall.name);
     const Icon = meta.icon;
@@ -239,11 +240,11 @@ function ToolCallCard({ toolCall, onAction }) {
                 return (
                     <div className="flex items-center gap-2">
                         <span className="font-semibold text-surface-100">{parsed.count}</span>
-                        <span className="text-surface-200/30 text-[10px]">signals found</span>
+                        <span className="text-surface-200/30 text-[10px]">{t('dashboard.chatPage.signalsFound', 'signals found')}</span>
                     </div>
                 );
             default:
-                return <span className="text-surface-200/35">✅ {parsed.text || 'Data received'}</span>;
+                return <span className="text-surface-200/35">✅ {parsed.text || t('dashboard.chatPage.dataReceived', 'Data received')}</span>;
         }
     };
 
@@ -329,7 +330,7 @@ function ToolCallCard({ toolCall, onAction }) {
                     {/* Raw data fallback */}
                     {toolCall.args && Object.keys(toolCall.args).length > 0 && (
                         <div>
-                            <p className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1">Arguments</p>
+                            <p className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1">{t('dashboard.chatPage.arguments', 'Arguments')}</p>
                             <pre className="text-[11px] text-surface-200/60 bg-surface-900/50 rounded-lg p-2 overflow-x-auto font-mono">
                                 {JSON.stringify(toolCall.args, null, 2)}
                             </pre>
@@ -337,7 +338,7 @@ function ToolCallCard({ toolCall, onAction }) {
                     )}
                     {toolCall.result && (
                         <div>
-                            <p className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1">Result</p>
+                            <p className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1">{t('dashboard.chatPage.result', 'Result')}</p>
                             <pre className="text-[11px] text-surface-200/60 bg-surface-900/50 rounded-lg p-2 overflow-x-auto font-mono max-h-48 overflow-y-auto custom-scrollbar">
                                 {(() => {
                                     try { return JSON.stringify(JSON.parse(toolCall.result), null, 2); }
@@ -355,6 +356,7 @@ function ToolCallCard({ toolCall, onAction }) {
 
 /* ─── Mobile message action sheet (bottom sheet) ─── */
 function MessageActionSheet({ visible, onClose, message, onCopy, onFeedback, feedback, onPin, isPinned, onEdit, onSave, onRetry }) {
+    const { t } = useTranslation();
     if (!visible) return null;
     const isUser = message?.role === 'user';
     const isError = !isUser && message?.content?.startsWith('\u274c');
@@ -371,7 +373,7 @@ function MessageActionSheet({ visible, onClose, message, onCopy, onFeedback, fee
                         <button onClick={() => { onCopy(); onClose(); }}
                             className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all">
                             <Copy size={18} className="text-surface-200/70" />
-                            <span className="text-[10px] text-surface-200/50">Copy</span>
+                            <span className="text-[10px] text-surface-200/50">{t('dashboard.chatPage.copy', 'Copy')}</span>
                         </button>
                     )}
                     {!isUser && onFeedback && (
@@ -379,12 +381,12 @@ function MessageActionSheet({ visible, onClose, message, onCopy, onFeedback, fee
                             <button onClick={() => { onFeedback('up'); onClose(); }}
                                 className={`flex flex-col items-center gap-1.5 p-3 rounded-xl active:scale-95 transition-all ${feedback === 'up' ? 'bg-emerald-500/10' : 'hover:bg-white/5'}`}>
                                 <ThumbsUp size={18} className={feedback === 'up' ? 'text-emerald-400' : 'text-surface-200/70'} />
-                                <span className="text-[10px] text-surface-200/50">Good</span>
+                                <span className="text-[10px] text-surface-200/50">{t('dashboard.chatPage.good', 'Good')}</span>
                             </button>
                             <button onClick={() => { onFeedback('down'); onClose(); }}
                                 className={`flex flex-col items-center gap-1.5 p-3 rounded-xl active:scale-95 transition-all ${feedback === 'down' ? 'bg-red-500/10' : 'hover:bg-white/5'}`}>
                                 <ThumbsDown size={18} className={feedback === 'down' ? 'text-red-400' : 'text-surface-200/70'} />
-                                <span className="text-[10px] text-surface-200/50">Bad</span>
+                                <span className="text-[10px] text-surface-200/50">{t('dashboard.chatPage.bad', 'Bad')}</span>
                             </button>
                         </>
                     )}
@@ -392,28 +394,28 @@ function MessageActionSheet({ visible, onClose, message, onCopy, onFeedback, fee
                         <button onClick={() => { onPin(); onClose(); }}
                             className={`flex flex-col items-center gap-1.5 p-3 rounded-xl active:scale-95 transition-all ${isPinned ? 'bg-amber-500/10' : 'hover:bg-white/5'}`}>
                             {isPinned ? <PinOff size={18} className="text-amber-400" /> : <Pin size={18} className="text-surface-200/70" />}
-                            <span className="text-[10px] text-surface-200/50">{isPinned ? 'Unpin' : 'Pin'}</span>
+                            <span className="text-[10px] text-surface-200/50">{isPinned ? t('dashboard.chatPage.unpin', 'Unpin') : t('dashboard.chatPage.pin', 'Pin')}</span>
                         </button>
                     )}
                     {isUser && onEdit && (
                         <button onClick={() => { onEdit(); onClose(); }}
                             className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all">
                             <Edit size={18} className="text-brand-400" />
-                            <span className="text-[10px] text-surface-200/50">Edit</span>
+                            <span className="text-[10px] text-surface-200/50">{t('dashboard.chatPage.edit', 'Edit')}</span>
                         </button>
                     )}
                     {isUser && onSave && (
                         <button onClick={() => { onSave(message.content); onClose(); }}
                             className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all">
                             <Star size={18} className="text-amber-400" />
-                            <span className="text-[10px] text-surface-200/50">Save</span>
+                            <span className="text-[10px] text-surface-200/50">{t('dashboard.chatPage.save', 'Save')}</span>
                         </button>
                     )}
                     {isError && onRetry && (
                         <button onClick={() => { onRetry(); onClose(); }}
                             className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all">
                             <RefreshCw size={18} className="text-amber-400" />
-                            <span className="text-[10px] text-surface-200/50">Retry</span>
+                            <span className="text-[10px] text-surface-200/50">{t('dashboard.chatPage.retryAction', 'Retry')}</span>
                         </button>
                     )}
                 </div>
@@ -554,6 +556,7 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
 
 /* ─── Conversation list item with preview & relative time ─── */
 function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
+    const { t } = useTranslation();
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     // Relative time helper
     const relTime = (ts) => {
@@ -579,7 +582,7 @@ function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                         <span className={`text-xs truncate flex-1 ${active ? 'text-brand-400 font-medium' : 'text-surface-200/60'}`}>
-                            {conv.title || 'New Chat'}
+                            {conv.title || t('dashboard.chatPage.newChat', 'New Chat')}
                         </span>
                         <span className="text-[9px] text-surface-200/20 flex-shrink-0">
                             {relTime(conv.updatedAt || conv.createdAt)}
@@ -603,11 +606,11 @@ function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
                 <div className="absolute inset-0 bg-surface-900/90 rounded-xl flex items-center justify-center gap-2 z-10 animate-fadeIn">
                     <button onClick={(e) => { onDelete(conv.conversationId, e); setShowDeleteConfirm(false); }}
                         className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-[10px] font-semibold active:scale-95">
-                        Delete
+                        {t('dashboard.chatPage.delete', 'Delete')}
                     </button>
                     <button onClick={() => setShowDeleteConfirm(false)}
                         className="px-3 py-1.5 rounded-lg bg-surface-800 text-surface-200/60 text-[10px] font-semibold active:scale-95">
-                        Cancel
+                        {t('dashboard.chatPage.cancel', 'Cancel')}
                     </button>
                 </div>
             )}
@@ -617,6 +620,7 @@ function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
 
 /* ─── Smart paste detection banner ─── */
 function PasteDetectionBanner({ type, onAction, onDismiss }) {
+    const { t } = useTranslation();
     if (!type) return null;
     const actions = type === 'tx'
         ? [{ label: '🔍 Check TX', action: 'tx' }]
@@ -630,7 +634,7 @@ function PasteDetectionBanner({ type, onAction, onDismiss }) {
             rounded-xl shadow-xl p-2.5 animate-fadeIn">
             <div className="flex items-center gap-2 mb-2">
                 <span className="text-[10px] text-brand-400 font-semibold">
-                    ✨ {type === 'tx' ? 'Transaction hash' : 'Address'} detected
+                    ✨ {type === 'tx' ? t('dashboard.chatPage.txDetected', 'Transaction hash detected') : t('dashboard.chatPage.addrDetected', 'Address detected')}
                 </span>
                 <button onClick={onDismiss} className="ml-auto p-0.5 text-surface-200/30 hover:text-surface-200/60">
                     <X size={10} />
@@ -742,6 +746,7 @@ function SlashCommandPalette({ input, onSelect, isMobile }) {
 
 /* ─── Typing indicator ─── */
 function TypingIndicator() {
+    const { t } = useTranslation();
     return (
         <div className="flex gap-3 animate-fadeIn">
             <div className="w-8 h-8 rounded-full bg-emerald-500/20 ring-1 ring-emerald-500/30 flex items-center justify-center flex-shrink-0">
@@ -754,7 +759,7 @@ function TypingIndicator() {
                         <span className="w-2 h-2 bg-surface-200/30 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                         <span className="w-2 h-2 bg-surface-200/30 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <span className="text-[10px] text-surface-200/30">Thinking & executing tools...</span>
+                    <span className="text-[10px] text-surface-200/30">{t('dashboard.chatPage.thinking', 'Thinking & executing tools...')}</span>
                 </div>
             </div>
         </div>
@@ -1947,31 +1952,45 @@ export default function ChatPage() {
             {/* Main chat area */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Header */}
-                <div className="px-4 py-3 border-b border-white/5 flex items-center gap-3 bg-surface-900/80 backdrop-blur-sm">
+                <div className={`border-b border-white/5 flex items-center bg-surface-900/80 backdrop-blur-sm
+                    ${isMobile ? 'px-2 py-2 gap-1' : 'px-4 py-3 gap-3'}`}>
+                    {/* Mobile: Home button */}
                     <button onClick={() => navigate('/')}
-                        className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/50 hover:text-brand-400 transition-colors md:hidden"
-                        title="Home">
-                        <Home size={16} />
+                        className={`rounded-lg hover:bg-white/5 text-surface-200/50 hover:text-brand-400 transition-colors active:scale-95 md:hidden
+                            ${isMobile ? 'p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center' : 'p-1.5'}`}
+                        title={t('dashboard.chatPage.home', 'Home')}>
+                        <Home size={isMobile ? 18 : 16} />
                     </button>
+                    {/* Mobile: Conversations button with count badge */}
                     <button onClick={() => setSidebarOpen(true)}
-                        className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/50 md:hidden">
-                        <ChevronLeft size={16} />
+                        className={`rounded-lg hover:bg-white/5 text-surface-200/50 hover:text-brand-400 transition-colors active:scale-95 relative md:hidden
+                            ${isMobile ? 'p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center' : 'p-1.5'}`}
+                        title={t('dashboard.chatPage.conversations', 'Conversations')}>
+                        <MessageSquare size={isMobile ? 18 : 16} />
+                        {conversations.length > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-brand-500 text-white text-[8px] font-bold flex items-center justify-center">
+                                {conversations.length > 9 ? '9+' : conversations.length}
+                            </span>
+                        )}
                     </button>
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-emerald-500 flex items-center justify-center">
-                        <Bot size={16} className="text-white" />
+                    <div className={`rounded-full bg-gradient-to-br from-brand-500 to-emerald-500 flex items-center justify-center flex-shrink-0
+                        ${isMobile ? 'w-7 h-7' : 'w-8 h-8'}`}>
+                        <Bot size={isMobile ? 14 : 16} className="text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h1 className="text-sm font-semibold text-surface-100">{t('dashboard.chatPage.title', 'AI Trading Assistant')}</h1>
-                        <p className="text-[10px] text-emerald-400/70 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            {t('dashboard.chatPage.status', 'Online — Powered by Gemini + OnchainOS')}
+                        <h1 className={`font-semibold text-surface-100 truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>
+                            {t('dashboard.chatPage.title', 'AI Trading Assistant')}
+                        </h1>
+                        <p className="text-[10px] text-emerald-400/70 flex items-center gap-1 truncate">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                            <span className="truncate">{t('dashboard.chatPage.status', 'Online — Powered by Gemini + OnchainOS')}</span>
                         </p>
                     </div>
-                    <div className="flex items-center gap-1">
-                        {/* Compare toggle */}
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                        {/* Compare toggle — hidden on mobile */}
                         <button
                             onClick={() => setCompareMode(!compareMode)}
-                            className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
+                            className={`hidden sm:flex p-2 rounded-lg transition-colors items-center gap-1 ${
                                 compareMode
                                     ? 'bg-purple-500/20 text-purple-400'
                                     : 'hover:bg-white/5 text-surface-200/40 hover:text-purple-400'
@@ -1984,15 +2003,17 @@ export default function ChatPage() {
                         {/* AI Settings Button */}
                         <div className="relative">
                             <button onClick={() => { setShowSettingsPanel(!showSettingsPanel); if (!showSettingsPanel) { loadApiKeys(); } }}
-                                className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
+                                className={`rounded-lg transition-colors flex items-center gap-1 active:scale-95 ${
+                                    isMobile ? 'p-2.5 min-w-[40px] min-h-[40px] justify-center' : 'p-2'
+                                } ${
                                     showSettingsPanel ? 'bg-brand-500/15 text-brand-400' : 'hover:bg-white/5 text-surface-200/40 hover:text-brand-400'
                                 }`}
-                                title="AI Settings">
-                                <Settings size={12} />
+                                title={t('dashboard.chatPage.aiSettings', 'AI Settings')}>
+                                <Settings size={isMobile ? 16 : 12} />
                                 <span className="hidden sm:inline text-[10px]">{modelOptions.find(m => m.id === selectedModel)?.label || 'Flash'}</span>
                             </button>
                         </div>
-                        {/* Context indicator */}
+                        {/* Context indicator — desktop only */}
                         {messages.length > 0 && (
                             <div className="hidden sm:flex items-center gap-1.5 px-2" title={`Context: ${contextPercent}%`}>
                                 <Gauge size={10} className="text-surface-200/30" />
@@ -2003,32 +2024,37 @@ export default function ChatPage() {
                                 <span className="text-[9px] text-surface-200/25">{contextPercent}%</span>
                             </div>
                         )}
+                        {/* Share & Export — desktop only */}
                         {messages.length > 0 && (
                             <>
                                 <button onClick={shareConversation}
-                                    className="p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-brand-400 transition-colors"
-                                    title="Share">
+                                    className="hidden sm:flex p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-brand-400 transition-colors"
+                                    title={t('dashboard.chatPage.share', 'Share')}>
                                     <Share2 size={12} />
                                 </button>
                                 <button onClick={exportConversation}
-                                    className="p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-emerald-400 transition-colors"
+                                    className="hidden sm:flex p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-emerald-400 transition-colors"
                                     title={t('dashboard.chatPage.export', 'Export chat')}>
                                     <Download size={12} />
                                 </button>
                             </>
                         )}
+                        {/* Guide — desktop only */}
                         <button onClick={() => setShowHelp(!showHelp)}
-                            className={`p-2 rounded-lg transition-colors text-xs flex items-center gap-1.5 ${
+                            className={`hidden sm:flex p-2 rounded-lg transition-colors text-xs items-center gap-1.5 ${
                                 showHelp ? 'bg-brand-500/15 text-brand-400 border border-brand-500/20' : 'hover:bg-white/5 text-surface-200/40 hover:text-brand-400'
                             }`}
                             title={t('dashboard.chatPage.helpBtn', 'Features Guide')}>
                             <BookOpen size={12} />
                             <span className="hidden sm:inline">{t('dashboard.chatPage.helpBtn', 'Guide')}</span>
                         </button>
+                        {/* New Chat */}
                         {conversationId && (
                             <button onClick={startNewChat}
-                                className="p-2 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-brand-400 transition-colors text-xs flex items-center gap-1.5">
-                                <Plus size={12} /> {t('dashboard.chatPage.newChat', 'New')}
+                                className={`rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-brand-400 transition-colors active:scale-95 flex items-center gap-1
+                                    ${isMobile ? 'p-2.5 min-w-[40px] min-h-[40px] justify-center' : 'p-2 text-xs gap-1.5'}`}>
+                                <Plus size={isMobile ? 16 : 12} />
+                                <span className="hidden sm:inline">{t('dashboard.chatPage.newChat', 'New')}</span>
                             </button>
                         )}
                     </div>

@@ -31,6 +31,12 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
+### 🚀 What's New in v1.2.3 (AI Chat Mobile UX Optimization)
+- **Responsive Navigation Upgrade**: Resolved AI Chat Page usability bottlenecks by replacing cramped components with large (44px) touch-friendly action targets, including a dedicated "Conversations" toggle with an integrated unread counter.
+- **Dynamic Header Resizing**: Alleviated severe mobile overflow clipping by restructuring the core header toolbar to conditionally hide non-essential desktop modules (e.g. Compare, Export), securely wrapping long AI persona strings.
+- **Deep Component Localization**: Truncated 20+ persistent hardcoded English strings across deep UI components (ToolCallCards, ActionSheets, PasteDetectionBanners) by mapping them securely to the `i18n` dictionary.
+- **Universal Multi-Language Parity**: Extended translation block parity (`chatPage`) into all 6 core system languages (EN, VI, ZH, KO, RU, ID), guaranteeing immediate runtime localization for international users.
+
 ### 🚀 What's New in v1.2.2 (Advanced User Management)
 - **Direct Messaging Engine**: Owners can now seamlessly broadcast HTML-formatted direct messages to individual users, selected groups, or the entire userbase directly from the Web Dashboard.
 - **Granular AI API Rate Limiting**: Introduced a dynamic per-user AI request quota system. Owners can easily throttle limits (0 to Unlimited) via new bulk-action modals or intuitive inline dropdowns to protect server API keys.
