@@ -68,10 +68,10 @@ export default function Layout() {
                     isChatRoute ? 'overflow-hidden' : 'p-4 md:p-6 lg:p-8 overflow-auto pb-20 lg:pb-8'
                 } ${theme === 'light' ? 'bg-slate-50' : ''}`}>
                     {isChatRoute ? (
-                        <Outlet />
+                        <Outlet context={{ setGlobalSidebarOpen: setSidebarOpen }} />
                     ) : (
                         <div key={location.pathname} className="max-w-7xl mx-auto page-enter">
-                            <Outlet />
+                            <Outlet context={{ setGlobalSidebarOpen: setSidebarOpen }} />
                         </div>
                     )}
                 </main>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import api from '@/api/client';
 import useAuthStore from '@/stores/authStore';
 import {
@@ -9,7 +9,7 @@ import {
     Wallet, TrendingUp, BarChart3, Zap, Shield, Globe, Coins, ArrowLeftRight,
     HelpCircle, BookOpen, Star, Bell, Search, Activity, ArrowUpDown, Eye,
     Download, Pin, PinOff, Keyboard, Mic, MicOff, Paperclip, Image,
-    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home, Columns, Lock
+    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home, Columns, Lock, Menu
 } from 'lucide-react';
 import { hapticImpact, hapticNotification } from '@/utils/telegram';
 import AiTraderPanel from '@/components/AiTraderPanel';
@@ -891,6 +891,8 @@ const MODEL_OPTIONS_BY_PROVIDER = {
 export default function ChatPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const outletContext = useOutletContext();
+    const setGlobalSidebarOpen = outletContext?.setGlobalSidebarOpen;
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -1954,6 +1956,13 @@ export default function ChatPage() {
                 {/* Header */}
                 <div className={`border-b border-white/5 flex items-center bg-surface-900/80 backdrop-blur-sm
                     ${isMobile ? 'px-2 py-2 gap-1' : 'px-4 py-3 gap-3'}`}>
+                    {/* Mobile: Global Menu button */}
+                    <button onClick={() => setGlobalSidebarOpen?.(true)}
+                        className={`rounded-lg hover:bg-white/5 text-surface-200/50 hover:text-brand-400 transition-colors active:scale-95 md:hidden
+                            ${isMobile ? 'p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center' : 'p-1.5'}`}
+                        title={t('dashboard.common.menu', 'Menu')}>
+                        <Menu size={isMobile ? 18 : 16} />
+                    </button>
                     {/* Mobile: Home button */}
                     <button onClick={() => navigate('/')}
                         className={`rounded-lg hover:bg-white/5 text-surface-200/50 hover:text-brand-400 transition-colors active:scale-95 md:hidden
