@@ -1359,12 +1359,13 @@ export default function ChatPage() {
                 const pLink = selectedProvider === 'google' ? 'aistudio.google.com/app/apikey' : selectedProvider === 'openai' ? 'platform.openai.com/api-keys' : 'console.groq.com/keys';
 
                 if (hasUserKey) {
-                   errMsg = `\u274c **Lỗi khóa API ${pName} cá nhân của bạn:**\n${isRateLimit ? 'Tài khoản đã hết hạn mức (Quota Exceeded) hoặc bị giới hạn tốc độ gõ (Rate Limit).' : 'Khóa API không hợp lệ, đã bị thu hồi hoặc không có quyền truy cập model này.'}\n\n💡 **Cách khắc phục:** Vui lòng mở bảng [Cài đặt AI ⚙️] > [Khóa API] để cập nhật lại khóa mới hoặc xóa khóa đi để sử dụng chung đường truyền máy chủ XBot.`;
+                   const errReason = isRateLimit ? t('dashboard.chatPage.err_quotaUser', 'Account has reached its quota.') : t('dashboard.chatPage.err_authUser', 'API key is invalid.');
+                   errMsg = `\u274c **${t('dashboard.chatPage.err_titleUser', `Personal {{pName}} API Key Error:`, { pName })}**\n${errReason}\n\n💡 **${t('dashboard.chatPage.err_fixHint', 'How to fix:')}** ${t('dashboard.chatPage.err_fixUserDesc', 'Please open [AI Settings ⚙️] > [API Keys] to update your key or delete it to use the default XBot server connection.')}`;
                 } else {
-                   errMsg = `\u274c **Đường truyền máy chủ ${pName} đang quá tải:**\nLượng người dùng hiện tại đang vượt quá hạn mức miễn phí của hệ thống XBot.\n\n💡 **Mẹo để không bị gián đoạn:**\nBạn có thể thiết lập khóa API cá nhân của riêng mình để được ưu tiên xử lý tức thì, tốc độ cao nhất và hoàn toàn miễn phí!\n\n**Hướng dẫn:**\n1. Lấy khóa API miễn phí tại: [${pLink}](https://${pLink})\n2. Trên góc phải màn hình Chat, bấm vào [Cài đặt AI ⚙️] > chuyển sang tab [Khóa API 🔑]\n3. Dán khóa của bạn vào và tận hưởng đường truyền riêng biệt.`;
+                   errMsg = `\u274c **${t('dashboard.chatPage.err_titleServer', `Server {{pName}} connection is overloaded:`, { pName })}**\n${t('dashboard.chatPage.err_descServer', 'Current usage has exceeded the free quota of the XBot system.')}\n\n💡 **${t('dashboard.chatPage.err_tipServer', 'Tip to avoid interruptions:')}**\n${t('dashboard.chatPage.err_tipServerDesc', 'You can set up your own personal API key to get instant processing, highest speed, and completely for free!')}\n\n**${t('dashboard.chatPage.err_guideServer', 'Guide:')}**\n${t('dashboard.chatPage.err_guideServer1', '1. Get a free API key at:')} [${pLink}](https://${pLink})\n${t('dashboard.chatPage.err_guideServer2', '2. On the top right of the Chat screen, click [AI Settings ⚙️] > switch to the [API Keys 🔑] tab')}\n${t('dashboard.chatPage.err_guideServer3', '3. Paste your key and enjoy a dedicated connection.')}`;
                 }
             } else {
-                errMsg = `\u274c Lỗi: ${errMsg}`;
+                errMsg = `\u274c ${t('dashboard.chatPage.err_generic', 'Error:')} ${errMsg}`;
             }
 
             // Update the existing streaming placeholder instead of adding a duplicate
