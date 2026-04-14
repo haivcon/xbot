@@ -659,6 +659,69 @@ function createDashboardRoutes() {
         }
     });
 
+    // --- Send DM to selected users ---
+    router.post('/owner/users/message', ownerGuard, async (req, res) => {
+        try {
+            const { userIds, text } = req.body;
+            if (!text || !text.trim()) return res.status(400).json({ error: 'Message text required' });
+
+            const { bot } = require('../core/bot');
+            let targets;
+            if (!userIds || (Array.isArray(userIds) && userIds.length === 0)) {
+                // Broadcast to all users
+                const allUsers = await db.listUsersDetailed?.() || [];
+                targets = allUsers.map(u => u.chatId || u.userId).filter(Boolean);
+            } else {
+                targets = Array.isArray(userIds) ? userIds : [userIds];
+            }
+
+            let success = 0, failed = 0;
+            for (const [idx, userId] of targets.entries()) {
+                try {
+                    await bot.sendMessage(userId, sanitizeTelegramHtml(text.trim()), { parse_mode: 'HTML' });
+                    success++;
+                } catch {
+                    failed++;
+                }
+                if (idx < targets.length - 1) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+
+            log.info(`Dashboard: Message sent to ${success}/${targets.length} users by ${req.dashboardUser.userId}`);
+            res.json({ success: true, sent: success, failed, total: targets.length });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // --- Set AI daily limit for users ---
+    router.put('/owner/users/ai-limit', ownerGuard, async (req, res) => {
+        try {
+            const { userIds, limit } = req.body;
+            if (limit === undefined || limit === null) return res.status(400).json({ error: 'limit required' });
+            const limitVal = parseInt(limit, 10);
+            if (isNaN(limitVal)) return res.status(400).json({ error: 'Invalid limit value' });
+
+            let targets;
+            if (!userIds || (Array.isArray(userIds) && userIds.length === 0)) {
+                // Apply to all users
+                await db.dbRun(`UPDATE users SET aiDailyLimit = ?`, [limitVal]);
+                const count = await db.dbGet(`SELECT changes() as cnt`);
+                log.info(`Dashboard: AI limit set to ${limitVal} for ALL users by ${req.dashboardUser.userId}`);
+                res.json({ success: true, updated: count?.cnt || 0 });
+            } else {
+                targets = Array.isArray(userIds) ? userIds : [userIds];
+                const placeholders = targets.map(() => '?').join(',');
+                await db.dbRun(`UPDATE users SET aiDailyLimit = ? WHERE chatId IN (${placeholders})`, [limitVal, ...targets]);
+                log.info(`Dashboard: AI limit set to ${limitVal} for ${targets.length} users by ${req.dashboardUser.userId}`);
+                res.json({ success: true, updated: targets.length });
+            }
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     router.get('/owner/co-owners', ownerGuard, async (req, res) => {
         try {
             const coOwners = await db.listCoOwners?.() || [];

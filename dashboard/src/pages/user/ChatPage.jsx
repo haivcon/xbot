@@ -156,22 +156,135 @@ function getToolMeta(name) {
     return TOOL_META[name] || { icon: Wrench, color: 'text-surface-200/60', bg: 'bg-white/5' };
 }
 
-/* ─── Tool call card with expandable details ─── */
-function ToolCallCard({ toolCall }) {
+/* ─── Parse tool result into structured preview ─── */
+function parseToolResult(name, result) {
+    try {
+        const d = typeof result === 'string' ? JSON.parse(result) : result;
+        if (d?.error) return { type: 'error', error: d.error };
+        // Token price
+        if ((name === 'get_token_price' || name === 'get_market_price') && d) {
+            const price = d.price || d.lastPrice || d.usdPrice;
+            const change = d.change24h || d.priceChange24h || d.changePercent24h;
+            const symbol = d.symbol || d.tokenSymbol || d.token || '';
+            const vol = d.volume24h || d.vol24h;
+            if (price) return { type: 'price', price: Number(price), change: Number(change || 0), symbol, volume: vol ? Number(vol) : null };
+        }
+        // Balance
+        if ((name === 'get_wallet_balance' || name === 'list_wallets') && d) {
+            const tokens = d.tokens || d.balances || d.assets || (Array.isArray(d) ? d : null);
+            const total = d.totalUsd || d.totalValue;
+            if (tokens) return { type: 'balance', tokens: Array.isArray(tokens) ? tokens.slice(0, 5) : [], total: total ? Number(total) : null };
+        }
+        // Swap
+        if ((name === 'swap_tokens' || name === 'get_swap_quote') && d) {
+            return { type: 'swap', fromToken: d.fromToken || d.srcToken, toToken: d.toToken || d.dstToken, fromAmount: d.fromAmount || d.srcAmount, toAmount: d.toAmount || d.dstAmount || d.estimatedAmount, status: d.status || 'quoted' };
+        }
+        // Signals
+        if (name === 'get_signal_list' && d) {
+            const signals = d.signals || d.data || (Array.isArray(d) ? d : []);
+            return { type: 'signals', count: signals.length, top: signals.slice(0, 3) };
+        }
+        // Generic object
+        if (typeof d === 'object') return { type: 'data' };
+        return { type: 'text', text: String(d).substring(0, 100) };
+    } catch {
+        return { type: 'text', text: result ? String(result).substring(0, 80) : 'Done' };
+    }
+}
+
+/* ─── Rich tool call card with data previews & actions ─── */
+function ToolCallCard({ toolCall, onAction }) {
     const [expanded, setExpanded] = useState(false);
     const meta = getToolMeta(toolCall.name);
     const Icon = meta.icon;
+    const parsed = parseToolResult(toolCall.name, toolCall.result);
 
-    // Parse result for preview
-    let resultPreview = '';
-    try {
-        const parsed = JSON.parse(toolCall.result);
-        if (parsed.error) resultPreview = `❌ ${parsed.error}`;
-        else if (typeof parsed === 'object') resultPreview = `✅ Data received`;
-        else resultPreview = `✅ ${String(parsed).substring(0, 100)}`;
-    } catch {
-        resultPreview = toolCall.result ? `✅ ${toolCall.result.substring(0, 80)}` : '✅ Done';
-    }
+    // Build rich preview based on parsed type
+    const renderPreview = () => {
+        switch (parsed.type) {
+            case 'error':
+                return <span className="text-red-400/80">❌ {parsed.error}</span>;
+            case 'price':
+                return (
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-surface-100">${parsed.price?.toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>
+                        {parsed.change !== 0 && (
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md ${
+                                parsed.change > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                            }`}>
+                                {parsed.change > 0 ? '▲' : '▼'} {Math.abs(parsed.change).toFixed(2)}%
+                            </span>
+                        )}
+                        {parsed.symbol && <span className="text-surface-200/30 text-[10px]">{parsed.symbol.toUpperCase()}</span>}
+                    </div>
+                );
+            case 'balance':
+                return (
+                    <div className="flex items-center gap-2">
+                        {parsed.total != null && <span className="font-semibold text-surface-100">${parsed.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>}
+                        <span className="text-surface-200/30 text-[10px]">{parsed.tokens.length} token{parsed.tokens.length > 1 ? 's' : ''}</span>
+                    </div>
+                );
+            case 'swap':
+                return (
+                    <div className="flex items-center gap-1.5 text-surface-200/70">
+                        <span className="font-medium text-surface-100">{parsed.fromAmount}</span>
+                        <span className="text-[10px]">{parsed.fromToken}</span>
+                        <ArrowLeftRight size={10} className="text-purple-400 mx-0.5" />
+                        <span className="font-medium text-surface-100">{parsed.toAmount || '...'}</span>
+                        <span className="text-[10px]">{parsed.toToken}</span>
+                    </div>
+                );
+            case 'signals':
+                return (
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-surface-100">{parsed.count}</span>
+                        <span className="text-surface-200/30 text-[10px]">signals found</span>
+                    </div>
+                );
+            default:
+                return <span className="text-surface-200/35">✅ {parsed.text || 'Data received'}</span>;
+        }
+    };
+
+    // Context-aware action buttons
+    const renderActions = () => {
+        const actions = [];
+        if (parsed.type === 'price')
+            actions.push(
+                { label: '💱 Swap', cmd: `Swap ${parsed.symbol || 'this token'}` },
+                { label: '🔔 Alert', cmd: `Set price alert for ${parsed.symbol || 'this token'}` },
+                { label: '🔬 Analyze', cmd: `Analyze token ${parsed.symbol || ''}` },
+            );
+        else if (parsed.type === 'balance')
+            actions.push(
+                { label: '💱 Swap', cmd: 'I want to swap tokens' },
+                { label: '📤 Transfer', cmd: 'Transfer tokens' },
+                { label: '📊 Portfolio', cmd: 'Show my portfolio' },
+            );
+        else if (parsed.type === 'swap')
+            actions.push(
+                { label: '💼 Balance', cmd: 'Check my wallet balance' },
+                { label: '📈 Price', cmd: `What is the price of ${parsed.toToken || 'this token'}?` },
+            );
+        else if (parsed.type === 'signals')
+            actions.push(
+                { label: '🔬 Analyze top', cmd: 'Analyze the top signal token' },
+                { label: '💱 Swap', cmd: 'Swap into top signal token' },
+            );
+        if (actions.length === 0) return null;
+        return (
+            <div className="flex gap-1 mt-1.5 flex-wrap">
+                {actions.map((a, i) => (
+                    <button key={i} onClick={(e) => { e.stopPropagation(); onAction?.(a.cmd); }}
+                        className="px-2 py-1 rounded-lg text-[9px] font-medium bg-brand-500/8 text-brand-400/70
+                            border border-brand-500/10 hover:bg-brand-500/15 hover:text-brand-400 transition-all active:scale-95">
+                        {a.label}
+                    </button>
+                ))}
+            </div>
+        );
+    };
 
     return (
         <div className={`rounded-xl border border-white/5 overflow-hidden transition-all duration-200 ${expanded ? 'bg-surface-800/40' : 'bg-surface-800/20 hover:bg-surface-800/30'}`}>
@@ -183,13 +296,37 @@ function ToolCallCard({ toolCall }) {
                     <Icon size={12} className={meta.color} />
                 </div>
                 <div className="flex-1 min-w-0">
-                    <span className="text-xs font-mono font-medium text-surface-200/80">{toolCall.name}</span>
-                    <span className="text-[10px] text-surface-200/35 ml-2">{resultPreview}</span>
+                    <span className="text-xs font-mono font-medium text-surface-200/60">{toolCall.name?.replace(/_/g, ' ')}</span>
+                    <div className="text-[11px] mt-0.5">{renderPreview()}</div>
                 </div>
                 <ChevronDown size={12} className={`text-surface-200/30 transition-transform duration-200 flex-shrink-0 ${expanded ? 'rotate-180' : ''}`} />
             </button>
+            {/* Action buttons row */}
+            {!expanded && parsed.type !== 'error' && renderActions()}
             {expanded && (
                 <div className="px-3 pb-3 space-y-2 animate-fadeIn">
+                    {/* Rich expanded content */}
+                    {parsed.type === 'balance' && parsed.tokens.length > 0 && (
+                        <div className="rounded-lg bg-surface-900/40 border border-white/5 overflow-hidden">
+                            {parsed.tokens.map((tk, i) => (
+                                <div key={i} className="flex items-center justify-between px-3 py-1.5 border-b border-white/3 last:border-0 text-[11px]">
+                                    <span className="text-surface-200/70 font-medium">{tk.symbol || tk.token || tk.name || 'Token'}</span>
+                                    <span className="text-surface-100 font-semibold">{tk.balance || tk.amount || '—'}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {parsed.type === 'signals' && parsed.top.length > 0 && (
+                        <div className="rounded-lg bg-surface-900/40 border border-white/5 overflow-hidden">
+                            {parsed.top.map((sig, i) => (
+                                <div key={i} className="flex items-center justify-between px-3 py-1.5 border-b border-white/3 last:border-0 text-[11px]">
+                                    <span className="text-surface-200/70">{sig.token || sig.symbol || `Signal #${i + 1}`}</span>
+                                    <span className="text-emerald-400 text-[10px] font-medium">{sig.type || sig.direction || 'BUY'}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {/* Raw data fallback */}
                     {toolCall.args && Object.keys(toolCall.args).length > 0 && (
                         <div>
                             <p className="text-[10px] text-surface-200/30 uppercase tracking-wider mb-1">Arguments</p>
@@ -209,15 +346,88 @@ function ToolCallCard({ toolCall }) {
                             </pre>
                         </div>
                     )}
+                    {renderActions()}
                 </div>
             )}
         </div>
     );
 }
 
-/* ─── Single message bubble ─── */
-function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, onEdit, onSave }) {
+/* ─── Mobile message action sheet (bottom sheet) ─── */
+function MessageActionSheet({ visible, onClose, message, onCopy, onFeedback, feedback, onPin, isPinned, onEdit, onSave, onRetry }) {
+    if (!visible) return null;
+    const isUser = message?.role === 'user';
+    const isError = !isUser && message?.content?.startsWith('\u274c');
+    return (
+        <>
+            <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm" onClick={onClose} />
+            <div className="fixed bottom-0 left-0 right-0 z-[71] bg-surface-900 border-t border-white/10 rounded-t-2xl
+                shadow-2xl shadow-black/60 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] bottom-sheet-enter">
+                <div className="flex justify-center mb-3">
+                    <div className="w-10 h-1 rounded-full bg-white/20" />
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                    {!isUser && onCopy && (
+                        <button onClick={() => { onCopy(); onClose(); }}
+                            className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all">
+                            <Copy size={18} className="text-surface-200/70" />
+                            <span className="text-[10px] text-surface-200/50">Copy</span>
+                        </button>
+                    )}
+                    {!isUser && onFeedback && (
+                        <>
+                            <button onClick={() => { onFeedback('up'); onClose(); }}
+                                className={`flex flex-col items-center gap-1.5 p-3 rounded-xl active:scale-95 transition-all ${feedback === 'up' ? 'bg-emerald-500/10' : 'hover:bg-white/5'}`}>
+                                <ThumbsUp size={18} className={feedback === 'up' ? 'text-emerald-400' : 'text-surface-200/70'} />
+                                <span className="text-[10px] text-surface-200/50">Good</span>
+                            </button>
+                            <button onClick={() => { onFeedback('down'); onClose(); }}
+                                className={`flex flex-col items-center gap-1.5 p-3 rounded-xl active:scale-95 transition-all ${feedback === 'down' ? 'bg-red-500/10' : 'hover:bg-white/5'}`}>
+                                <ThumbsDown size={18} className={feedback === 'down' ? 'text-red-400' : 'text-surface-200/70'} />
+                                <span className="text-[10px] text-surface-200/50">Bad</span>
+                            </button>
+                        </>
+                    )}
+                    {onPin && (
+                        <button onClick={() => { onPin(); onClose(); }}
+                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl active:scale-95 transition-all ${isPinned ? 'bg-amber-500/10' : 'hover:bg-white/5'}`}>
+                            {isPinned ? <PinOff size={18} className="text-amber-400" /> : <Pin size={18} className="text-surface-200/70" />}
+                            <span className="text-[10px] text-surface-200/50">{isPinned ? 'Unpin' : 'Pin'}</span>
+                        </button>
+                    )}
+                    {isUser && onEdit && (
+                        <button onClick={() => { onEdit(); onClose(); }}
+                            className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all">
+                            <Edit size={18} className="text-brand-400" />
+                            <span className="text-[10px] text-surface-200/50">Edit</span>
+                        </button>
+                    )}
+                    {isUser && onSave && (
+                        <button onClick={() => { onSave(message.content); onClose(); }}
+                            className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all">
+                            <Star size={18} className="text-amber-400" />
+                            <span className="text-[10px] text-surface-200/50">Save</span>
+                        </button>
+                    )}
+                    {isError && onRetry && (
+                        <button onClick={() => { onRetry(); onClose(); }}
+                            className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all">
+                            <RefreshCw size={18} className="text-amber-400" />
+                            <span className="text-[10px] text-surface-200/50">Retry</span>
+                        </button>
+                    )}
+                </div>
+            </div>
+        </>
+    );
+}
+
+/* ─── Single message bubble (mobile-friendly: tap to show actions) ─── */
+function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, onEdit, onSave, isMobile }) {
     const [copied, setCopied] = useState(false);
+    const [showActions, setShowActions] = useState(false);
+    const [showSheet, setShowSheet] = useState(false);
+    const longPressTimer = useRef(null);
     const isUser = message.role === 'user';
     const isError = !isUser && message.content?.startsWith('\u274c');
     const copyText = () => {
@@ -225,7 +435,25 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
     };
+
+    // Long-press handlers for mobile
+    const handleTouchStart = () => {
+        if (!isMobile) return;
+        longPressTimer.current = setTimeout(() => {
+            setShowSheet(true);
+            hapticImpact('medium');
+        }, 500);
+    };
+    const handleTouchEnd = () => {
+        if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    };
+    // Tap toggle for mobile (fallback)
+    const handleTap = () => {
+        if (isMobile) setShowActions(prev => !prev);
+    };
+
     return (
+        <>
         <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} animate-fadeIn group ${isPinned ? 'ring-1 ring-amber-500/20 rounded-2xl p-1' : ''}`}>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isUser
                     ? 'bg-brand-500/20 ring-1 ring-brand-500/30'
@@ -235,10 +463,16 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
                     ? <User size={14} className="text-brand-400" />
                     : <Bot size={14} className="text-emerald-400" />}
             </div>
-            <div className={`max-w-[80%] rounded-2xl px-4 py-3 relative ${isUser
+            <div
+                className={`max-w-[80%] rounded-2xl px-4 py-3 relative ${isUser
                     ? 'bg-brand-500/15 border border-brand-500/20'
                     : 'bg-surface-800/60 border border-white/5'
-                }`}>
+                }`}
+                onClick={handleTap}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
+            >
                 {isUser ? (
                     <>
                         {message.image && <img src={message.image} alt="" className="max-h-32 rounded-lg mb-2 border border-white/10" />}
@@ -255,21 +489,22 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
                         {new Date(message.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                 )}
-                {/* Action buttons */}
-                <div className={`absolute -bottom-3 ${isUser ? 'left-2' : 'right-2'} opacity-0 group-hover:opacity-100 transition-opacity flex gap-1`}>
+                {/* Action buttons — desktop: hover, mobile: tap toggle */}
+                <div className={`absolute -bottom-3 ${isUser ? 'left-2' : 'right-2'} flex gap-1 transition-opacity duration-150
+                    ${isMobile ? (showActions ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'opacity-0 group-hover:opacity-100'}`}>
                     {!isUser && (
                         <>
-                            <button onClick={copyText} className="p-1 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-surface-100 transition-colors" title="Copy">
+                            <button onClick={(e) => { e.stopPropagation(); copyText(); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-surface-100 transition-colors" title="Copy">
                                 {copied ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
                             </button>
                             {onFeedback && (
                                 <>
-                                    <button onClick={() => onFeedback('up')}
-                                        className={`p-1 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'up' ? 'text-emerald-400' : 'text-surface-200/50 hover:text-emerald-400'}`} title="Good">
+                                    <button onClick={(e) => { e.stopPropagation(); onFeedback('up'); }}
+                                        className={`p-1.5 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'up' ? 'text-emerald-400' : 'text-surface-200/50 hover:text-emerald-400'}`} title="Good">
                                         <ThumbsUp size={10} />
                                     </button>
-                                    <button onClick={() => onFeedback('down')}
-                                        className={`p-1 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'down' ? 'text-red-400' : 'text-surface-200/50 hover:text-red-400'}`} title="Bad">
+                                    <button onClick={(e) => { e.stopPropagation(); onFeedback('down'); }}
+                                        className={`p-1.5 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'down' ? 'text-red-400' : 'text-surface-200/50 hover:text-red-400'}`} title="Bad">
                                         <ThumbsDown size={10} />
                                     </button>
                                 </>
@@ -277,26 +512,138 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
                         </>
                     )}
                     {isUser && onEdit && (
-                        <button onClick={onEdit} className="p-1 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-brand-400 transition-colors" title="Edit">
+                        <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-brand-400 transition-colors" title="Edit">
                             <Edit size={10} />
                         </button>
                     )}
                     {isUser && onSave && (
-                        <button onClick={() => onSave(message.content)} className="p-1 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-amber-400 transition-colors" title="Save prompt">
+                        <button onClick={(e) => { e.stopPropagation(); onSave(message.content); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-amber-400 transition-colors" title="Save prompt">
                             <Star size={10} />
                         </button>
                     )}
                     {onPin && (
-                        <button onClick={onPin} className={`p-1 rounded-md bg-surface-800 border border-white/10 transition-colors ${isPinned ? 'text-amber-400' : 'text-surface-200/50 hover:text-amber-400'}`} title={isPinned ? 'Unpin' : 'Pin'}>
+                        <button onClick={(e) => { e.stopPropagation(); onPin(); }} className={`p-1.5 rounded-md bg-surface-800 border border-white/10 transition-colors ${isPinned ? 'text-amber-400' : 'text-surface-200/50 hover:text-amber-400'}`} title={isPinned ? 'Unpin' : 'Pin'}>
                             {isPinned ? <PinOff size={10} /> : <Pin size={10} />}
                         </button>
                     )}
                     {isError && onRetry && (
-                        <button onClick={onRetry} className="p-1 rounded-md bg-surface-800 border border-white/10 text-amber-400/60 hover:text-amber-400 transition-colors" title="Retry">
+                        <button onClick={(e) => { e.stopPropagation(); onRetry(); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-amber-400/60 hover:text-amber-400 transition-colors" title="Retry">
                             <RefreshCw size={10} />
                         </button>
                     )}
                 </div>
+            </div>
+        </div>
+        {/* Mobile long-press bottom sheet */}
+        <MessageActionSheet
+            visible={showSheet}
+            onClose={() => setShowSheet(false)}
+            message={message}
+            onCopy={!isUser ? copyText : undefined}
+            onFeedback={!isUser ? onFeedback : undefined}
+            feedback={feedback}
+            onPin={onPin}
+            isPinned={isPinned}
+            onEdit={isUser ? onEdit : undefined}
+            onSave={isUser ? onSave : undefined}
+            onRetry={isError ? onRetry : undefined}
+        />
+        </>
+    );
+}
+
+/* ─── Conversation list item with preview & relative time ─── */
+function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    // Relative time helper
+    const relTime = (ts) => {
+        if (!ts) return '';
+        const d = typeof ts === 'string' ? new Date(ts) : new Date(ts);
+        const now = Date.now();
+        const diff = now - d.getTime();
+        if (diff < 60000) return 'now';
+        if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+        if (diff < 604800000) return `${Math.floor(diff / 86400000)}d`;
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    };
+    return (
+        <div className={`relative rounded-xl transition-colors group
+            ${active ? 'bg-brand-500/10 border border-brand-500/20' : 'hover:bg-white/3 border border-transparent'}`}>
+            <button
+                onClick={() => onLoad(conv.conversationId)}
+                onContextMenu={(e) => { if (isMobile) { e.preventDefault(); setShowDeleteConfirm(true); } }}
+                className="w-full text-left px-3 py-2.5 flex items-start gap-2.5"
+            >
+                <MessageSquare size={12} className={`flex-shrink-0 mt-0.5 ${active ? 'text-brand-400' : 'text-surface-200/30'}`} />
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                        <span className={`text-xs truncate flex-1 ${active ? 'text-brand-400 font-medium' : 'text-surface-200/60'}`}>
+                            {conv.title || 'New Chat'}
+                        </span>
+                        <span className="text-[9px] text-surface-200/20 flex-shrink-0">
+                            {relTime(conv.updatedAt || conv.createdAt)}
+                        </span>
+                    </div>
+                    {conv.lastMessage && (
+                        <p className="text-[10px] text-surface-200/25 truncate mt-0.5">{conv.lastMessage.substring(0, 60)}</p>
+                    )}
+                </div>
+            </button>
+            {/* Delete button — desktop: hover, mobile: long-press confirm */}
+            {!isMobile && (
+                <button
+                    onClick={(e) => onDelete(conv.conversationId, e)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-surface-200/30 hover:text-red-400 transition-all">
+                    <Trash2 size={10} />
+                </button>
+            )}
+            {/* Mobile delete confirmation */}
+            {showDeleteConfirm && isMobile && (
+                <div className="absolute inset-0 bg-surface-900/90 rounded-xl flex items-center justify-center gap-2 z-10 animate-fadeIn">
+                    <button onClick={(e) => { onDelete(conv.conversationId, e); setShowDeleteConfirm(false); }}
+                        className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-[10px] font-semibold active:scale-95">
+                        Delete
+                    </button>
+                    <button onClick={() => setShowDeleteConfirm(false)}
+                        className="px-3 py-1.5 rounded-lg bg-surface-800 text-surface-200/60 text-[10px] font-semibold active:scale-95">
+                        Cancel
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ─── Smart paste detection banner ─── */
+function PasteDetectionBanner({ type, onAction, onDismiss }) {
+    if (!type) return null;
+    const actions = type === 'tx'
+        ? [{ label: '🔍 Check TX', action: 'tx' }]
+        : [
+            { label: '🔬 Analyze', action: 'analyze' },
+            { label: '📋 Lookup', action: 'lookup' },
+            { label: '🛡️ Security', action: 'security' },
+        ];
+    return (
+        <div className="absolute bottom-full mb-1 left-0 right-0 z-10 bg-surface-800/95 backdrop-blur-xl border border-brand-500/20
+            rounded-xl shadow-xl p-2.5 animate-fadeIn">
+            <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] text-brand-400 font-semibold">
+                    ✨ {type === 'tx' ? 'Transaction hash' : 'Address'} detected
+                </span>
+                <button onClick={onDismiss} className="ml-auto p-0.5 text-surface-200/30 hover:text-surface-200/60">
+                    <X size={10} />
+                </button>
+            </div>
+            <div className="flex gap-1.5">
+                {actions.map(a => (
+                    <button key={a.action} onClick={() => onAction(a.action)}
+                        className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium bg-brand-500/10 text-brand-400
+                            border border-brand-500/15 hover:bg-brand-500/20 transition-all active:scale-95 flex-1">
+                        {a.label}
+                    </button>
+                ))}
             </div>
         </div>
     );
@@ -314,6 +661,80 @@ function ChatSkeleton() {
                         <div className="h-3 bg-surface-700/50 rounded w-3/4" />
                     </div>
                 </div>
+            ))}
+        </div>
+    );
+}
+
+/* ─── Tool call shimmer skeleton ─── */
+function ToolCallSkeleton({ name }) {
+    const meta = getToolMeta(name);
+    const Icon = meta.icon;
+    return (
+        <div className="rounded-xl border border-white/5 bg-surface-800/20 px-3 py-2.5 flex items-center gap-2.5 animate-pulse">
+            <div className={`w-6 h-6 rounded-lg ${meta.bg} flex items-center justify-center flex-shrink-0`}>
+                <Icon size={12} className={meta.color} />
+            </div>
+            <div className="flex-1 min-w-0">
+                <span className="text-xs font-mono font-medium text-surface-200/50">{name?.replace(/_/g, ' ')}</span>
+                <div className="mt-1 h-2 bg-surface-700/40 rounded w-24 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent" style={{ animation: 'shimmer 1.5s infinite' }} />
+                </div>
+            </div>
+            <Loader2 size={12} className="text-surface-200/30 animate-spin flex-shrink-0" />
+        </div>
+    );
+}
+
+/* ─── Slash Command Palette ─── */
+const SLASH_COMMANDS = [
+    { cmd: '/swap', icon: '💱', label: 'Swap tokens', template: 'Swap 0.01 OKB to USDT' },
+    { cmd: '/balance', icon: '💰', label: 'Check wallet balance', template: 'Check my wallet balance' },
+    { cmd: '/price', icon: '📈', label: 'Token price', template: 'What is the price of OKB?' },
+    { cmd: '/analyze', icon: '🔬', label: 'Analyze token', template: 'Analyze token OKB' },
+    { cmd: '/signals', icon: '📡', label: 'Whale/KOL signals', template: 'Show whale buy signals' },
+    { cmd: '/trending', icon: '🔥', label: 'Top trending tokens', template: 'Show top trending tokens' },
+    { cmd: '/gas', icon: '⛽', label: 'Gas prices', template: 'What are current gas prices?' },
+    { cmd: '/portfolio', icon: '📊', label: 'Portfolio overview', template: 'Show my portfolio' },
+    { cmd: '/alert', icon: '🔔', label: 'Set price alert', template: 'Alert me when ETH goes above $4000' },
+    { cmd: '/transfer', icon: '📤', label: 'Transfer tokens', template: 'Transfer 10 USDT to ' },
+    { cmd: '/wallet', icon: '🔑', label: 'Create wallet', template: 'Create a new wallet' },
+    { cmd: '/compare', icon: '⚖️', label: 'Compare tokens', template: 'Compare OKB vs BNB vs ETH' },
+    { cmd: '/research', icon: '🧠', label: 'Deep research', template: 'Deep research ETH' },
+    { cmd: '/copy-trade', icon: '👥', label: 'Copy trading', template: 'Show copy trading leaderboard' },
+    { cmd: '/auto-trade', icon: '🤖', label: 'AI Auto Trading', template: 'Auto trading status' },
+    { cmd: '/security', icon: '🛡️', label: 'Token security', template: 'Check token security for ' },
+];
+
+function SlashCommandPalette({ input, onSelect, isMobile }) {
+    const match = input.match(/^\/([\w-]*)$/);
+    if (!match) return null;
+    const query = match[1].toLowerCase();
+    const filtered = SLASH_COMMANDS.filter(c =>
+        c.cmd.toLowerCase().includes(query) || c.label.toLowerCase().includes(query)
+    ).slice(0, isMobile ? 6 : 10);
+    if (filtered.length === 0) return null;
+
+    return (
+        <div className={`absolute bottom-full mb-1 left-0 right-0 z-20
+            bg-surface-800/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/30
+            overflow-hidden ${isMobile ? 'max-h-[240px]' : 'max-h-[320px]'} overflow-y-auto custom-scrollbar`}>
+            <div className="px-3 py-2 border-b border-white/5 flex items-center gap-2">
+                <Zap size={11} className="text-brand-400" />
+                <span className="text-[10px] text-surface-200/40 font-semibold uppercase tracking-wider">Commands</span>
+            </div>
+            {filtered.map(c => (
+                <button key={c.cmd}
+                    onClick={() => onSelect(c.template)}
+                    className={`w-full text-left flex items-center gap-3 px-3 transition-colors group
+                        ${isMobile ? 'py-3 active:bg-brand-500/10' : 'py-2 hover:bg-brand-500/10'}`}>
+                    <span className="text-base">{c.icon}</span>
+                    <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-surface-100">{c.cmd}</div>
+                        <div className="text-[10px] text-surface-200/40 truncate">{c.label}</div>
+                    </div>
+                    <ChevronRight size={12} className="text-surface-200/20 group-hover:text-brand-400 transition-colors flex-shrink-0" />
+                </button>
             ))}
         </div>
     );
@@ -778,7 +1199,7 @@ export default function ChatPage() {
 
         hapticImpact('light');
         setInput('');
-        if (inputRef.current) inputRef.current.style.height = '40px';
+        if (inputRef.current) inputRef.current.style.height = isMobile ? '44px' : '40px';
         abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
@@ -943,15 +1364,63 @@ export default function ChatPage() {
         sendMessage(lastUserMsg.content);
     };
 
+    // ── Command history (↑ to recall) ──
+    const commandHistoryRef = useRef([]);
+    const historyIndexRef = useRef(-1);
+    // Save sent commands
+    const pushToHistory = useCallback((cmd) => {
+        if (!cmd?.trim()) return;
+        const h = commandHistoryRef.current;
+        if (h[0] === cmd) return; // dedup
+        h.unshift(cmd);
+        if (h.length > 30) h.pop();
+        historyIndexRef.current = -1;
+    }, []);
+
     const handleKeyDown = (e) => {
+        // Arrow up — recall previous commands
+        if (e.key === 'ArrowUp' && !e.shiftKey && (!input || historyIndexRef.current >= 0)) {
+            const h = commandHistoryRef.current;
+            if (h.length === 0) return;
+            e.preventDefault();
+            const next = Math.min(historyIndexRef.current + 1, h.length - 1);
+            historyIndexRef.current = next;
+            setInput(h[next]);
+            return;
+        }
+        if (e.key === 'ArrowDown' && historyIndexRef.current >= 0) {
+            e.preventDefault();
+            const next = historyIndexRef.current - 1;
+            historyIndexRef.current = next;
+            setInput(next < 0 ? '' : commandHistoryRef.current[next]);
+            return;
+        }
+        if (e.key === 'Escape') {
+            // Dismiss slash palette or paste banner
+            if (input.match(/^\/[\w-]*$/)) { setInput(''); return; }
+            if (pasteDetected) { setPasteDetected(null); return; }
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             if (!input.trim()) {
-                // Shake animation feedback for empty input
                 setInputShake(true);
                 setTimeout(() => setInputShake(false), 500);
                 return;
             }
+            // Intercept slash commands — select first matching command instead of sending raw text
+            const slashMatch = input.match(/^\/[\w-]*$/);
+            if (slashMatch) {
+                const query = input.slice(1).toLowerCase();
+                const match = SLASH_COMMANDS.find(c =>
+                    c.cmd.toLowerCase().includes(query) || c.label.toLowerCase().includes(query)
+                );
+                if (match) {
+                    setInput('');
+                    sendMessage(match.template);
+                    return;
+                }
+            }
+            pushToHistory(input.trim());
             sendMessage();
         }
     };
@@ -980,30 +1449,49 @@ export default function ChatPage() {
         ? conversations.filter(c => c.title?.toLowerCase().includes(searchQuery.toLowerCase()))
         : conversations;
 
-    // #2 Build follow-up suggestions from AI response
+    // #2 Build context-aware follow-up suggestions from AI response
     const buildFollowUps = (reply, tools) => {
         const suggestions = [];
         const toolNames = (tools || []).map(t => t.name);
-        if (toolNames.includes('get_token_price') || toolNames.includes('get_market_price'))
-            suggestions.push('📊 Show price chart', '🔬 Analyze this token', '🔔 Set price alert');
-        else if (toolNames.includes('analyze_token'))
-            suggestions.push('💱 Swap this token', '⭐ Add to favorites', '🐳 Show whale signals');
-        else if (toolNames.includes('get_signal_list'))
-            suggestions.push('📊 Analyze top signal', '💰 Check my portfolio', '🔔 Set alerts');
-        else if (toolNames.includes('swap_tokens') || toolNames.includes('get_swap_quote'))
-            suggestions.push('💼 Check balance', '📊 Show price', '📈 Top trending tokens');
-        else if (toolNames.includes('get_wallet_balance') || toolNames.includes('list_wallets'))
-            suggestions.push('💱 Swap tokens', '📊 Top trending', '🐳 Whale signals');
-        else
-            suggestions.push('💰 Check balance', '📊 Top tokens', '🐳 Whale signals');
-        return suggestions.slice(0, 3);
+        // Extract token names from response for contextual suggestions
+        const tokenMatch = reply?.match(/\b([A-Z]{2,10})(?:\/USDT|\s*\$)/) || reply?.match(/\b(OKB|ETH|BTC|SOL|BNB|USDT|PEPE|DOGE|SHIB|ARB|OP|AVAX|MATIC|DOT|ADA|XRP|LINK|UNI|AAVE|BANMAO)\b/i);
+        const token = tokenMatch ? tokenMatch[1].toUpperCase() : '';
+        const t_ = token ? ` ${token}` : '';
+
+        if (toolNames.includes('get_token_price') || toolNames.includes('get_market_price')) {
+            suggestions.push(`💱 Swap${t_}`, `🔔 Set alert for${t_}`, `🔬 Deep analyze${t_}`, `📊 Compare${t_} vs ETH`);
+        } else if (toolNames.includes('analyze_token') || toolNames.includes('get_token_info')) {
+            suggestions.push(`💱 Swap${t_}`, `⭐ Add${t_} to favorites`, '🐳 Whale signals', `🛡️ Security check${t_}`);
+        } else if (toolNames.includes('get_signal_list')) {
+            suggestions.push('🔬 Analyze top signal token', '💱 Buy top signal', '📊 Portfolio overview', '🔔 Set alerts');
+        } else if (toolNames.includes('swap_tokens') || toolNames.includes('get_swap_quote')) {
+            suggestions.push('💼 Check balance', `📈 Price of${t_}`, '📊 Top trending tokens', '🔔 Set take-profit alert');
+        } else if (toolNames.includes('get_wallet_balance') || toolNames.includes('list_wallets')) {
+            suggestions.push('💱 Swap lowest performer', '📤 Transfer tokens', '📊 Portfolio chart', '🐳 Whale signals');
+        } else if (toolNames.includes('transfer_tokens')) {
+            suggestions.push('💼 Check balance', `📈 Price of${t_}`, '📜 Transfer history');
+        } else if (toolNames.includes('create_wallet')) {
+            suggestions.push('💼 Check balance', '💱 First swap', '📡 Show signals');
+        } else if (toolNames.includes('get_gas_price')) {
+            suggestions.push('💱 Swap tokens', '📤 Transfer', '📈 Top tokens');
+        } else {
+            // Generic — extract context from reply text
+            if (reply?.toLowerCase().includes('price') || reply?.toLowerCase().includes('$'))
+                suggestions.push(`📊 More about${t_ || ' prices'}`, '💱 Swap tokens');
+            else
+                suggestions.push('💰 Check balance', '📊 Top tokens', '🐳 Whale signals');
+        }
+        return suggestions.slice(0, 4); // Show up to 4 suggestions
     };
 
-    // #4 Token autocomplete
+    // #4 Token autocomplete & smart paste detection
+    const [pasteDetected, setPasteDetected] = useState(null);
     const handleInputChange = (e) => {
         const val = e.target.value;
         setInput(val);
-        // Check for $ trigger
+        // Reset history index on manual typing
+        historyIndexRef.current = -1;
+        // Check for $ trigger (token autocomplete)
         const match = val.match(/\$(\w*)$/);
         if (match) {
             const query = match[1].toUpperCase();
@@ -1013,11 +1501,28 @@ export default function ChatPage() {
         } else {
             setShowAutocomplete(false);
         }
+        // Smart paste detection — detect 0x addresses / tx hashes pasted
+        if (val.match(/^0x[a-fA-F0-9]{40,64}$/)) {
+            const isLong = val.length > 50; // tx hash vs address
+            setPasteDetected(isLong ? 'tx' : 'address');
+        } else {
+            if (pasteDetected) setPasteDetected(null);
+        }
     };
     const insertToken = (token) => {
         setInput(prev => prev.replace(/\$\w*$/, token + ' '));
         setShowAutocomplete(false);
         inputRef.current?.focus();
+    };
+    // Paste detection action handler
+    const handlePasteAction = (action) => {
+        const addr = input.trim();
+        setPasteDetected(null);
+        setInput(''); // Clear input before sending
+        if (action === 'analyze') sendMessage(`Analyze this address: ${addr}`);
+        else if (action === 'lookup') sendMessage(`Look up contract ${addr}`);
+        else if (action === 'tx') sendMessage(`Check transaction ${addr}`);
+        else if (action === 'security') sendMessage(`Check token security for ${addr}`);
     };
 
     // #6 Voice input
@@ -1343,23 +1848,47 @@ export default function ChatPage() {
                 <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                     {filteredConversations.length === 0 ? (
                         <p className="text-xs text-surface-200/30 text-center py-8">{t('dashboard.chatPage.noConv', 'No conversations yet')}</p>
-                    ) : filteredConversations.map(conv => (
-                        <button
-                            key={conv.conversationId}
-                            onClick={() => loadConversation(conv.conversationId)}
-                            className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-colors group flex items-center gap-2 ${conv.conversationId === conversationId
-                                    ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
-                                    : 'hover:bg-white/3 text-surface-200/60 hover:text-surface-200/80'
-                                }`}>
-                            <MessageSquare size={12} className="flex-shrink-0 opacity-50" />
-                            <span className="flex-1 truncate">{conv.title}</span>
-                            <button
-                                onClick={(e) => deleteConversation(conv.conversationId, e)}
-                                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-500/20 text-surface-200/30 hover:text-red-400 transition-all">
-                                <Trash2 size={10} />
-                            </button>
-                        </button>
-                    ))}
+                    ) : (() => {
+                        // Group conversations by date
+                        const now = new Date();
+                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                        const yesterday = today - 86400000;
+                        const weekAgo = today - 7 * 86400000;
+                        const groups = { pinned: [], today: [], yesterday: [], week: [], older: [] };
+                        filteredConversations.forEach(conv => {
+                            const ts = conv.updatedAt || conv.createdAt || 0;
+                            const time = typeof ts === 'string' ? new Date(ts).getTime() : ts;
+                            if (conv._pinned) groups.pinned.push(conv);
+                            else if (time >= today) groups.today.push(conv);
+                            else if (time >= yesterday) groups.yesterday.push(conv);
+                            else if (time >= weekAgo) groups.week.push(conv);
+                            else groups.older.push(conv);
+                        });
+                        const groupLabels = [
+                            { key: 'pinned', label: '📌 ' + t('dashboard.chatPage.pinned', 'Pinned'), items: groups.pinned },
+                            { key: 'today', label: t('dashboard.chatPage.today', 'Today'), items: groups.today },
+                            { key: 'yesterday', label: t('dashboard.chatPage.yesterday', 'Yesterday'), items: groups.yesterday },
+                            { key: 'week', label: t('dashboard.chatPage.thisWeek', 'This Week'), items: groups.week },
+                            { key: 'older', label: t('dashboard.chatPage.older', 'Older'), items: groups.older },
+                        ].filter(g => g.items.length > 0);
+                        // If no date info, fall back to flat list
+                        const hasDateInfo = filteredConversations.some(c => c.updatedAt || c.createdAt);
+                        if (!hasDateInfo) {
+                            return filteredConversations.map(conv => (
+                                <ConvItem key={conv.conversationId} conv={conv} active={conv.conversationId === conversationId}
+                                    onLoad={loadConversation} onDelete={deleteConversation} isMobile={isMobile} />
+                            ));
+                        }
+                        return groupLabels.map(g => (
+                            <div key={g.key}>
+                                <p className="text-[9px] text-surface-200/25 font-semibold uppercase tracking-wider px-2 pt-2 pb-1">{g.label}</p>
+                                {g.items.map(conv => (
+                                    <ConvItem key={conv.conversationId} conv={conv} active={conv.conversationId === conversationId}
+                                        onLoad={loadConversation} onDelete={deleteConversation} isMobile={isMobile} />
+                                ))}
+                            </div>
+                        ));
+                    })()}
                 </div>
 
                 {/* #18 Saved Prompts */}
@@ -1603,26 +2132,38 @@ export default function ChatPage() {
                     ) : messages.length === 0 && !showHelp ? (
                         /* ─── Empty state with quick suggestions ─── */
                         <div className="flex flex-col items-center justify-center h-full gap-6 animate-fadeIn">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500/20 to-emerald-500/20 border border-white/5 flex items-center justify-center">
-                                <Sparkles size={28} className="text-brand-400" />
+                            {/* Animated gradient icon */}
+                            <div className="relative">
+                                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-500/20 via-purple-500/15 to-emerald-500/20 border border-white/5
+                                    flex items-center justify-center shadow-2xl shadow-brand-500/10">
+                                    <Sparkles size={32} className="text-brand-400" />
+                                </div>
+                                <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-brand-500/10 to-emerald-500/10 blur-xl -z-10 animate-pulse" />
+                                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-400 border-2 border-surface-900 flex items-center justify-center">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                </div>
                             </div>
                             <div className="text-center">
                                 <h2 className="text-lg font-semibold text-surface-100 mb-1">{t('dashboard.chatPage.welcomeTitle', 'AI Trading Assistant')}</h2>
                                 <p className="text-xs text-surface-200/40 max-w-md">
                                     {t('dashboard.chatPage.welcomeDesc', 'Chat naturally to control your wallets, swap tokens, check prices, view signals, and manage your portfolio — all powered by AI + OnchainOS.')}
                                 </p>
+                                <p className="text-[10px] text-surface-200/25 mt-2">
+                                    💡 {t('dashboard.chatPage.slashHint', 'Type / to see all commands, or just describe what you need')}
+                                </p>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-lg">
+                            <div className={`grid gap-4 w-full max-w-lg ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
                                 {suggestionCategories.map((cat, ci) => (
                                     <div key={ci} className="space-y-1.5">
                                         <p className="text-[10px] text-surface-200/30 font-semibold uppercase tracking-wider px-1">{cat.title}</p>
                                         {cat.items.map((s, si) => (
                                             <button key={si}
                                                 onClick={() => sendMessage(s.text)}
-                                                className="w-full text-left px-3 py-2.5 rounded-xl border border-white/5 bg-surface-800/30
+                                                className={`w-full text-left rounded-xl border border-white/5 bg-surface-800/30
                                                     hover:bg-white/5 hover:border-brand-500/20 transition-all text-xs text-surface-200/60
-                                                    hover:text-surface-200/90 flex items-center gap-2 group">
-                                                <span>{s.icon}</span>
+                                                    hover:text-surface-200/90 flex items-center gap-2.5 group active:scale-[0.98]
+                                                    ${isMobile ? 'px-4 py-3' : 'px-3 py-2.5'}`}>
+                                                <span className="text-base">{s.icon}</span>
                                                 <span className="flex-1">{s.text}</span>
                                                 <ChevronRight size={10} className="text-surface-200/20 group-hover:text-brand-400 transition-colors" />
                                             </button>
@@ -1630,13 +2171,15 @@ export default function ChatPage() {
                                     </div>
                                 ))}
                             </div>
-                            {/* Quick help link */}
-                            <button onClick={() => setShowHelp(true)}
-                                className="flex items-center gap-2 text-[11px] text-surface-200/30 hover:text-brand-400 transition-colors group">
-                                <BookOpen size={12} className="group-hover:text-brand-400" />
-                                {t('dashboard.chatHelp.viewAll', 'View all 53 available tools & features')}
-                                <ChevronRight size={10} />
-                            </button>
+                            {/* Quick help link + Type / hint */}
+                            <div className="flex flex-col items-center gap-2">
+                                <button onClick={() => setShowHelp(true)}
+                                    className="flex items-center gap-2 text-[11px] text-surface-200/30 hover:text-brand-400 transition-colors group">
+                                    <BookOpen size={12} className="group-hover:text-brand-400" />
+                                    {t('dashboard.chatHelp.viewAll', 'View all 53 available tools & features')}
+                                    <ChevronRight size={10} />
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <>
@@ -1679,7 +2222,7 @@ export default function ChatPage() {
                                                         </div>
                                                         {r?.error
                                                             ? <p className="text-xs text-red-400">❌ {r.error}</p>
-                                                            : <ChatBubble message={{ role: 'assistant', content: r?.response || '' }} />
+                                                            : <ChatBubble message={{ role: 'assistant', content: r?.response || '' }} isMobile={isMobile} />
                                                         }
                                                     </div>
                                                 ))}
@@ -1696,7 +2239,7 @@ export default function ChatPage() {
                                                 {msg.toolCalls.length} {msg.toolCalls.length > 1 ? t('dashboard.chatPage.toolsUsed', 'tools used') : t('dashboard.chatPage.toolUsed', 'tool used')}
                                             </p>
                                             {msg.toolCalls.map((tc, j) => (
-                                                <ToolCallCard key={j} toolCall={tc} />
+                                                tc.result === '...' ? <ToolCallSkeleton key={j} name={tc.name} /> : <ToolCallCard key={j} toolCall={tc} onAction={sendMessage} />
                                             ))}
                                         </div>
                                     )}
@@ -1709,6 +2252,7 @@ export default function ChatPage() {
                                         feedback={messageFeedback[i]}
                                         onEdit={msg.role === 'user' ? () => editMessage(i) : undefined}
                                         onSave={msg.role === 'user' ? savePrompt : undefined}
+                                        isMobile={isMobile}
                                     />
                                     {/* Always-visible retry button on error messages */}
                                     {msg.role === 'assistant' && msg.content?.startsWith('\u274c') && (
@@ -1729,12 +2273,14 @@ export default function ChatPage() {
                             <div ref={messagesEndRef} />
                             {/* Follow-up suggestions */}
                             {followUpSuggestions.length > 0 && !loading && (
-                                <div className="flex flex-wrap gap-1.5 mt-2 animate-fadeIn">
+                                <div className={`flex gap-1.5 mt-2 animate-fadeIn ${isMobile ? 'overflow-x-auto pb-1 -mx-2 px-2 scrollbar-hide' : 'flex-wrap'}`}>
                                     {followUpSuggestions.map((s, i) => (
                                         <button key={i}
                                             onClick={() => sendMessage(s.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}]\s*/u, ''))}
-                                            className="px-3 py-1.5 rounded-full text-[11px] bg-brand-500/8 text-brand-400/80
-                                                border border-brand-500/15 hover:bg-brand-500/15 hover:text-brand-400 transition-all">
+                                            className={`rounded-full bg-brand-500/8 text-brand-400/80
+                                                border border-brand-500/15 hover:bg-brand-500/15 hover:text-brand-400 transition-all
+                                                active:scale-95 whitespace-nowrap flex-shrink-0
+                                                ${isMobile ? 'px-4 py-2 text-xs' : 'px-3 py-1.5 text-[11px]'}`}>
                                             {s}
                                         </button>
                                     ))}
@@ -1757,48 +2303,50 @@ export default function ChatPage() {
                 <div className={`p-3 border-t border-white/5 bg-surface-900/80 backdrop-blur-sm ${isMobile ? 'chat-input-safe' : ''}`}>
                     {/* Quick action chips (new/empty chat only) */}
                     {messages.length === 0 && !loading && (
-                        <div className="flex flex-wrap gap-1.5 mb-2 animate-fadeIn">
+                        <div className={`flex gap-1.5 mb-2 animate-fadeIn ${isMobile ? 'overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide' : 'flex-wrap'}`}>
                             {[
                                 { label: '💰 Balance', cmd: 'Check my wallet balance' },
                                 { label: '📈 Top tokens', cmd: 'Show top trending tokens' },
-                                { label: '🔄 Swap', cmd: 'I want to swap tokens' },
+                                { label: '💱 Swap', cmd: 'I want to swap tokens' },
                                 { label: '📊 Analyze', cmd: 'Analyze OKB token' },
                                 { label: '📡 Signals', cmd: 'Show whale buy signals' },
+                                { label: '🔔 Alerts', cmd: 'Show my price alerts' },
                             ].map(chip => (
                                 <button key={chip.cmd}
                                     onClick={() => sendMessage(chip.cmd)}
-                                    className={`${isMobile ? 'px-3 py-2 text-xs' : 'px-2.5 py-1.5 text-[11px]'} rounded-full
-                                        bg-brand-500/8 text-brand-400/80 border border-brand-500/15
-                                        hover:bg-brand-500/15 hover:text-brand-400 transition-all active:scale-95`}>
+                                    className={`rounded-full bg-brand-500/8 text-brand-400/80 border border-brand-500/15
+                                        hover:bg-brand-500/15 hover:text-brand-400 transition-all active:scale-95
+                                        whitespace-nowrap flex-shrink-0
+                                        ${isMobile ? 'px-4 py-2.5 text-xs min-h-[40px]' : 'px-2.5 py-1.5 text-[11px]'}`}>
                                     {chip.label}
                                 </button>
                             ))}
                         </div>
                     )}
 
-                    {/* U6: Quick-switch chips + U7: Token counter */}
+                    {/* Compact chip bar — Model+Persona unified + AI Trader */}
                     <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
-                            {/* Model chip */}
+                        <div className={`flex items-center gap-1.5 flex-1 min-w-0 ${isMobile ? 'overflow-x-auto scrollbar-hide' : 'flex-wrap'}`}>
+                            {/* Unified Model+Persona chip */}
                             <button onClick={() => { setShowSettingsPanel(true); setSettingsTab('model'); }}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] bg-surface-800/60 border border-white/5 text-surface-200/50 hover:text-surface-200/80 hover:border-white/10 transition-all">
-                                {(MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || []).find(m => m.id === selectedModel)?.icon || '🤖'}
-                                <span className="truncate max-w-[80px]">{(MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || []).find(m => m.id === selectedModel)?.label || selectedModel}</span>
-                            </button>
-                            {/* Persona chip */}
-                            <button onClick={() => { setShowSettingsPanel(true); setSettingsTab('persona'); }}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] bg-surface-800/60 border border-white/5 text-surface-200/50 hover:text-surface-200/80 hover:border-white/10 transition-all">
-                                {selectedPersona === 'custom' ? '✏️' : (PERSONA_OPTIONS.find(p => p.value === selectedPersona)?.icon || '🤖')}
-                                <span className="truncate max-w-[60px]">{selectedPersona === 'custom' ? t('dashboard.chatPage.custom', 'Custom') : (PERSONA_OPTIONS.find(p => p.value === selectedPersona)?.label || 'Default')}</span>
+                                className={`inline-flex items-center gap-1.5 rounded-full bg-surface-800/60 border border-white/5 text-surface-200/60 hover:text-surface-200/90 hover:border-white/10 transition-all whitespace-nowrap flex-shrink-0
+                                    ${isMobile ? 'px-3 py-2 text-xs' : 'px-2.5 py-1 text-[10px]'}`}>
+                                <span>{(MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || []).find(m => m.id === selectedModel)?.icon || '🤖'}</span>
+                                <span className="truncate max-w-[70px]">{(MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || []).find(m => m.id === selectedModel)?.label || 'Flash'}</span>
+                                <span className="text-surface-200/25">·</span>
+                                <span>{selectedPersona === 'custom' ? '✏️' : (PERSONA_OPTIONS.find(p => p.value === selectedPersona)?.icon || '🔰')}</span>
+                                <span className="truncate max-w-[50px]">{selectedPersona === 'custom' ? t('dashboard.chatPage.custom', 'Custom') : (PERSONA_OPTIONS.find(p => p.value === selectedPersona)?.label || 'Default')}</span>
                             </button>
                             {/* AI Trader chip */}
                             <button onClick={() => setShowAiTrader(true)}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] bg-gradient-to-r from-brand-500/10 to-purple-500/10 border border-brand-500/20 text-brand-400 hover:border-brand-500/40 transition-all">
+                                className={`inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-500/10 to-purple-500/10 border border-brand-500/20 text-brand-400 hover:border-brand-500/40 transition-all whitespace-nowrap flex-shrink-0
+                                    ${isMobile ? 'px-3 py-2 text-xs' : 'px-2 py-1 text-[10px]'}`}>
                                 🤖 <span>AI Trader</span>
                                 <span className="px-1 py-0 text-[8px] font-bold bg-amber-500/20 text-amber-400 rounded">β</span>
                             </button>
                             {/* Compare mode indicator */}
-                            {compareMode && <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-400">{t('dashboard.chatPage.compareIndicator', '⚔️ Compare')}</span>}
+                            {compareMode && <span className={`inline-flex items-center gap-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 whitespace-nowrap flex-shrink-0
+                                ${isMobile ? 'px-3 py-2 text-xs' : 'px-2 py-1 text-[10px]'}`}>{t('dashboard.chatPage.compareIndicator', '⚔️ Compare')}</span>}
                         </div>
                         {/* U7: Session token counter */}
                         {(sessionTokens.sent > 0 || sessionTokens.received > 0) && (
@@ -1827,18 +2375,35 @@ export default function ChatPage() {
                         <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                         <button
                             onClick={() => imageInputRef.current?.click()}
-                            className="p-2.5 rounded-xl hover:bg-white/5 text-surface-200/30 hover:text-surface-200/60 transition-all flex-shrink-0"
+                            className={`rounded-xl hover:bg-white/5 text-surface-200/30 hover:text-surface-200/60 transition-all flex-shrink-0
+                                ${isMobile ? 'p-3 min-w-[44px] min-h-[44px] flex items-center justify-center' : 'p-2.5'}`}
                             title={t('dashboard.chatPage.uploadImage', 'Upload image for analysis')}>
-                            <Paperclip size={16} />
+                            <Paperclip size={isMobile ? 18 : 16} />
                         </button>
                         <div className="flex-1 relative">
+                            {/* Slash command palette */}
+                            <SlashCommandPalette
+                                input={input}
+                                isMobile={isMobile}
+                                onSelect={(template) => {
+                                    setInput('');
+                                    sendMessage(template);
+                                }}
+                            />
+                            {/* Smart paste detection */}
+                            <PasteDetectionBanner
+                                type={pasteDetected}
+                                onAction={handlePasteAction}
+                                onDismiss={() => setPasteDetected(null)}
+                            />
                             {/* Token autocomplete dropdown */}
                             {showAutocomplete && (
                                 <div className="absolute bottom-full mb-1 left-0 w-full bg-surface-800 border border-white/10 rounded-xl shadow-xl z-10 overflow-hidden">
                                     {autocompleteResults.map(token => (
                                         <button key={token}
                                             onClick={() => insertToken(token)}
-                                            className="w-full text-left px-3 py-2 text-xs text-surface-100 hover:bg-brand-500/10 transition-colors flex items-center gap-2">
+                                            className={`w-full text-left px-3 text-xs text-surface-100 hover:bg-brand-500/10 transition-colors flex items-center gap-2
+                                                ${isMobile ? 'py-3' : 'py-2'}`}>
                                             <Coins size={12} className="text-amber-400" />
                                             <span className="font-semibold">{token}</span>
                                         </button>
@@ -1850,16 +2415,18 @@ export default function ChatPage() {
                                 value={input}
                                 onChange={handleInputChange}
                                 onKeyDown={handleKeyDown}
-                                placeholder={t('dashboard.chatPage.inputPlaceholder', 'Ask anything about crypto, tokens, wallets...')}
+                                placeholder={t('dashboard.chatPage.inputPlaceholder', 'Type / for commands or ask anything...')}
                                 rows={1}
-                                className={`w-full px-4 py-2.5 rounded-xl bg-surface-800/60 border
-                                    text-sm text-surface-100 placeholder:text-surface-200/25
+                                className={`w-full rounded-xl bg-surface-800/60 border
+                                    text-surface-100 placeholder:text-surface-200/25
                                     focus:outline-none focus:border-brand-500/30 focus:ring-1 focus:ring-brand-500/20
                                     resize-none transition-all ${isListening ? 'border-red-500/40 ring-1 ring-red-500/20' : 'border-white/5'}
-                                    ${inputShake ? 'animate-[shake_0.4s_ease-in-out]' : ''}`}
-                                style={{ maxHeight: '120px', minHeight: '40px' }}
+                                    ${inputShake ? 'animate-[shake_0.4s_ease-in-out]' : ''}
+                                    ${isMobile ? 'px-4 py-3 text-base min-h-[44px]' : 'px-4 py-2.5 text-sm min-h-[40px]'}`}
+                                style={{ maxHeight: '120px' }}
                                 onInput={(e) => {
-                                    e.target.style.height = '40px';
+                                    const minH = isMobile ? 44 : 40;
+                                    e.target.style.height = minH + 'px';
                                     e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
                                 }}
                             />
@@ -1868,12 +2435,14 @@ export default function ChatPage() {
                         {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
                             <button
                                 onClick={toggleVoice}
-                                className={`p-2.5 rounded-xl transition-all flex-shrink-0 ${isListening
+                                className={`rounded-xl transition-all flex-shrink-0
+                                    ${isMobile ? 'p-3 min-w-[44px] min-h-[44px] flex items-center justify-center' : 'p-2.5'}
+                                    ${isListening
                                     ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse'
                                     : 'hover:bg-white/5 text-surface-200/30 hover:text-surface-200/60'
                                 }`}
                                 title={isListening ? 'Stop' : t('dashboard.chatPage.voiceHint', 'Voice input')}>
-                                {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+                                {isListening ? <MicOff size={isMobile ? 18 : 16} /> : <Mic size={isMobile ? 18 : 16} />}
                             </button>
                         )}
                         <button
@@ -1886,18 +2455,20 @@ export default function ChatPage() {
                                 sendMessage();
                             }}
                             disabled={loading}
-                            className={`p-2.5 rounded-xl transition-all flex-shrink-0 ${input.trim() && !loading
+                            className={`rounded-xl transition-all flex-shrink-0
+                                ${isMobile ? 'p-3 min-w-[44px] min-h-[44px] flex items-center justify-center' : 'p-2.5'}
+                                ${input.trim() && !loading
                                     ? 'bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/25'
                                     : 'bg-surface-800/40 text-surface-200/20 cursor-not-allowed'
                                 }`}>
                             {loading
-                                ? <Loader2 size={16} className="animate-spin" />
-                                : <Send size={16} />}
+                                ? <Loader2 size={isMobile ? 18 : 16} className="animate-spin" />
+                                : <Send size={isMobile ? 18 : 16} />}
                         </button>
                     </div>
                     <p className="text-[9px] text-surface-200/20 mt-1.5 text-center">
                         {t('dashboard.chatPage.disclaimer', 'AI can make mistakes. Always verify important information.')}
-                        {' · '}<span className="text-surface-200/15">$token · Ctrl+N · Esc</span>
+                        {' · '}<span className="text-surface-200/15">/cmd · $token · Ctrl+N</span>
                     </p>
                 </div>
             </div>

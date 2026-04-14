@@ -615,6 +615,11 @@ async function init() {
         await dbRun(`ALTER TABLE users ADD COLUMN walletLimit INTEGER DEFAULT 50`);
     } catch (e) { /* Column likely exists already */ }
 
+    // Migration: add aiDailyLimit to users for owner-controlled AI API usage cap
+    try {
+        await dbRun(`ALTER TABLE users ADD COLUMN aiDailyLimit INTEGER DEFAULT 50`);
+    } catch (e) { /* Column likely exists already */ }
+
     // Portfolio snapshots for chart
     await dbRun(`CREATE TABLE IF NOT EXISTS wallet_portfolio_snapshots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

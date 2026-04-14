@@ -127,6 +127,14 @@ class ApiClient {
         return this.get('/owner/users/banned');
     }
 
+    sendMessageToUsers(userIds, text) {
+        return this.post('/owner/users/message', { userIds, text });
+    }
+
+    setUserAiLimit(userIds, limit) {
+        return this.put('/owner/users/ai-limit', { userIds, limit });
+    }
+
     getCoOwners() {
         return this.get('/owner/co-owners');
     }

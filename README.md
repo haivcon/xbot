@@ -31,6 +31,11 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
+### 🚀 What's New in v1.2.2 (Advanced User Management)
+- **Direct Messaging Engine**: Owners can now seamlessly broadcast HTML-formatted direct messages to individual users, selected groups, or the entire userbase directly from the Web Dashboard.
+- **Granular AI API Rate Limiting**: Introduced a dynamic per-user AI request quota system. Owners can easily throttle limits (0 to Unlimited) via new bulk-action modals or intuitive inline dropdowns to protect server API keys.
+- **Enhanced Dashboard UI**: Upgraded the `Users` page with a completely redesigned floating bulk-action bar, real-time AI usage statistical cards, and expanded multi-language translations explicitly supporting EN, VI, ZH, KO, RU, and ID.
+
 ### 🚀 What's New in v1.2.1 (Ecosystem Auto-Discovery)
 - **Zero-Touch Community Listing**: Verified and documented the automated bot-integration pipeline. Telegram groups are instantly indexed and displayed on the Web Dashboard the moment `@XlayerAi_bot` is added as an administrator.
 - **Multilingual Onboarding UX**: Expanded the dashboard call-to-actions with detailed, 6-language (EN, VI, ZH, KO, RU, ID) typography instructing users on the automated bot-integration process.
