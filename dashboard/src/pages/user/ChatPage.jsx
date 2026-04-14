@@ -453,18 +453,24 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
     const handleTap = () => {
         if (isMobile) setShowActions(prev => !prev);
     };
+    const { user } = useAuthStore();
 
     return (
         <>
         <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} animate-fadeIn group ${isPinned ? 'ring-1 ring-amber-500/20 rounded-2xl p-1' : ''}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isUser
-                    ? 'bg-brand-500/20 ring-1 ring-brand-500/30'
-                    : 'bg-emerald-500/20 ring-1 ring-emerald-500/30'
-                }`}>
-                {isUser
-                    ? <User size={14} className="text-brand-400" />
-                    : <Bot size={14} className="text-emerald-400" />}
-            </div>
+            {isUser ? (
+                user?.photo_url ? (
+                    <img src={user.photo_url} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-brand-500/30 flex-shrink-0" />
+                ) : (
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-brand-500/20 ring-1 ring-brand-500/30`}>
+                        <User size={14} className="text-brand-400" />
+                    </div>
+                )
+            ) : (
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ring-1 ring-emerald-500/30 overflow-hidden bg-surface-800`}>
+                    <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                </div>
+            )}
             <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 relative ${isUser
                     ? 'bg-brand-500/15 border border-brand-500/20'
@@ -749,8 +755,8 @@ function TypingIndicator() {
     const { t } = useTranslation();
     return (
         <div className="flex gap-3 animate-fadeIn">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 ring-1 ring-emerald-500/30 flex items-center justify-center flex-shrink-0">
-                <Bot size={14} className="text-emerald-400" />
+            <div className="w-8 h-8 rounded-full ring-1 ring-emerald-500/30 flex items-center justify-center flex-shrink-0 overflow-hidden bg-surface-800">
+                <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
             </div>
             <div className="bg-surface-800/60 border border-white/5 rounded-2xl px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -1336,12 +1342,37 @@ export default function ChatPage() {
         } catch (err) {
             if (controller.signal.aborted) return;
             hapticNotification('error');
+            
+            let errMsg = err.message || 'Lỗi kết nối. Vui lòng thử lại sau.';
+            const isRateLimit = errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit');
+            const isAuthError = errMsg.includes('401') || errMsg.includes('403') || errMsg.toLowerCase().includes('invalid api key') || errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('api_key_invalid');
+            
+            if (isRateLimit || isAuthError) {
+                const hasUserKey = (() => {
+                    try {
+                        const keys = JSON.parse(localStorage.getItem('xbot_ai_api_keys') || '[]');
+                        return !!keys.find(k => k.provider === selectedProvider)?.apiKey;
+                    } catch { return false; }
+                })();
+                
+                const pName = selectedProvider === 'google' ? 'Gemini' : selectedProvider === 'openai' ? 'OpenAI' : selectedProvider === 'groq' ? 'Groq' : 'AI';
+                const pLink = selectedProvider === 'google' ? 'aistudio.google.com/app/apikey' : selectedProvider === 'openai' ? 'platform.openai.com/api-keys' : 'console.groq.com/keys';
+
+                if (hasUserKey) {
+                   errMsg = `\u274c **Lỗi khóa API ${pName} cá nhân của bạn:**\n${isRateLimit ? 'Tài khoản đã hết hạn mức (Quota Exceeded) hoặc bị giới hạn tốc độ gõ (Rate Limit).' : 'Khóa API không hợp lệ, đã bị thu hồi hoặc không có quyền truy cập model này.'}\n\n💡 **Cách khắc phục:** Vui lòng mở bảng [Cài đặt AI ⚙️] > [Khóa API] để cập nhật lại khóa mới hoặc xóa khóa đi để sử dụng chung đường truyền máy chủ XBot.`;
+                } else {
+                   errMsg = `\u274c **Đường truyền máy chủ ${pName} đang quá tải:**\nLượng người dùng hiện tại đang vượt quá hạn mức miễn phí của hệ thống XBot.\n\n💡 **Mẹo để không bị gián đoạn:**\nBạn có thể thiết lập khóa API cá nhân của riêng mình để được ưu tiên xử lý tức thì, tốc độ cao nhất và hoàn toàn miễn phí!\n\n**Hướng dẫn:**\n1. Lấy khóa API miễn phí tại: [${pLink}](https://${pLink})\n2. Trên góc phải màn hình Chat, bấm vào [Cài đặt AI ⚙️] > chuyển sang tab [Khóa API 🔑]\n3. Dán khóa của bạn vào và tận hưởng đường truyền riêng biệt.`;
+                }
+            } else {
+                errMsg = `\u274c Lỗi: ${errMsg}`;
+            }
+
             // Update the existing streaming placeholder instead of adding a duplicate
             setMessages(prev => {
                 const copy = [...prev];
                 const lastIdx = copy.length - 1;
                 if (lastIdx >= 0 && copy[lastIdx].role === 'assistant' && !copy[lastIdx].content) {
-                    copy[lastIdx] = { ...copy[lastIdx], content: `\u274c ${err.message || 'Failed to get AI response. Please try again.'}` };
+                    copy[lastIdx] = { ...copy[lastIdx], content: errMsg };
                     return copy;
                 }
                 return [...prev, {
@@ -1982,13 +2013,13 @@ export default function ChatPage() {
                             </span>
                         )}
                     </button>
-                    <div className={`rounded-full bg-gradient-to-br from-brand-500 to-emerald-500 flex items-center justify-center flex-shrink-0
+                    <div className={`rounded-full flex items-center justify-center flex-shrink-0 ring-1 ring-emerald-500/30 overflow-hidden bg-surface-800
                         ${isMobile ? 'w-7 h-7' : 'w-8 h-8'}`}>
-                        <Bot size={isMobile ? 14 : 16} className="text-white" />
+                        <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                         <h1 className={`font-semibold text-surface-100 truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>
-                            {t('dashboard.chatPage.title', 'AI Trading Assistant')}
+                            {t('dashboard.chatPage.title', 'XBot')}
                         </h1>
                         <p className="text-[10px] text-emerald-400/70 flex items-center gap-1 truncate">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
@@ -2179,7 +2210,7 @@ export default function ChatPage() {
                                 </div>
                             </div>
                             <div className="text-center">
-                                <h2 className="text-lg font-semibold text-surface-100 mb-1">{t('dashboard.chatPage.welcomeTitle', 'AI Trading Assistant')}</h2>
+                                <h2 className="text-lg font-semibold text-surface-100 mb-1">{t('dashboard.chatPage.welcomeTitle', 'XBot')}</h2>
                                 <p className="text-xs text-surface-200/40 max-w-md">
                                     {t('dashboard.chatPage.welcomeDesc', 'Chat naturally to control your wallets, swap tokens, check prices, view signals, and manage your portfolio — all powered by AI + OnchainOS.')}
                                 </p>

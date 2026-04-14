@@ -1,4 +1,4 @@
-﻿import i18n from 'i18next';
+import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
@@ -1448,9 +1448,9 @@ const dashboardResources = {
                 saved: 'Đã lưu!',
             },
             chatPage: {
-                title: 'Trợ lý Giao dịch AI',
+                title: 'XBot',
                 status: 'Trực tuyến — Hỗ trợ bởi Gemini + OnchainOS',
-                welcomeTitle: 'Trợ lý Giao dịch AI',
+                welcomeTitle: 'XBot',
                 welcomeDesc: 'Trò chuyện tự nhiên để quản lý ví, swap token, xem giá, tín hiệu và danh mục đầu tư — tất cả được hỗ trợ bởi AI + OnchainOS.',
                 inputPlaceholder: 'Hỏi bất cứ điều gì về crypto, token, ví...',
                 disclaimer: 'AI có thể mắc lỗi. Luôn xác minh thông tin quan trọng.',
