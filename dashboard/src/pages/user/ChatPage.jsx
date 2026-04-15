@@ -9,7 +9,8 @@ import {
     Wallet, TrendingUp, BarChart3, Zap, Shield, Globe, Coins, ArrowLeftRight,
     HelpCircle, BookOpen, Star, Bell, Search, Activity, ArrowUpDown, Eye,
     Download, Pin, PinOff, Keyboard, Mic, MicOff, Paperclip, Image,
-    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home, Columns, Lock, Menu, MoreVertical
+    ThumbsUp, ThumbsDown, Edit, Share2, Settings, Gauge, Key, ExternalLink, Home, Columns, Lock, Menu, MoreVertical,
+    Brain, Save, Tag, AlertCircle, ChevronUp
 } from 'lucide-react';
 import { hapticImpact, hapticNotification } from '@/utils/telegram';
 import AiTraderPanel from '@/components/AiTraderPanel';
@@ -1023,6 +1024,13 @@ export default function ChatPage() {
     const [inputShake, setInputShake] = useState(false);
     const [shareModal, setShareModal] = useState(null); // { url, title, loading }
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    // ── AI Memory panel state ──
+    const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+    const [memPrefs, setMemPrefs] = useState({});
+    const [memLoading, setMemLoading] = useState(false);
+    const [memNewKey, setMemNewKey] = useState('');
+    const [memNewValue, setMemNewValue] = useState('');
+    const [memSaving, setMemSaving] = useState(false);
     // U3: Model usage tracking
     const [modelUsageStats, setModelUsageStats] = useState(() => {
         try { return JSON.parse(localStorage.getItem('xbot_model_usage') || '{}'); } catch { return {}; }
@@ -1054,6 +1062,45 @@ export default function ChatPage() {
         window.addEventListener('resize', onResize);
         return () => window.removeEventListener('resize', onResize);
     }, []);
+
+    // ── AI Memory: load/save/delete ──
+    const MEMORY_SUGGESTED_KEYS = [
+        { key: 'nickname', desc: 'What AI calls you' },
+        { key: 'language', desc: 'Preferred language' },
+        { key: 'trading_style', desc: 'Cautious/Aggressive' },
+        { key: 'favorite_chain', desc: 'Preferred chain' },
+        { key: 'risk_tolerance', desc: 'Low/Medium/High' },
+        { key: 'timezone', desc: 'Your timezone' },
+    ];
+    const loadMemory = useCallback(async () => {
+        setMemLoading(true);
+        try {
+            const data = await api.request('/user/preferences');
+            setMemPrefs(data?.preferences || {});
+        } catch (err) { console.error('Failed to load memory:', err); }
+        finally { setMemLoading(false); }
+    }, []);
+    const saveMemoryItem = async () => {
+        if (!memNewKey.trim() || !memNewValue.trim()) return;
+        setMemSaving(true);
+        try {
+            await api.request('/user/preferences', {
+                method: 'POST',
+                body: JSON.stringify({ key: memNewKey.trim(), value: memNewValue.trim() }),
+            });
+            setMemNewKey(''); setMemNewValue('');
+            await loadMemory();
+        } catch (err) { console.error('Failed to save memory:', err); }
+        finally { setMemSaving(false); }
+    };
+    const deleteMemoryItem = async (key) => {
+        try {
+            await api.request(`/user/preferences/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            await loadMemory();
+        } catch (err) { console.error('Failed to delete memory:', err); }
+    };
+    // Auto-load memory when panel opens
+    useEffect(() => { if (showMemoryPanel) loadMemory(); }, [showMemoryPanel, loadMemory]);
 
     // ── Load available models from backend ──
     const loadModels = useCallback(async () => {
@@ -2089,6 +2136,82 @@ export default function ChatPage() {
                         </div>
                     </div>
                 )}
+
+                {/* ── 🧠 AI Memory Panel (collapsible) ── */}
+                <div className="border-t border-white/5">
+                    <button onClick={() => setShowMemoryPanel(!showMemoryPanel)}
+                        className="w-full px-3 py-2 flex items-center gap-2 hover:bg-white/[0.03] transition-colors">
+                        <Brain size={12} className="text-violet-400" />
+                        <span className="text-[10px] font-semibold text-surface-200/50 uppercase tracking-wider flex-1 text-left">
+                            {t('dashboard.aiMemoryPage.title', 'AI Memory')}
+                            <span className="text-surface-200/25 font-normal ml-1">({Object.keys(memPrefs).length})</span>
+                        </span>
+                        {showMemoryPanel ? <ChevronUp size={12} className="text-surface-200/30" /> : <ChevronDown size={12} className="text-surface-200/30" />}
+                    </button>
+                    {showMemoryPanel && (
+                        <div className="px-3 pb-3 space-y-2 animate-fadeIn">
+                            {/* Usage guide */}
+                            <div className="flex items-start gap-2 p-2 rounded-lg bg-violet-500/5 border border-violet-500/10">
+                                <AlertCircle size={11} className="text-violet-400 mt-0.5 flex-shrink-0" />
+                                <p className="text-[9px] text-surface-200/50 leading-relaxed">
+                                    {t('dashboard.aiMemoryPage.usageGuide', 'AI stores these preferences and uses them across ALL conversations to personalize responses. Example: set nickname, language, trading style.')}
+                                </p>
+                            </div>
+
+                            {/* Stored memories list */}
+                            {memLoading ? (
+                                <div className="flex justify-center py-3">
+                                    <Loader2 size={14} className="animate-spin text-violet-400" />
+                                </div>
+                            ) : Object.keys(memPrefs).length === 0 ? (
+                                <p className="text-[10px] text-surface-200/25 text-center py-2">
+                                    {t('dashboard.aiMemoryPage.noMemories', 'No memories yet')}
+                                </p>
+                            ) : (
+                                <div className="space-y-1">
+                                    {Object.entries(memPrefs).map(([key, value]) => (
+                                        <div key={key} className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-surface-800/30 hover:bg-surface-800/50 transition-colors group">
+                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                <span className="text-[10px] text-violet-400 font-mono font-semibold whitespace-nowrap">{key}</span>
+                                                <span className="text-[10px] text-surface-200/50 truncate">{value}</span>
+                                            </div>
+                                            <button onClick={() => deleteMemoryItem(key)}
+                                                className="p-1 rounded text-surface-200/15 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                                                <Trash2 size={10} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Quick add form */}
+                            <div className="flex gap-1.5 items-end">
+                                <input type="text" value={memNewKey} onChange={e => setMemNewKey(e.target.value)}
+                                    placeholder={t('dashboard.aiMemoryPage.keyPlaceholder', 'Key')}
+                                    className="flex-1 min-w-0 bg-surface-800/40 border border-white/5 rounded-lg px-2 py-1.5 text-[10px] text-surface-100 placeholder-surface-200/20 focus:outline-none focus:border-violet-400/30" />
+                                <input type="text" value={memNewValue} onChange={e => setMemNewValue(e.target.value)}
+                                    placeholder={t('dashboard.aiMemoryPage.valuePlaceholder', 'Value')}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveMemoryItem(); }}
+                                    className="flex-[1.5] min-w-0 bg-surface-800/40 border border-white/5 rounded-lg px-2 py-1.5 text-[10px] text-surface-100 placeholder-surface-200/20 focus:outline-none focus:border-violet-400/30" />
+                                <button onClick={saveMemoryItem} disabled={memSaving || !memNewKey.trim() || !memNewValue.trim()}
+                                    className="p-1.5 rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 disabled:opacity-30 transition-all flex-shrink-0">
+                                    {memSaving ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                                </button>
+                            </div>
+
+                            {/* Suggested keys */}
+                            <div className="flex gap-1 flex-wrap">
+                                {MEMORY_SUGGESTED_KEYS.filter(s => !memPrefs[s.key]).slice(0, 4).map(s => (
+                                    <button key={s.key} onClick={() => setMemNewKey(s.key)}
+                                        className="px-1.5 py-0.5 rounded bg-surface-800/30 text-[9px] text-surface-200/30 hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
+                                        title={s.desc}>
+                                        <Tag size={7} className="inline mr-0.5" /> {s.key}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 {/* #20 Copilot Quick Prompts */}
                 <div className="border-t border-white/5 p-3">

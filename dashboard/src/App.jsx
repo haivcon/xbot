@@ -31,7 +31,6 @@ const AuditLogPage = lazy(() => import('@/pages/owner/AuditLogPage'));
 const TokenLookupPage = lazy(() => import('@/pages/user/TokenLookupPage'));
 const PortfolioPage = lazy(() => import('@/pages/user/PortfolioPage'));
 const MiniGamesPage = lazy(() => import('@/pages/user/MiniGamesPage'));
-const AiMemoryPage = lazy(() => import('@/pages/user/AiMemoryPage'));
 const CheckinAdminPage = lazy(() => import('@/pages/owner/CheckinAdminPage'));
 const MemeScannerPage = lazy(() => import('@/pages/user/MemeScannerPage'));
 const DiscoveryPage = lazy(() => import('@/pages/user/DiscoveryPage'));
@@ -143,7 +142,7 @@ export default function App() {
                     <Route path="token-lookup" element={<Navigate to="/trading" />} />
                     <Route path="portfolio" element={<SuspenseWrapper><PortfolioPage /></SuspenseWrapper>} />
                     <Route path="games" element={<SuspenseWrapper><MiniGamesPage /></SuspenseWrapper>} />
-                    <Route path="ai-memory" element={<SuspenseWrapper><AiMemoryPage /></SuspenseWrapper>} />
+                    <Route path="ai-memory" element={<Navigate to="/chat" />} />
                     <Route path="ai-trader" element={<SuspenseWrapper><AiTraderPage /></SuspenseWrapper>} />
                     <Route path="meme-scanner" element={<Navigate to="/trading" />} />
                     <Route path="discovery" element={<SuspenseWrapper><DiscoveryPage /></SuspenseWrapper>} />
