@@ -248,6 +248,7 @@ export default function ChatWidget() {
     const [unread, setUnread] = useState(0);
     
     const [showHistory, setShowHistory] = useState(false);
+    const [activeWidgetMenu, setActiveWidgetMenu] = useState(null);
     const [historyConvs, setHistoryConvs] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -595,3 +596,5 @@ export default function ChatWidget() {
         </>
     );
 }
+
+export default ChatWidget;
