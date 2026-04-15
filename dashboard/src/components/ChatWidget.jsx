@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import {
     Bot, Send, Loader2, Sparkles, X, Minus, Maximize2, Minimize2,
     Wallet, BarChart3, Fuel, TrendingUp, ArrowRightLeft, AlertTriangle,
-    Search, Shield, Users, Store, Mic, Brain, Copy, Repeat, History, MessageSquare
+    Search, Shield, Users, Store, Mic, Brain, Copy, Repeat, History, MessageSquare,
+    MoreVertical, Trash2, Share2, Pin, Edit
 } from 'lucide-react';
 
 /* ─── Markdown renderer (XSS-safe) ─── */
@@ -145,7 +147,7 @@ function MsgBubble({ msg }) {
                 isUser ? 'bg-brand-500/20' : 'bg-surface-800 ring-1 ring-emerald-500/30'}`}>
                 {isUser
                     ? <span className="text-[10px] text-brand-400 font-bold">U</span>
-                    : <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />}
+                    : <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover rounded-full" />}
             </div>
             <div className={`max-w-[85%] rounded-xl px-3 py-2 ${isUser
                     ? 'bg-brand-500/15 border border-brand-500/15'
@@ -167,7 +169,7 @@ function TypingDots() {
     return (
         <div className="flex gap-2 animate-fadeIn">
             <div className="w-6 h-6 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover rounded-full" />
             </div>
             <div className="bg-surface-800/60 border border-white/5 rounded-xl px-3 py-2">
                 <div className="flex gap-1">
@@ -215,20 +217,73 @@ function TradeConfirmCard({ data, onConfirm, onCancel }) {
 
 /* ─── Quick suggestion chips (D6: Context-Aware) ─── */
 const SUGGESTIONS = [
-    { icon: '💰', text: 'Check my portfolio' },
-    { icon: '📊', text: 'Top trending tokens' },
-    { icon: '⛽', text: 'Gas prices' },
-    { icon: '🐳', text: 'Whale signals' },
-    { icon: '🔬', text: 'Deep research' },
-    { icon: '📈', text: 'Scan arbitrage' },
-    { icon: '👥', text: 'Copy trading board' },
-    { icon: '🤖', text: 'Auto trading status' },
+    { icon: '💰', textKey: 'widget.suggestPortfolio', text: 'Check my portfolio' },
+    { icon: '📊', textKey: 'widget.suggestTrending', text: 'Top trending tokens' },
+    { icon: '⛽', textKey: 'widget.suggestGas', text: 'Gas prices' },
+    { icon: '🐳', textKey: 'widget.suggestWhale', text: 'Whale signals' },
+    { icon: '🔬', textKey: 'widget.suggestResearch', text: 'Deep research' },
+    { icon: '📈', textKey: 'widget.suggestArbitrage', text: 'Scan arbitrage' },
+    { icon: '👥', textKey: 'widget.suggestCopy', text: 'Copy trading board' },
+    { icon: '🤖', textKey: 'widget.suggestAutoTrading', text: 'Auto trading status' },
 ];
+
+/* ─── History item with MoreVertical dropdown (synced with ChatPage.ConvItem) ─── */
+function WidgetHistoryItem({ conv, active, onLoad, onDelete, t }) {
+    const [showMenu, setShowMenu] = useState(false);
+    return (
+        <div className={`relative rounded-xl border transition-all group
+            ${active ? 'bg-brand-500/10 border-brand-500/20' : 'bg-surface-800/40 border-white/5 hover:bg-surface-800 hover:border-white/10'}`}>
+            <button onClick={() => onLoad(conv.id)} className="text-left w-full pl-3 pr-8 py-2.5">
+                <div className="flex items-center gap-2 mb-0.5">
+                    <MessageSquare size={12} className={active ? 'text-brand-400' : 'text-surface-200/40'} />
+                    <span className={`text-xs font-semibold truncate flex-1 ${active ? 'text-brand-400' : 'text-surface-100'}`}>
+                        {conv.title || t('dashboard.chatPage.newChat', 'New Chat')}
+                    </span>
+                </div>
+                {conv.lastMessage && (
+                    <div className="text-[10px] text-surface-200/50 truncate pl-5">{conv.lastMessage.substring(0, 60)}</div>
+                )}
+            </button>
+            {/* ⋮ Menu */}
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10">
+                <button onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+                    className={`p-1 rounded-md transition-all
+                        ${showMenu ? 'bg-white/10 text-surface-100' : 'text-surface-200/25 hover:text-surface-100 hover:bg-white/5 opacity-0 group-hover:opacity-100'}
+                        ${active ? 'opacity-100 text-brand-400' : ''}`}>
+                    <MoreVertical size={14} />
+                </button>
+                {showMenu && (
+                    <>
+                        <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
+                        <div className="absolute top-8 right-0 w-40 bg-surface-800 border border-white/10 rounded-xl shadow-2xl z-50 py-1 overflow-hidden"
+                             onClick={(e) => e.stopPropagation()}>
+                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                                <Share2 size={12}/> {t('dashboard.chatPage.shareChat', 'Share')}
+                            </button>
+                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                                <Pin size={12}/> {t('dashboard.chatPage.pinChat', 'Pin')}
+                            </button>
+                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                                <Edit size={12}/> {t('dashboard.chatPage.renameChat', 'Rename')}
+                            </button>
+                            <div className="h-px bg-white/5 my-1" />
+                            <button onClick={(e) => { onDelete(conv.id, e); setShowMenu(false); }}
+                                className="flex items-center w-full px-3 py-2 text-[11px] text-red-400 hover:bg-red-500/10 gap-2">
+                                <Trash2 size={12}/> {t('dashboard.chatPage.deleteChat', 'Delete')}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+}
 
 /* ═══════════════════════════════════════
    Main Floating Chat Widget
    ═══════════════════════════════════════ */
 export default function ChatWidget() {
+    const { t } = useTranslation();
     const location = useLocation();
     const isChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
     const [open, setOpen] = useState(false);
@@ -410,7 +465,7 @@ export default function ChatWidget() {
                         group bg-surface-900 ring-2 ring-brand-500/50"
                     aria-label="Open AI Chat"
                 >
-                    <img src="/xbot-logo.png" alt="XBot" className="w-[42px] h-[42px] object-cover group-hover:scale-110 transition-transform" />
+                    <img src="/xbot-logo.png" alt="XBOT" className="w-[42px] h-[42px] rounded-full object-cover group-hover:scale-110 transition-transform" />
 
                     {/* Unread badge */}
                     {unread > 0 && (
@@ -437,13 +492,13 @@ export default function ChatWidget() {
                     <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5
                         bg-gradient-to-r from-brand-500/5 to-emerald-500/5 transition-colors">
                         <div className="w-8 h-8 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 flex items-center justify-center overflow-hidden">
-                            <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                            <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover rounded-full" />
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-bold text-surface-100">XBot</h3>
+                            <h3 className="text-sm font-bold text-surface-100">XBOT</h3>
                             <p className="text-[9px] text-emerald-400/70 flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
-                                Online — Gemini + OnchainOS
+                                {t('dashboard.chatPage.status', 'Online — Powered by Gemini + OnchainOS')}
                             </p>
                         </div>
                         <div className="flex items-center gap-0.5">
@@ -473,53 +528,39 @@ export default function ChatWidget() {
                         {showHistory ? (
                             <div className="flex flex-col gap-2 animate-fadeIn">
                                 <div className="text-[10px] font-semibold text-surface-200/40 uppercase tracking-widest px-1 mb-1">
-                                    Recent Conversations
+                                    {t('widget.recentConversations', 'Recent Conversations')}
                                 </div>
                                 {loadingHistory ? (
                                     <div className="flex justify-center p-8"><Loader2 size={16} className="text-brand-400 animate-spin" /></div>
                                 ) : historyConvs.length === 0 ? (
-                                    <div className="text-center p-8 text-xs text-surface-200/40">No chat history found.</div>
+                                    <div className="text-center p-8 text-xs text-surface-200/40">{t('widget.noHistory', 'No chat history found.')}</div>
                                 ) : (
                                     historyConvs.map(conv => (
-                                        <button key={conv.id} onClick={() => loadOldChat(conv.id)}
-                                            className={`text-left p-3 rounded-xl border transition-all ${
-                                                conv.id === conversationId 
-                                                    ? 'bg-brand-500/10 border-brand-500/20' 
-                                                    : 'bg-surface-800/40 border-white/5 hover:bg-surface-800 hover:border-white/10'
-                                            }`}>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <MessageSquare size={12} className={conv.id === conversationId ? 'text-brand-400' : 'text-surface-200/40'} />
-                                                <span className={`text-xs font-semibold truncate ${conv.id === conversationId ? 'text-brand-400' : 'text-surface-100'}`}>
-                                                    {conv.title || 'Conversation'}
-                                                </span>
-                                            </div>
-                                            <div className="text-[10px] text-surface-200/50 line-clamp-2 pl-5">
-                                                {conv.lastMessage || '...'}
-                                            </div>
-                                        </button>
-                                    ))
+                                        <WidgetHistoryItem key={conv.id} conv={conv} active={conv.id === conversationId}
+                                            onLoad={loadOldChat} onDelete={async (id, e) => { e?.stopPropagation(); try { await api.deleteConversation(id); setHistoryConvs(prev => prev.filter(c => c.id !== id)); if (id === conversationId) { setMessages([]); setConversationId(null); } } catch {} }} t={t} />)
+                                    )
                                 )}
                             </div>
                         ) : messages.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full gap-4 animate-fadeIn">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500/15 to-emerald-500/15
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500/15 to-emerald-500/15
                                     border border-white/5 flex items-center justify-center overflow-hidden ring-1 ring-emerald-500/30">
-                                    <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                                    <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover rounded-full" />
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-sm font-semibold text-surface-100 mb-0.5">XBot Trading Assistant</p>
+                                    <p className="text-sm font-semibold text-surface-100 mb-0.5">{t('widget.title', 'XBOT Trading Assistant')}</p>
                                     <p className="text-[10px] text-surface-200/30 max-w-[250px] mx-auto">
-                                        Ask about tokens, swap, signals, gas, portfolio — I execute on-chain tools for you.
+                                        {t('widget.desc', 'Ask about tokens, swap, signals, gas, portfolio — I execute on-chain tools for you.')}
                                     </p>
                                 </div>
                                 <div className="grid grid-cols-2 gap-1.5 w-full mt-2">
                                     {SUGGESTIONS.map((s, i) => (
                                         <button key={i}
-                                            onClick={() => sendMessage(s.text)}
+                                            onClick={() => sendMessage(t(s.textKey, s.text))}
                                             className="text-left px-2.5 py-2 rounded-lg border border-white/5 bg-surface-800/30
                                                 hover:bg-white/5 hover:border-brand-500/15 transition-all text-[10px]
                                                 text-surface-200/50 hover:text-surface-200/80">
-                                            <span className="mr-1">{s.icon}</span>{s.text}
+                                            <span className="mr-1">{s.icon}</span>{t(s.textKey, s.text)}
                                         </button>
                                     ))}
                                 </div>
@@ -542,7 +583,7 @@ export default function ChatWidget() {
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyDown={handleKeyDown}
-                                    placeholder="Ask anything..."
+                                    placeholder={t('widget.inputPlaceholder', 'Ask anything...')}
                                     rows={1}
                                     className="flex-1 px-3 py-2 rounded-xl bg-surface-800/60 border border-white/5
                                         text-xs text-surface-100 placeholder:text-surface-200/20
