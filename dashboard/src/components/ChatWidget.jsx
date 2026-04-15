@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import {
-    Bot, Send, Loader2, Sparkles, X, Minus, Maximize2, Minimize2,
+    Bot, Send, Loader2, Sparkles, X, Minus, Maximize2, Minimize2, Trash2,
     Wallet, BarChart3, Fuel, TrendingUp, ArrowRightLeft, AlertTriangle,
     Search, Shield, Users, Store, Mic, Brain, Copy, Repeat, History, MessageSquare
 } from 'lucide-react';
@@ -145,7 +146,7 @@ function MsgBubble({ msg }) {
                 isUser ? 'bg-brand-500/20' : 'bg-surface-800 ring-1 ring-emerald-500/30'}`}>
                 {isUser
                     ? <span className="text-[10px] text-brand-400 font-bold">U</span>
-                    : <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />}
+                    : <img src="/XBOT-logo.png" alt="XBOT" className="w-full h-full object-cover" />}
             </div>
             <div className={`max-w-[85%] rounded-xl px-3 py-2 ${isUser
                     ? 'bg-brand-500/15 border border-brand-500/15'
@@ -167,7 +168,7 @@ function TypingDots() {
     return (
         <div className="flex gap-2 animate-fadeIn">
             <div className="w-6 h-6 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                <img src="/XBOT-logo.png" alt="XBOT" className="w-full h-full object-cover" />
             </div>
             <div className="bg-surface-800/60 border border-white/5 rounded-xl px-3 py-2">
                 <div className="flex gap-1">
@@ -229,6 +230,7 @@ const SUGGESTIONS = [
    Main Floating Chat Widget
    ═══════════════════════════════════════ */
 export default function ChatWidget() {
+    const { t } = useTranslation();
     const location = useLocation();
     const isChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
     const [open, setOpen] = useState(false);
@@ -376,14 +378,17 @@ export default function ChatWidget() {
         setShowHistory(false);
         abortRef.current?.abort();
         
+           const deleteOldChat = async (convId, e) => {
+        e.stopPropagation();
         try {
-            const res = await api.getChatMessages(convId);
-            setMessages(res.messages || []);
-            setConversationId(convId);
+            await api.clearChat(convId);
+            setHistoryConvs(prev => prev.filter(c => c.id !== convId));
+            if (convId === conversationId) {
+                setMessages([]);
+                setConversationId(null);
+            }
         } catch (err) {
             console.error(err);
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -410,7 +415,7 @@ export default function ChatWidget() {
                         group bg-surface-900 ring-2 ring-brand-500/50"
                     aria-label="Open AI Chat"
                 >
-                    <img src="/xbot-logo.png" alt="XBot" className="w-[42px] h-[42px] object-cover group-hover:scale-110 transition-transform" />
+                    <img src="/xbot-logo.png" alt="XBOT" className="w-[44px] h-[44px] rounded-full object-cover group-hover:scale-110 transition-transform" />
 
                     {/* Unread badge */}
                     {unread > 0 && (
@@ -437,10 +442,10 @@ export default function ChatWidget() {
                     <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5
                         bg-gradient-to-r from-brand-500/5 to-emerald-500/5 transition-colors">
                         <div className="w-8 h-8 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 flex items-center justify-center overflow-hidden">
-                            <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                            <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-bold text-surface-100">XBot</h3>
+                            <h3 className="text-sm font-bold text-surface-100">XBOT</h3>
                             <p className="text-[9px] text-emerald-400/70 flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
                                 Online — Gemini + OnchainOS
@@ -481,22 +486,33 @@ export default function ChatWidget() {
                                     <div className="text-center p-8 text-xs text-surface-200/40">No chat history found.</div>
                                 ) : (
                                     historyConvs.map(conv => (
-                                        <button key={conv.id} onClick={() => loadOldChat(conv.id)}
-                                            className={`text-left p-3 rounded-xl border transition-all ${
-                                                conv.id === conversationId 
-                                                    ? 'bg-brand-500/10 border-brand-500/20' 
-                                                    : 'bg-surface-800/40 border-white/5 hover:bg-surface-800 hover:border-white/10'
-                                            }`}>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <MessageSquare size={12} className={conv.id === conversationId ? 'text-brand-400' : 'text-surface-200/40'} />
-                                                <span className={`text-xs font-semibold truncate ${conv.id === conversationId ? 'text-brand-400' : 'text-surface-100'}`}>
-                                                    {conv.title || 'Conversation'}
-                                                </span>
-                                            </div>
-                                            <div className="text-[10px] text-surface-200/50 line-clamp-2 pl-5">
-                                                {conv.lastMessage || '...'}
-                                            </div>
-                                        </button>
+                                        <div key={conv.id} className="relative group">
+                                            <button onClick={() => loadOldChat(conv.id)}
+                                                className={`w-full text-left p-3 pr-10 rounded-xl border transition-all ${
+                                                    conv.id === conversationId 
+                                                        ? 'bg-brand-500/10 border-brand-500/20' 
+                                                        : 'bg-surface-800/40 border-white/5 hover:bg-surface-800 hover:border-white/10'
+                                                }`}>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <MessageSquare size={12} className={conv.id === conversationId ? 'text-brand-400' : 'text-surface-200/40'} />
+                                                    <span className={`text-xs font-semibold truncate ${conv.id === conversationId ? 'text-brand-400' : 'text-surface-100'}`}>
+                                                        {conv.title || 'Conversation'}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[10px] text-surface-200/50 line-clamp-2 pl-5">
+                                                    {conv.lastMessage || '...'}
+                                                </div>
+                                            </button>
+                                            {/* Delete button — always visible */}
+                                            <button
+                                                onClick={(e) => deleteOldChat(conv.id, e)}
+                                                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-all z-10
+                                                    ${conv.id === conversationId ? 'text-red-400 hover:bg-red-500/20' : 'text-surface-200/30 hover:text-red-400 hover:bg-red-500/10'}
+                                                    opacity-70 hover:opacity-100`}
+                                                title="Delete Chat">
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
                                     ))
                                 )}
                             </div>
@@ -504,12 +520,12 @@ export default function ChatWidget() {
                             <div className="flex flex-col items-center justify-center h-full gap-4 animate-fadeIn">
                                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500/15 to-emerald-500/15
                                     border border-white/5 flex items-center justify-center overflow-hidden ring-1 ring-emerald-500/30">
-                                    <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                                    <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover" />
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-sm font-semibold text-surface-100 mb-0.5">XBot Trading Assistant</p>
+                                    <p className="text-sm font-semibold text-surface-100 mb-0.5">XBOT Trading Assistant</p>
                                     <p className="text-[10px] text-surface-200/30 max-w-[250px] mx-auto">
-                                        Ask about tokens, swap, signals, gas, portfolio — I execute on-chain tools for you.
+                                        {t('dashboard.chatPage.widgetSubtitle', 'Ask about tokens, swap, signals, gas, portfolio — I execute on-chain tools for you.')}
                                     </p>
                                 </div>
                                 <div className="grid grid-cols-2 gap-1.5 w-full mt-2">
@@ -519,7 +535,7 @@ export default function ChatWidget() {
                                             className="text-left px-2.5 py-2 rounded-lg border border-white/5 bg-surface-800/30
                                                 hover:bg-white/5 hover:border-brand-500/15 transition-all text-[10px]
                                                 text-surface-200/50 hover:text-surface-200/80">
-                                            <span className="mr-1">{s.icon}</span>{s.text}
+                                            <span className="mr-1">{s.icon}</span>{t(`dashboard.chatPage.suggestions.${i}`, s.text)}
                                         </button>
                                     ))}
                                 </div>
