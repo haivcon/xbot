@@ -95,17 +95,18 @@ function StatCard({ icon: Icon, label, value, sub, color = 'brand', sparkData })
     };
     return (
         <div className="stat-card">
-            <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colors[color]}`}>
-                    <Icon size={20} />
+            <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center ${colors[color]}`}>
+                    <Icon size={16} className="sm:hidden" />
+                    <Icon size={20} className="hidden sm:block" />
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-xs text-surface-200/50 font-medium">{label}</p>
+                    <p className="text-[10px] sm:text-xs text-surface-200/50 font-medium truncate">{label}</p>
                     <div className="flex items-center">
-                        <p className="text-xl font-bold text-surface-100 truncate">{value}</p>
+                        <p className="text-base sm:text-xl font-bold text-surface-100 truncate">{value}</p>
                         {sparkData && <Sparkline data={sparkData} color={sparkColors[color] || '#60a5fa'} />}
                     </div>
-                    {sub && <p className="text-xs text-surface-200/40 mt-0.5">{sub}</p>}
+                    {sub && <p className="text-[10px] sm:text-xs text-surface-200/40 mt-0.5 truncate">{sub}</p>}
                 </div>
             </div>
         </div>
@@ -178,19 +179,19 @@ function WatchlistTokens({ tokens }) {
     };
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {tokens.map(tk => {
                 const p = prices[tk.addr.toLowerCase()];
                 return (
                     <a key={tk.addr} href={`https://web3.okx.com/token/x-layer/${tk.addr}`} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.05] hover:border-white/[0.08] transition-all group/wl">
-                        <img src={tk.logo} alt={tk.name} className="w-8 h-8 rounded-lg object-cover"
+                        className="flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 p-2 sm:p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.05] hover:border-white/[0.08] transition-all group/wl">
+                        <img src={tk.logo} alt={tk.name} className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg object-cover"
                             onError={(e) => { e.target.style.display = 'none'; }} />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-surface-100">{tk.name}</p>
-                            <p className="text-[10px] text-surface-200/40">{tk.symbol}</p>
+                        <div className="flex-1 min-w-0 text-center sm:text-left">
+                            <p className="text-[11px] sm:text-sm font-semibold text-surface-100 truncate">{tk.name}</p>
+                            <p className="text-[9px] sm:text-[10px] text-surface-200/40">{tk.symbol}</p>
                         </div>
-                        <span className="text-sm font-bold text-surface-100 tabular-nums">{fmtP(p)}</span>
+                        <span className="text-[11px] sm:text-sm font-bold text-surface-100 tabular-nums">{fmtP(p)}</span>
                     </a>
                 );
             })}
@@ -520,7 +521,7 @@ export default function DashboardPage() {
         return (
             <div className="space-y-6">
                 <SkeletonStatCards count={4} />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-2 gap-2.5 sm:gap-4">
                     <SkeletonCard lines={3} />
                     <SkeletonCard lines={3} />
                 </div>
@@ -591,46 +592,47 @@ export default function DashboardPage() {
 
             {/* ── Live Stats Widget ── */}
             {isVisible('live') && (
-                <div className={`grid gap-4 ${ownerMode ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
-                    <div className="glass-card p-5 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center">
-                            <Wallet size={22} className="text-brand-400" />
+                <div className={`grid items-start gap-2.5 sm:gap-4 ${ownerMode ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'}`}>
+                    <div className="glass-card p-3 sm:p-5 flex items-center gap-3 sm:gap-4">
+                        <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-brand-500/20 to-purple-500/20 flex items-center justify-center">
+                            <Wallet size={18} className="text-brand-400 sm:hidden" />
+                            <Wallet size={22} className="text-brand-400 hidden sm:block" />
                         </div>
-                        <div className="flex-1">
-                            <p className="text-xs text-surface-200/50 font-medium">{t('dashboard.liveStats.portfolio') || 'Portfolio Value'}</p>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[10px] sm:text-xs text-surface-200/50 font-medium truncate">{t('dashboard.liveStats.portfolio') || 'Portfolio Value'}</p>
                             <div className="flex items-center">
-                                <p className="text-2xl font-bold text-surface-100 tabular-nums">
+                                <p className="text-lg sm:text-2xl font-bold text-surface-100 tabular-nums truncate">
                                     {liveStats.portfolio !== null ? `$${Math.floor(liveStats.portfolio * 100) / 100}` : '—'}
                                 </p>
-                                {/* #12: Sparkline */}
                                 <Sparkline data={portfolioHistory.current} color="#818cf8" />
                             </div>
                         </div>
                     </div>
-                    <div className="glass-card p-5 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center">
-                            <Fuel size={22} className="text-amber-400" />
+                    <div className="glass-card p-3 sm:p-5 flex items-center gap-3 sm:gap-4">
+                        <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-500/10 flex items-center justify-center">
+                            <Fuel size={18} className="text-amber-400 sm:hidden" />
+                            <Fuel size={22} className="text-amber-400 hidden sm:block" />
                         </div>
-                        <div className="flex-1">
-                            <p className="text-xs text-surface-200/50 font-medium">{t('dashboard.liveStats.gasPrice') || 'Gas Price'}</p>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[10px] sm:text-xs text-surface-200/50 font-medium truncate">{t('dashboard.liveStats.gasPrice') || 'Gas Price'}</p>
                             <div className="flex items-center">
-                                <p className="text-2xl font-bold text-surface-100 tabular-nums">
+                                <p className="text-lg sm:text-2xl font-bold text-surface-100 tabular-nums truncate">
                                     {liveStats.gasPrice !== null ? `${liveStats.gasPrice < 0.01 ? liveStats.gasPrice.toFixed(4) : liveStats.gasPrice.toFixed(2)} Gwei` : '—'}
                                 </p>
-                                {/* #12: Sparkline */}
                                 <Sparkline data={gasHistory.current} color="#fbbf24" />
                             </div>
                         </div>
                     </div>
                     {/* #4: Only show alerts card for owner */}
                     {ownerMode && (
-                    <div className="glass-card p-5 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 flex items-center justify-center">
-                            <Bell size={22} className="text-cyan-400" />
+                    <div className="glass-card p-3 sm:p-5 flex items-center gap-3 sm:gap-4">
+                        <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-cyan-500/10 flex items-center justify-center">
+                            <Bell size={18} className="text-cyan-400 sm:hidden" />
+                            <Bell size={22} className="text-cyan-400 hidden sm:block" />
                         </div>
                         <div>
-                            <p className="text-xs text-surface-200/50 font-medium">{t('dashboard.liveStats.activeAlerts') || 'Active Alerts'}</p>
-                            <p className="text-2xl font-bold text-surface-100 tabular-nums">
+                            <p className="text-[10px] sm:text-xs text-surface-200/50 font-medium">{t('dashboard.liveStats.activeAlerts') || 'Active Alerts'}</p>
+                            <p className="text-lg sm:text-2xl font-bold text-surface-100 tabular-nums">
                                 {liveStats.alertsCount !== null ? liveStats.alertsCount : '—'}
                             </p>
                         </div>
@@ -641,11 +643,11 @@ export default function DashboardPage() {
 
             {/* ── Token Watchlist Widget (#14: Customizable) ── */}
             {isVisible('live') && liveStats.portfolio !== null && (
-                <div className="glass-card p-5">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <TrendingUp size={18} className="text-emerald-400" />
-                            <h3 className="font-semibold text-surface-100">{t('dashboard.liveStats.watchlist') || 'Token Watchlist'}</h3>
+                <div className="glass-card p-3 sm:p-5">
+                    <div className="flex items-center justify-between mb-2 sm:mb-4">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                            <TrendingUp size={16} className="text-emerald-400" />
+                            <h3 className="text-sm sm:text-base font-semibold text-surface-100">{t('dashboard.liveStats.watchlist') || 'Token Watchlist'}</h3>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] text-surface-200/30">X Layer</span>
@@ -659,7 +661,7 @@ export default function DashboardPage() {
                     <WatchlistTokens tokens={watchlist} />
                     {/* Remove buttons under each token */}
                     {watchlist.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-3">
+                        <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-3">
                             {watchlist.map(tk => (
                                 <button key={tk.addr} onClick={() => removeToken(tk.addr)}
                                     className="inline-flex items-center gap-1 text-[10px] text-surface-200/25 hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-500/5 transition-colors">
@@ -683,7 +685,7 @@ export default function DashboardPage() {
 
             {/* Overview Stats */}
             {overview && isVisible('overview') && (
-                <div className={`grid grid-cols-2 gap-4 ${ownerMode ? 'sm:grid-cols-3 lg:grid-cols-6' : 'sm:grid-cols-2 lg:grid-cols-4'}`}>
+                <div className={`grid items-start grid-cols-2 gap-2.5 sm:gap-4 ${ownerMode ? 'sm:grid-cols-3 lg:grid-cols-6' : 'sm:grid-cols-2 lg:grid-cols-4'}`}>
                     {/* Owner-only stats */}
                     {ownerMode && (
                     <StatCard
@@ -739,16 +741,16 @@ export default function DashboardPage() {
             {health && isVisible('status') && (
                 <>
                     {/* Status indicator */}
-                    <div className="glass-card p-5 flex items-center gap-4">
-                        <div className={`w-3 h-3 rounded-full ${health.status === 'ok' ? 'bg-emerald-500 animate-pulse-soft' : 'bg-amber-500'}`} />
-                        <span className="text-lg font-semibold text-surface-100">
+                    <div className="glass-card p-3 sm:p-5 flex items-center gap-3 sm:gap-4">
+                        <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${health.status === 'ok' ? 'bg-emerald-500 animate-pulse-soft' : 'bg-amber-500'}`} />
+                        <span className="text-base sm:text-lg font-semibold text-surface-100">
                             {health.status === 'ok' ? t('dashboard.status.online') : t('dashboard.status.degraded')}
                         </span>
                         <span className="badge-info ml-auto">v{health.version || '?'}</span>
                     </div>
 
                     {/* System stats grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid items-start grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
                         <StatCard
                             icon={Clock}
                             label={t('dashboard.status.uptime')}
@@ -778,10 +780,10 @@ export default function DashboardPage() {
 
                     {/* Detail cards + Activity Feed */}
                     {isVisible('health') && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid items-start grid-cols-2 md:grid-cols-2 gap-2.5 sm:gap-4">
                         {/* Database */}
-                        <div className="glass-card p-5">
-                            <div className="flex items-center gap-3 mb-4">
+                        <div className="glass-card p-3 sm:p-5">
+                            <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-4">
                                 <Database size={18} className="text-brand-400" />
                                 <h3 className="font-semibold text-surface-100">{t('dashboard.status.database')}</h3>
                                 <span className={`ml-auto ${health.db === 'ok' ? 'badge-success' : 'badge-danger'}`}>
@@ -797,8 +799,8 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Queue */}
-                        <div className="glass-card p-5">
-                            <div className="flex items-center gap-3 mb-4">
+                        <div className="glass-card p-3 sm:p-5">
+                            <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-4">
                                 <Layers size={18} className="text-cyan-400" />
                                 <h3 className="font-semibold text-surface-100">{t('dashboard.status.queue')}</h3>
                                 <span className="badge-info ml-auto">{health.queue?.mode || 'memory'}</span>
@@ -823,8 +825,8 @@ export default function DashboardPage() {
 
                     {/* Recent Activity Feed — owner only */}
                     {ownerMode && isVisible('activity') && (
-                    <div className="glass-card p-5">
-                        <div className="flex items-center gap-3 mb-4">
+                    <div className="glass-card p-3 sm:p-5">
+                        <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-4">
                             <History size={18} className="text-purple-400" />
                             <h3 className="font-semibold text-surface-100">{t('dashboard.overview.recentActivity') || 'Recent Activity'}</h3>
                         </div>

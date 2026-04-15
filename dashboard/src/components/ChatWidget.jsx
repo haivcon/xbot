@@ -524,10 +524,10 @@ export default function ChatWidget() {
         }
     };
 
-    // Panel dimensions
+    // Panel dimensions — full screen on mobile, floating on desktop
     const panelClass = expanded
         ? 'fixed inset-4 sm:inset-8 z-[60]'
-        : 'fixed bottom-20 right-4 sm:right-6 w-[360px] sm:w-[400px] h-[520px] sm:h-[560px] z-[60]';
+        : 'fixed inset-0 sm:inset-auto sm:bottom-20 sm:right-6 sm:w-[400px] sm:h-[560px] sm:rounded-2xl z-[60]';
 
     // Hide entirely on /chat page
     if (isChatRoute) return null;
@@ -566,7 +566,7 @@ export default function ChatWidget() {
             {open && (
                 <div className={`${panelClass} flex flex-col
                     bg-surface-900/95 backdrop-blur-2xl
-                    border border-white/10 rounded-2xl
+                    border border-white/10 rounded-none sm:rounded-2xl
                     shadow-2xl shadow-black/40
                     overflow-hidden animate-fadeIn`}
                 >

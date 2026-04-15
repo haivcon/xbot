@@ -396,13 +396,14 @@
 
   /* === Mobile Responsive === */
   @media (max-width: 768px) {
-    .glass-card { @apply rounded-xl; }
+    .glass-card { @apply rounded-xl p-3; }
     .btn-primary, .btn-secondary { @apply px-3 py-2 text-xs; }
     .input-field { @apply px-3 py-2 text-sm; }
-    .stat-card { @apply p-3; }
+    .stat-card { @apply p-2.5; }
     
-    /* Full-screen modals on mobile */
-    .fixed.inset-0 .glass-card {
+    /* Full-screen modals on mobile — only target actual modal backdrops, NOT the app layout wrapper */
+    .fixed.inset-0.backdrop-blur-sm .glass-card,
+    .fixed.inset-0[class*="bg-black"] .glass-card {
       @apply max-w-none m-0 rounded-none min-h-screen;
     }
     
@@ -418,6 +419,13 @@
 
     /* Compact scale via base font-size */
     html { font-size: 13px; }
+
+    /* Tighter vertical rhythm on mobile */
+    .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+      --tw-space-y-reverse: 0;
+      margin-top: calc(0.75rem * calc(1 - var(--tw-space-y-reverse)));
+      margin-bottom: calc(0.75rem * var(--tw-space-y-reverse));
+    }
   }
 
   /* Extra compact for small phones */
@@ -426,7 +434,7 @@
     h1 { font-size: 1rem !important; }
     h2 { font-size: 0.875rem !important; }
     h3 { font-size: 0.8rem !important; }
-    .glass-card { @apply p-3 rounded-lg; }
+    .glass-card { @apply p-2.5 rounded-lg; }
     .stat-card { @apply p-2; }
     .sidebar-link { @apply px-2 py-2 text-xs gap-2; }
   }

@@ -65,7 +65,7 @@ export default function Layout() {
                 {/* Header — hidden on mobile when on full-screen chat */}
                 {!isChatRoute && <Header onMenuClick={() => setSidebarOpen(true)} />}
                 <main className={`flex-1 min-h-0 transition-colors duration-300 ${
-                    isChatRoute ? 'overflow-hidden' : 'p-4 md:p-6 lg:p-8 overflow-auto pb-20 lg:pb-8'
+                    isChatRoute ? 'overflow-hidden' : 'p-3 md:p-6 lg:p-8 overflow-auto pb-20 lg:pb-8'
                 } ${theme === 'light' ? 'bg-slate-50' : ''}`}>
                     {isChatRoute ? (
                         <Outlet context={{ setGlobalSidebarOpen: setSidebarOpen }} />

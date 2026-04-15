@@ -31,6 +31,12 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
+### 🚀 What's New in v1.2.6 (Mobile CSS Architecture Refactoring & Responsive UX)
+- **CSS Grid Architecture Overhaul**: Rectified a critical flex-layout anomaly causing excessive, uncontrolled vertical stretching on dynamic glass-cards across the web dashboard by enforcing strict `items-start` parameters across all grid containers. 
+- **Restricted Modifier Scoping**: Identified and neutralized a cascading CSS leakage where a ubiquitous `.fixed.inset-0` modal wrapper rule was inadvertently forcing a brutal `min-h-screen` parameter across the entire app footprint. The fix strictly confines the max-height override uniquely to standard backdrop-blurred overlays.
+- **Adaptive Chat Widget Geometry**: Completely restructured the floating AI Chat widget's CSS geometry. Instead of breaking viewport boundaries with fixed rigid dimensions on small phones, the overlay now seamlessly morphs into a fluid, safe-area padded fullscreen view specifically calibrated for mobile viewports.
+- **Micro-Padding Compaction**: Implemented an aggressive mobile rhythm overhaul across the entire DashboardPage—substantially tightening component paddings (`p-5` to `p-3`), optimizing icon scalar containers, reducing visual gaps (`space-y-6` to `space-y-4`), and enforcing side-by-side metric stacking (`grid-cols-2`) for critical real-time portfolio data.
+
 ### 🚀 What's New in v1.2.5 (Advanced Wallet Management & Analytics Export)
 - **Dynamic Limits Enforcement**: Unshackled wallet import and creation parameters from restrictive hardcoded bounds, implementing a fluid max-cap system completely synchronized with owner-defined user limits.
 - **Enterprise Excel Compatibility**: Integrated essential UTF-8 BOM byte-order marking into the client-side file blobs, outright ending character scrambling (mojibake) when visualizing multi-lingual names in commercial data viewers.
