@@ -2221,10 +2221,10 @@ export default function ChatPage() {
                     </div>
                     <div className="space-y-1">
                         {[
-                            { label: '🔍 Analyze token', cmd: 'Analyze this token for me: ' },
-                            { label: '📊 Market trend', cmd: 'What is the current market trend for top tokens?' },
-                            { label: '🐋 Whale signals', cmd: 'Show me the latest whale buy signals' },
-                            { label: '💱 Best swap', cmd: 'What is the best swap route for 0.1 OKB to USDT?' },
+                            { label: '🔍 ' + t('dashboard.chatPage.copilotAnalyze', 'Analyze token'), cmd: t('dashboard.chatPage.suggestAnalyze', 'Analyze this token for me: ') },
+                            { label: '📊 ' + t('dashboard.chatPage.copilotTrend', 'Market trend'), cmd: t('dashboard.chatPage.copilotTrendCmd', 'What is the current market trend for top tokens?') },
+                            { label: '🐋 ' + t('dashboard.chatPage.copilotWhale', 'Whale signals'), cmd: t('dashboard.chatPage.suggestWhale', 'Show me the latest whale buy signals') },
+                            { label: '💱 ' + t('dashboard.chatPage.copilotSwap', 'Best swap'), cmd: t('dashboard.chatPage.copilotSwapCmd', 'What is the best swap route for 0.1 OKB to USDT?') },
                         ].map(p => (
                             <button key={p.cmd} onClick={() => sendMessage(p.cmd)}
                                 className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] text-surface-200/50 hover:text-brand-400 hover:bg-brand-500/5 transition-colors">
