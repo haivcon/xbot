@@ -4,7 +4,7 @@ import api from '@/api/client';
 import {
     Bot, Send, Loader2, Sparkles, X, Minus, Maximize2, Minimize2,
     Wallet, BarChart3, Fuel, TrendingUp, ArrowRightLeft, AlertTriangle,
-    Search, Shield, Users, Store, Mic, Brain, Copy, Repeat
+    Search, Shield, Users, Store, Mic, Brain, Copy, Repeat, History, MessageSquare
 } from 'lucide-react';
 
 /* ─── Markdown renderer (XSS-safe) ─── */
@@ -141,11 +141,11 @@ function MsgBubble({ msg }) {
     const isUser = msg.role === 'user';
     return (
         <div className={`flex gap-2 ${isUser ? 'flex-row-reverse' : ''} animate-fadeIn`}>
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                isUser ? 'bg-brand-500/20' : 'bg-emerald-500/20'}`}>
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden ${
+                isUser ? 'bg-brand-500/20' : 'bg-surface-800 ring-1 ring-emerald-500/30'}`}>
                 {isUser
                     ? <span className="text-[10px] text-brand-400 font-bold">U</span>
-                    : <Bot size={11} className="text-emerald-400" />}
+                    : <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />}
             </div>
             <div className={`max-w-[85%] rounded-xl px-3 py-2 ${isUser
                     ? 'bg-brand-500/15 border border-brand-500/15'
@@ -166,8 +166,8 @@ function MsgBubble({ msg }) {
 function TypingDots() {
     return (
         <div className="flex gap-2 animate-fadeIn">
-            <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                <Bot size={11} className="text-emerald-400" />
+            <div className="w-6 h-6 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
             </div>
             <div className="bg-surface-800/60 border border-white/5 rounded-xl px-3 py-2">
                 <div className="flex gap-1">
@@ -219,9 +219,9 @@ const SUGGESTIONS = [
     { icon: '📊', text: 'Top trending tokens' },
     { icon: '⛽', text: 'Gas prices' },
     { icon: '🐳', text: 'Whale signals' },
-    { icon: '🔬', text: 'Deep research ETH' },
-    { icon: '📈', text: 'Scan arbitrage USDT' },
-    { icon: '👥', text: 'Copy trading leaderboard' },
+    { icon: '🔬', text: 'Deep research' },
+    { icon: '📈', text: 'Scan arbitrage' },
+    { icon: '👥', text: 'Copy trading board' },
     { icon: '🤖', text: 'Auto trading status' },
 ];
 
@@ -237,12 +237,18 @@ export default function ChatWidget() {
     useEffect(() => {
         if (isChatRoute) setOpen(false);
     }, [isChatRoute]);
+    
     const [expanded, setExpanded] = useState(false);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [conversationId, setConversationId] = useState(null);
     const [unread, setUnread] = useState(0);
+    
+    const [showHistory, setShowHistory] = useState(false);
+    const [historyConvs, setHistoryConvs] = useState([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
     const abortRef = useRef(null);
@@ -251,8 +257,8 @@ export default function ChatWidget() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, []);
 
-    useEffect(() => { scrollToBottom(); }, [messages, loading, scrollToBottom]);
-    useEffect(() => { if (open) { inputRef.current?.focus(); setUnread(0); } }, [open]);
+    useEffect(() => { scrollToBottom(); }, [messages, loading, scrollToBottom, showHistory]);
+    useEffect(() => { if (open && !showHistory) { inputRef.current?.focus(); setUnread(0); } }, [open, showHistory]);
 
     const sendMessage = async (text) => {
         const msg = (text || input).trim();
@@ -345,6 +351,40 @@ export default function ChatWidget() {
         setMessages([]);
         setConversationId(null);
         setLoading(false);
+        setShowHistory(false);
+    };
+
+    const toggleHistory = async () => {
+        if (!showHistory) {
+            setLoadingHistory(true);
+            setShowHistory(true);
+            try {
+                const res = await api.getChatHistory();
+                setHistoryConvs(res.conversations || []);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoadingHistory(false);
+            }
+        } else {
+            setShowHistory(false);
+        }
+    };
+
+    const loadOldChat = async (convId) => {
+        setLoading(true);
+        setShowHistory(false);
+        abortRef.current?.abort();
+        
+        try {
+            const res = await api.getChatMessages(convId);
+            setMessages(res.messages || []);
+            setConversationId(convId);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Panel dimensions
@@ -363,15 +403,14 @@ export default function ChatWidget() {
                     onClick={() => setOpen(true)}
                     className="fixed bottom-8 right-5 sm:bottom-10 sm:right-6 z-[59]
                         w-14 h-14 rounded-full
-                        bg-gradient-to-br from-brand-500 to-emerald-500
                         shadow-xl shadow-brand-500/30
-                        flex items-center justify-center
+                        flex items-center justify-center overflow-hidden
                         hover:scale-110 hover:shadow-brand-500/50
                         active:scale-95 transition-all duration-200
-                        group"
+                        group bg-surface-900 ring-2 ring-brand-500/50"
                     aria-label="Open AI Chat"
                 >
-                    <Bot size={24} className="text-white group-hover:scale-110 transition-transform" />
+                    <img src="/xbot-logo.png" alt="XBot" className="w-[42px] h-[42px] object-cover group-hover:scale-110 transition-transform" />
 
                     {/* Unread badge */}
                     {unread > 0 && (
@@ -396,18 +435,23 @@ export default function ChatWidget() {
                 >
                     {/* Header */}
                     <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5
-                        bg-gradient-to-r from-brand-500/5 to-emerald-500/5">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-emerald-500 flex items-center justify-center">
-                            <Bot size={15} className="text-white" />
+                        bg-gradient-to-r from-brand-500/5 to-emerald-500/5 transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 flex items-center justify-center overflow-hidden">
+                            <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-bold text-surface-100">AI Assistant</h3>
+                            <h3 className="text-sm font-bold text-surface-100">XBot</h3>
                             <p className="text-[9px] text-emerald-400/70 flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
                                 Online — Gemini + OnchainOS
                             </p>
                         </div>
                         <div className="flex items-center gap-0.5">
+                            <button onClick={toggleHistory}
+                                className={`p-1.5 rounded-lg transition-colors ${showHistory ? 'bg-brand-500/15 text-brand-400' : 'hover:bg-white/5 text-surface-200/30 hover:text-surface-200/60'}`}
+                                title="Chat history">
+                                <History size={13} />
+                            </button>
                             <button onClick={() => setExpanded(!expanded)}
                                 className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-surface-200/60 transition-colors hidden sm:block">
                                 {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
@@ -424,21 +468,51 @@ export default function ChatWidget() {
                         </div>
                     </div>
 
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-3 space-y-3 scroll-smooth">
-                        {messages.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full gap-4">
+                    {/* Messages & History */}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-3 scroll-smooth custom-scrollbar">
+                        {showHistory ? (
+                            <div className="flex flex-col gap-2 animate-fadeIn">
+                                <div className="text-[10px] font-semibold text-surface-200/40 uppercase tracking-widest px-1 mb-1">
+                                    Recent Conversations
+                                </div>
+                                {loadingHistory ? (
+                                    <div className="flex justify-center p-8"><Loader2 size={16} className="text-brand-400 animate-spin" /></div>
+                                ) : historyConvs.length === 0 ? (
+                                    <div className="text-center p-8 text-xs text-surface-200/40">No chat history found.</div>
+                                ) : (
+                                    historyConvs.map(conv => (
+                                        <button key={conv.id} onClick={() => loadOldChat(conv.id)}
+                                            className={`text-left p-3 rounded-xl border transition-all ${
+                                                conv.id === conversationId 
+                                                    ? 'bg-brand-500/10 border-brand-500/20' 
+                                                    : 'bg-surface-800/40 border-white/5 hover:bg-surface-800 hover:border-white/10'
+                                            }`}>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <MessageSquare size={12} className={conv.id === conversationId ? 'text-brand-400' : 'text-surface-200/40'} />
+                                                <span className={`text-xs font-semibold truncate ${conv.id === conversationId ? 'text-brand-400' : 'text-surface-100'}`}>
+                                                    {conv.title || 'Conversation'}
+                                                </span>
+                                            </div>
+                                            <div className="text-[10px] text-surface-200/50 line-clamp-2 pl-5">
+                                                {conv.lastMessage || '...'}
+                                            </div>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        ) : messages.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full gap-4 animate-fadeIn">
                                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500/15 to-emerald-500/15
-                                    border border-white/5 flex items-center justify-center">
-                                    <Sparkles size={22} className="text-brand-400" />
+                                    border border-white/5 flex items-center justify-center overflow-hidden ring-1 ring-emerald-500/30">
+                                    <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-sm font-semibold text-surface-100 mb-0.5">AI Trading Assistant</p>
-                                    <p className="text-[10px] text-surface-200/30 max-w-[250px]">
+                                    <p className="text-sm font-semibold text-surface-100 mb-0.5">XBot Trading Assistant</p>
+                                    <p className="text-[10px] text-surface-200/30 max-w-[250px] mx-auto">
                                         Ask about tokens, swap, signals, gas, portfolio — I execute on-chain tools for you.
                                     </p>
                                 </div>
-                                <div className="grid grid-cols-2 gap-1.5 w-full">
+                                <div className="grid grid-cols-2 gap-1.5 w-full mt-2">
                                     {SUGGESTIONS.map((s, i) => (
                                         <button key={i}
                                             onClick={() => sendMessage(s.text)}
@@ -460,39 +534,41 @@ export default function ChatWidget() {
                     </div>
 
                     {/* Input */}
-                    <div className="p-2.5 border-t border-white/5 bg-surface-900/80">
-                        <div className="flex items-end gap-1.5">
-                            <textarea
-                                ref={inputRef}
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                placeholder="Ask anything..."
-                                rows={1}
-                                className="flex-1 px-3 py-2 rounded-xl bg-surface-800/60 border border-white/5
-                                    text-xs text-surface-100 placeholder:text-surface-200/20
-                                    focus:outline-none focus:border-brand-500/25 focus:ring-1 focus:ring-brand-500/15
-                                    resize-none transition-all"
-                                style={{ maxHeight: '80px', minHeight: '36px' }}
-                                onInput={(e) => {
-                                    e.target.style.height = '36px';
-                                    e.target.style.height = Math.min(e.target.scrollHeight, 80) + 'px';
-                                }}
-                            />
-                            <button
-                                onClick={() => sendMessage()}
-                                disabled={!input.trim() || loading}
-                                className={`p-2 rounded-xl transition-all flex-shrink-0 ${
-                                    input.trim() && !loading
-                                        ? 'bg-gradient-to-r from-brand-500 to-emerald-500 text-white shadow-lg shadow-brand-500/20 hover:shadow-brand-500/40'
-                                        : 'bg-surface-800/40 text-surface-200/15 cursor-not-allowed'
-                                }`}>
-                                {loading
-                                    ? <Loader2 size={14} className="animate-spin" />
-                                    : <Send size={14} />}
-                            </button>
+                    {!showHistory && (
+                        <div className="p-2.5 border-t border-white/5 bg-surface-900/80 animate-fadeIn">
+                            <div className="flex items-end gap-1.5">
+                                <textarea
+                                    ref={inputRef}
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Ask anything..."
+                                    rows={1}
+                                    className="flex-1 px-3 py-2 rounded-xl bg-surface-800/60 border border-white/5
+                                        text-xs text-surface-100 placeholder:text-surface-200/20
+                                        focus:outline-none focus:border-brand-500/25 focus:ring-1 focus:ring-brand-500/15
+                                        resize-none transition-all"
+                                    style={{ maxHeight: '80px', minHeight: '36px' }}
+                                    onInput={(e) => {
+                                        e.target.style.height = '36px';
+                                        e.target.style.height = Math.min(e.target.scrollHeight, 80) + 'px';
+                                    }}
+                                />
+                                <button
+                                    onClick={() => sendMessage()}
+                                    disabled={!input.trim() || loading}
+                                    className={`p-2 rounded-xl transition-all flex-shrink-0 ${
+                                        input.trim() && !loading
+                                            ? 'bg-gradient-to-r from-brand-500 to-emerald-500 text-white shadow-lg shadow-brand-500/20 hover:shadow-brand-500/40'
+                                            : 'bg-surface-800/40 text-surface-200/15 cursor-not-allowed'
+                                    }`}>
+                                    {loading
+                                        ? <Loader2 size={14} className="animate-spin" />
+                                        : <Send size={14} />}
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 
