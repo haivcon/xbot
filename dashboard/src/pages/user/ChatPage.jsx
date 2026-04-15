@@ -24,11 +24,11 @@ function renderMarkdown(text) {
         .replace(/javascript\s*:/gi, '')
         .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
         // Strip internal [Used: tool_name] metadata from display
-        .replace(/?\[Used: [\w, ]+\]/g, '');
+        .replace(/\n?\[Used: [\w, ]+\]/g, '');
 
     // Process code blocks first (protect from further parsing)
     const codeBlocks = [];
-    safe = safe.replace(/```([\w]*)?([\s\S]*?)```/g, (_, lang, code) => {
+    safe = safe.replace(/```([\w]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
         const idx = codeBlocks.length;
         // Syntax highlighting via CSS classes
         const langClass = lang ? ` language-${lang}` : '';
@@ -38,8 +38,8 @@ function renderMarkdown(text) {
     });
 
     // Process tables (| a | b | row blocks)
-    safe = safe.replace(/((?:^\|.+\|$?)+)/gm, (tableBlock) => {
-        const rows = tableBlock.trim().split('').filter(r => r.trim());
+    safe = safe.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
+        const rows = tableBlock.trim().split('\n').filter(r => r.trim());
         if (rows.length < 1) return tableBlock;
         let html = '<table class="chat-table">';
         rows.forEach((row, i) => {
@@ -57,13 +57,13 @@ function renderMarkdown(text) {
         // Horizontal rules
         .replace(/^-{3,}$/gm, '<hr class="chat-hr"/>')
         // Unordered lists (consecutive - lines)
-        .replace(/((?:^[-*] .+$?)+)/gm, (block) => {
-            const items = block.trim().split('').map(l => `<li>${l.replace(/^[-*] /, '')}</li>`);
+        .replace(/((?:^[-*] .+$\n?)+)/gm, (block) => {
+            const items = block.trim().split('\n').map(l => `<li>${l.replace(/^[-*] /, '')}</li>`);
             return `<ul class="chat-list">${items.join('')}</ul>`;
         })
         // Ordered lists (consecutive 1. lines)
-        .replace(/((?:^\d+\. .+$?)+)/gm, (block) => {
-            const items = block.trim().split('').map(l => `<li>${l.replace(/^\d+\. /, '')}</li>`);
+        .replace(/((?:^\d+\. .+$\n?)+)/gm, (block) => {
+            const items = block.trim().split('\n').map(l => `<li>${l.replace(/^\d+\. /, '')}</li>`);
             return `<ol class="chat-list chat-ol">${items.join('')}</ol>`;
         });
 
@@ -127,7 +127,7 @@ function renderMarkdown(text) {
     safe = safe.replace(/[_\-=~.·]{10,}/g, '<hr class="chat-hr"/>');
 
     // Newlines to <br>
-    safe = safe.replace(//g, '<br/>');
+    safe = safe.replace(/\n/g, '<br/>');
 
     // Restore code blocks
     codeBlocks.forEach((block, i) => { safe = safe.replace(`%%CODEBLOCK_${i}%%`, block); });
@@ -468,7 +468,7 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
                 )
             ) : (
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ring-1 ring-emerald-500/30 overflow-hidden bg-surface-800`}>
-                    <img src="/XBOT-logo.png" alt="XBOT" className="w-full h-full object-cover" />
+                    <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
                 </div>
             )}
             <div
@@ -563,7 +563,7 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
 /* ─── Conversation list item with preview & relative time ─── */
 function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
     const { t } = useTranslation();
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
     // Relative time helper
     const relTime = (ts) => {
         if (!ts) return '';
@@ -581,7 +581,7 @@ function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
             ${active ? 'bg-brand-500/10 border border-brand-500/20' : 'hover:bg-white/3 border border-transparent'}`}>
             <button
                 onClick={() => onLoad(conv.conversationId)}
-                className="w-full text-left pl-3 pr-10 py-2.5 flex items-start gap-2.5"
+                className="w-full text-left pl-3 pr-8 py-2.5 flex items-start gap-2.5"
             >
                 <MessageSquare size={12} className={`flex-shrink-0 mt-0.5 ${active ? 'text-brand-400' : 'text-surface-200/30'}`} />
                 <div className="flex-1 min-w-0">
@@ -598,52 +598,39 @@ function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
                     )}
                 </div>
             </button>
-            {/* Context Menu Trigger */}
-            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+            {/* Context Menu ⋮ */}
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10">
                 <button
                     onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
-                    className={`p-1 rounded-md transition-all z-10
-                        ${showMenu ? 'bg-surface-800 text-surface-100' : 'text-surface-200/30 hover:text-surface-100 hover:bg-white/5'}
-                        ${active ? 'text-brand-400 hover:bg-brand-500/20' : ''}`}
+                    className={`p-1 rounded-md transition-all
+                        ${showMenu ? 'bg-white/10 text-surface-100' : 'text-surface-200/25 hover:text-surface-100 hover:bg-white/5 opacity-0 group-hover:opacity-100'}
+                        ${active ? 'opacity-100 text-brand-400' : ''}`}
                     title={t('dashboard.chatPage.options', 'Options')}>
                     <MoreVertical size={14} />
                 </button>
                 {showMenu && (
                     <>
                         <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
-                        <div className="absolute top-8 right-0 w-44 bg-surface-800 border border-white/10 rounded-xl shadow-xl z-50 py-1"
+                        <div className="absolute top-8 right-0 w-44 bg-surface-800 border border-white/10 rounded-xl shadow-2xl z-50 py-1 overflow-hidden"
                              onClick={(e) => e.stopPropagation()}>
-                            <button className="flex items-center w-full px-3 py-2 text-xs text-surface-200/60 hover:bg-white/5 disabled:opacity-50" disabled>
-                                <Share2 size={12} className="mr-2"/> {t('dashboard.chatPage.share', 'Share')}
+                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                                <Share2 size={12}/> {t('dashboard.chatPage.shareChat', 'Chia sẻ cuộc trò chuyện')}
                             </button>
-                            <button className="flex items-center w-full px-3 py-2 text-xs text-surface-200/60 hover:bg-white/5 disabled:opacity-50" disabled>
-                                <Pin size={12} className="mr-2"/> {t('dashboard.chatPage.pin', 'Pin')}
+                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                                <Pin size={12}/> {t('dashboard.chatPage.pinChat', 'Ghim')}
                             </button>
-                            <button className="flex items-center w-full px-3 py-2 text-xs text-surface-200/60 hover:bg-white/5 disabled:opacity-50" disabled>
-                                <Edit size={12} className="mr-2"/> {t('dashboard.chatPage.rename', 'Rename')}
+                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                                <Edit size={12}/> {t('dashboard.chatPage.renameChat', 'Đổi tên')}
                             </button>
                             <div className="h-px bg-white/5 my-1" />
                             <button onClick={(e) => { onDelete(conv.conversationId, e); setShowMenu(false); }}
-                                className="flex items-center w-full px-3 py-2 text-xs text-red-400 hover:bg-red-500/10">
-                                <Trash2 size={12} className="mr-2"/> {t('dashboard.chatPage.deleteChat', 'Delete')}
+                                className="flex items-center w-full px-3 py-2 text-[11px] text-red-400 hover:bg-red-500/10 gap-2">
+                                <Trash2 size={12}/> {t('dashboard.chatPage.deleteChat', 'Xoá')}
                             </button>
                         </div>
                     </>
                 )}
             </div>
-            {/* Mobile delete confirmation removed since button is now directly accessible */}
-            {showDeleteConfirm && isMobile && (
-                <div className="absolute inset-0 bg-surface-900/90 rounded-xl flex items-center justify-center gap-2 z-10 animate-fadeIn">
-                    <button onClick={(e) => { onDelete(conv.conversationId, e); setShowDeleteConfirm(false); }}
-                        className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-[10px] font-semibold active:scale-95">
-                        {t('dashboard.chatPage.delete', 'Delete')}
-                    </button>
-                    <button onClick={() => setShowDeleteConfirm(false)}
-                        className="px-3 py-1.5 rounded-lg bg-surface-800 text-surface-200/60 text-[10px] font-semibold active:scale-95">
-                        {t('dashboard.chatPage.cancel', 'Cancel')}
-                    </button>
-                </div>
-            )}
         </div>
     );
 }
@@ -780,7 +767,7 @@ function TypingIndicator() {
     return (
         <div className="flex gap-3 animate-fadeIn">
             <div className="w-8 h-8 rounded-full ring-1 ring-emerald-500/30 flex items-center justify-center flex-shrink-0 overflow-hidden bg-surface-800">
-                <img src="/XBOT-logo.png" alt="XBOT" className="w-full h-full object-cover" />
+                <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
             </div>
             <div className="bg-surface-800/60 border border-white/5 rounded-2xl px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -799,7 +786,7 @@ function TypingIndicator() {
 // Token autocomplete data (outside component to avoid re-creation)
 const KNOWN_TOKEN_LIST = ['BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'OKB', 'BANMAO', 'PEPE', 'DOGE', 'SHIB', 'ARB', 'OP', 'AVAX', 'MATIC', 'DOT', 'ADA', 'XRP', 'LINK', 'UNI', 'AAVE'];
 const FALLBACK_MODELS = [
-    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: t('dashboard.chatPage.model.gemini-3-flash-preview.desc', 'Powerful multimodal & agentic'), icon: '🚀' },
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Powerful multimodal & agentic', icon: '🚀' },
 ];
 
 const PERSONA_OPTIONS = [
@@ -861,15 +848,15 @@ const PERSONA_PREVIEWS = {
 };
 
 const PROVIDER_OPTIONS = [
-    { value: 'google', label: 'Google (Gemini)', icon: '✨', desc: t('dashboard.chatPage.provider.google.desc', 'Multimodal, best for complex tasks') },
-    { value: 'openai', label: 'OpenAI (GPT)', icon: '🧠', desc: t('dashboard.chatPage.provider.openai.desc', 'Strong reasoning & code') },
-    { value: 'groq', label: 'Groq (LLaMA)', icon: '⚡', desc: t('dashboard.chatPage.provider.groq.desc', 'Ultra-fast inference') },
+    { value: 'google', label: 'Google (Gemini)', icon: '✨', desc: 'Multimodal, best for complex tasks' },
+    { value: 'openai', label: 'OpenAI (GPT)', icon: '🧠', desc: 'Strong reasoning & code' },
+    { value: 'groq', label: 'Groq (LLaMA)', icon: '⚡', desc: 'Ultra-fast inference' },
 ];
 
 const THINKING_OPTIONS = [
     { value: 'none', label: 'None', icon: '💤', desc: 'Fastest, no extra reasoning' },
     { value: 'low', label: 'Low', icon: '💡', desc: 'Light reasoning' },
-    { value: 'medium', label: 'Medium', icon: '🔥', desc: t('dashboard.chatPage.model.llama-70b.desc', 'Balanced speed & quality') },
+    { value: 'medium', label: 'Medium', icon: '🔥', desc: 'Balanced speed & quality' },
     { value: 'high', label: 'High', icon: '🚀', desc: 'Deep reasoning, slower' },
 ];
 
@@ -898,12 +885,12 @@ const SETTINGS_TABS = [
 // Model options per provider (fallback when backend doesn't return provider-specific models)
 const MODEL_OPTIONS_BY_PROVIDER = {
     google: [
-        { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', desc: t('dashboard.chatPage.model.gemini-3.1-pro-preview.desc', 'Best reasoning & complex tasks'), icon: '🟠' },
-        { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: t('dashboard.chatPage.model.gemini-3-flash-preview.desc', 'Powerful multimodal & agentic'), icon: '🚀' },
-        { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Lite', desc: t('dashboard.chatPage.model.gemini-3.1-flash-lite-preview.desc', 'Fastest, lowest cost'), icon: '⚡' },
+        { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', desc: 'Best reasoning & complex tasks', icon: '🟠' },
+        { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Powerful multimodal & agentic', icon: '🚀' },
+        { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Lite', desc: 'Fastest, lowest cost', icon: '⚡' },
     ],
     openai: [
-        { id: 'gpt-5.4', label: 'GPT-5.4', desc: t('dashboard.chatPage.model.gpt-5.4.desc', 'Flagship, best intelligence'), icon: '🧠' },
+        { id: 'gpt-5.4', label: 'GPT-5.4', desc: 'Flagship, best intelligence', icon: '🧠' },
         { id: 'gpt-5-mini', label: 'GPT-5 Mini', desc: 'Fast & affordable', icon: '⚡' },
         { id: 'gpt-4o', label: 'GPT-4o', desc: 'Reliable multimodal', icon: '🌟' },
         { id: 'gpt-4o-mini', label: 'GPT-4o Mini', desc: 'Budget-friendly', icon: '💡' },
@@ -981,11 +968,11 @@ export default function ChatPage() {
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     // U3: Model usage tracking
     const [modelUsageStats, setModelUsageStats] = useState(() => {
-        try { return JSON.parse(localStorage.getItem('XBOT_model_usage') || '{}'); } catch { return {}; }
+        try { return JSON.parse(localStorage.getItem('xbot_model_usage') || '{}'); } catch { return {}; }
     });
     // U5: Custom persona
     const [customPersonaInput, setCustomPersonaInput] = useState(() => {
-        try { return localStorage.getItem('XBOT_custom_persona') || ''; } catch { return ''; }
+        try { return localStorage.getItem('xbot_custom_persona') || ''; } catch { return ''; }
     });
     // U7: Token counter
     const [sessionTokens, setSessionTokens] = useState({ sent: 0, received: 0 });
@@ -1064,13 +1051,13 @@ export default function ChatPage() {
     const trackModelUsage = useCallback((modelId) => {
         setModelUsageStats(prev => {
             const updated = { ...prev, [modelId]: (prev[modelId] || 0) + 1 };
-            try { localStorage.setItem('XBOT_model_usage', JSON.stringify(updated)); } catch {}
+            try { localStorage.setItem('xbot_model_usage', JSON.stringify(updated)); } catch {}
             return updated;
         });
     }, []);
 
     // ── API key management — stored locally on device only ──
-    const LOCAL_KEYS_STORAGE = 'XBOT_ai_api_keys';
+    const LOCAL_KEYS_STORAGE = 'xbot_ai_api_keys';
     const loadApiKeys = useCallback(() => {
         try {
             const stored = JSON.parse(localStorage.getItem(LOCAL_KEYS_STORAGE) || '[]');
@@ -1305,7 +1292,7 @@ export default function ChatPage() {
                 customPersonaText: selectedPersona === 'custom' ? customPersonaInput : undefined,
                 userApiKey: (() => {
                     try {
-                        const keys = JSON.parse(localStorage.getItem('XBOT_ai_api_keys') || '[]');
+                        const keys = JSON.parse(localStorage.getItem('xbot_ai_api_keys') || '[]');
                         const providerKey = keys.find(k => k.provider === selectedProvider);
                         return providerKey?.apiKey || undefined;
                     } catch { return undefined; }
@@ -1374,7 +1361,7 @@ export default function ChatPage() {
             if (isRateLimit || isAuthError) {
                 const hasUserKey = (() => {
                     try {
-                        const keys = JSON.parse(localStorage.getItem('XBOT_ai_api_keys') || '[]');
+                        const keys = JSON.parse(localStorage.getItem('xbot_ai_api_keys') || '[]');
                         return !!keys.find(k => k.provider === selectedProvider)?.apiKey;
                     } catch { return false; }
                 })();
@@ -1384,9 +1371,9 @@ export default function ChatPage() {
 
                 if (hasUserKey) {
                    const errReason = isRateLimit ? t('dashboard.chatPage.err_quotaUser', 'Account has reached its quota.') : t('dashboard.chatPage.err_authUser', 'API key is invalid.');
-                   errMsg = `\u274c **${t('dashboard.chatPage.err_titleUser', `Personal {{pName}} API Key Error:`, { pName })}**${errReason}💡 **${t('dashboard.chatPage.err_fixHint', 'How to fix:')}** ${t('dashboard.chatPage.err_fixUserDesc', 'Please open [AI Settings ⚙️] > [API Keys] to update your key or delete it to use the default XBOT server connection.')}`;
+                   errMsg = `\u274c **${t('dashboard.chatPage.err_titleUser', `Personal {{pName}} API Key Error:`, { pName })}**\n${errReason}\n\n💡 **${t('dashboard.chatPage.err_fixHint', 'How to fix:')}** ${t('dashboard.chatPage.err_fixUserDesc', 'Please open [AI Settings ⚙️] > [API Keys] to update your key or delete it to use the default XBot server connection.')}`;
                 } else {
-                   errMsg = `\u274c **${t('dashboard.chatPage.err_titleServer', `Server {{pName}} connection is overloaded:`, { pName })}**${t('dashboard.chatPage.err_descServer', 'Current usage has exceeded the free quota of the XBOT system.')}💡 **${t('dashboard.chatPage.err_tipServer', 'Tip to avoid interruptions:')}**${t('dashboard.chatPage.err_tipServerDesc', 'You can set up your own personal API key to get instant processing, highest speed, and completely for free!')}**${t('dashboard.chatPage.err_guideServer', 'Guide:')}**${t('dashboard.chatPage.err_guideServer1', '1. Get a free API key at:')} [${pLink}](https://${pLink})${t('dashboard.chatPage.err_guideServer2', '2. On the top right of the Chat screen, click [AI Settings ⚙️] > switch to the [API Keys 🔑] tab')}${t('dashboard.chatPage.err_guideServer3', '3. Paste your key and enjoy a dedicated connection.')}`;
+                   errMsg = `\u274c **${t('dashboard.chatPage.err_titleServer', `Server {{pName}} connection is overloaded:`, { pName })}**\n${t('dashboard.chatPage.err_descServer', 'Current usage has exceeded the free quota of the XBot system.')}\n\n💡 **${t('dashboard.chatPage.err_tipServer', 'Tip to avoid interruptions:')}**\n${t('dashboard.chatPage.err_tipServerDesc', 'You can set up your own personal API key to get instant processing, highest speed, and completely for free!')}\n\n**${t('dashboard.chatPage.err_guideServer', 'Guide:')}**\n${t('dashboard.chatPage.err_guideServer1', '1. Get a free API key at:')} [${pLink}](https://${pLink})\n${t('dashboard.chatPage.err_guideServer2', '2. On the top right of the Chat screen, click [AI Settings ⚙️] > switch to the [API Keys 🔑] tab')}\n${t('dashboard.chatPage.err_guideServer3', '3. Paste your key and enjoy a dedicated connection.')}`;
                 }
             } else {
                 errMsg = `\u274c ${t('dashboard.chatPage.err_generic', 'Error:')} ${errMsg}`;
@@ -1491,8 +1478,8 @@ export default function ChatPage() {
     // #5 Export conversation as markdown
     const exportConversation = () => {
         if (messages.length === 0) return;
-        const lines = messages.map(m => `**${m.role === 'user' ? 'You' : 'AI'}**: ${m.content}`).join('---');
-        const blob = new Blob([`# AI Chat Export${lines}`], { type: 'text/markdown' });
+        const lines = messages.map(m => `**${m.role === 'user' ? 'You' : 'AI'}**: ${m.content}`).join('\n\n---\n\n');
+        const blob = new Blob([`# AI Chat Export\n\n${lines}`], { type: 'text/markdown' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = `chat-${new Date().toISOString().slice(0, 10)}.md`;
@@ -1660,8 +1647,8 @@ export default function ChatPage() {
     // #5 Share conversation
     const shareConversation = () => {
         if (messages.length === 0) return;
-        const lines = messages.map(m => `**${m.role === 'user' ? 'You' : 'AI'}**: ${m.content}`).join('---');
-        const text = `# AI Chat${lines}`;
+        const lines = messages.map(m => `**${m.role === 'user' ? 'You' : 'AI'}**: ${m.content}`).join('\n\n---\n\n');
+        const text = `# AI Chat\n\n${lines}`;
         if (navigator.clipboard?.writeText) {
             navigator.clipboard.writeText(text).then(() => hapticNotification('success')).catch(() => {});
         } else {
@@ -2041,11 +2028,11 @@ export default function ChatPage() {
                     </button>
                     <div className={`rounded-full flex items-center justify-center flex-shrink-0 ring-1 ring-emerald-500/30 overflow-hidden bg-surface-800
                         ${isMobile ? 'w-7 h-7' : 'w-8 h-8'}`}>
-                        <img src="/XBOT-logo.png" alt="XBOT" className="w-full h-full object-cover" />
+                        <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                         <h1 className={`font-semibold text-surface-100 truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>
-                            {t('dashboard.chatPage.title', 'XBOT')}
+                            {t('dashboard.chatPage.title', 'XBot')}
                         </h1>
                         <p className="text-[10px] text-emerald-400/70 flex items-center gap-1 truncate">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
@@ -2236,7 +2223,7 @@ export default function ChatPage() {
                                 </div>
                             </div>
                             <div className="text-center">
-                                <h2 className="text-lg font-semibold text-surface-100 mb-1">{t('dashboard.chatPage.welcomeTitle', 'XBOT')}</h2>
+                                <h2 className="text-lg font-semibold text-surface-100 mb-1">{t('dashboard.chatPage.welcomeTitle', 'XBot')}</h2>
                                 <p className="text-xs text-surface-200/40 max-w-md">
                                     {t('dashboard.chatPage.welcomeDesc', 'Chat naturally to control your wallets, swap tokens, check prices, view signals, and manage your portfolio — all powered by AI + OnchainOS.')}
                                 </p>
@@ -2256,7 +2243,7 @@ export default function ChatPage() {
                                                     hover:text-surface-200/90 flex items-center gap-2.5 group active:scale-[0.98]
                                                     ${isMobile ? 'px-4 py-3' : 'px-3 py-2.5'}`}>
                                                 <span className="text-base">{s.icon}</span>
-                                                <span className="flex-1">{t(`dashboard.chatPage.suggestions.${i}`, s.text)}</span>
+                                                <span className="flex-1">{s.text}</span>
                                                 <ChevronRight size={10} className="text-surface-200/20 group-hover:text-brand-400 transition-colors" />
                                             </button>
                                         ))}
@@ -2651,7 +2638,7 @@ export default function ChatPage() {
                                                         }`}>
                                                         <div>
                                                             <span className="font-medium">{p.icon} {p.label}</span>
-                                                            <span className="block text-[10px] text-surface-200/40">{p.desc}</span>
+                                                            <span className="block text-[10px] text-surface-200/40">{t(`dashboard.chatPage.providerDesc.${p.value}`, p.desc)}</span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
                                                             {providerUsage > 0 && <span className="text-[9px] text-surface-200/30">{t('dashboard.chatPage.msgCount', '{count} msgs').replace('{count}', providerUsage)}</span>}
@@ -2664,7 +2651,7 @@ export default function ChatPage() {
                                                     </button>
                                                 );
                                             })}
-                                        </div>                                    </div>
+                                        </div>\n                                    </div>
 
                                     {/* Model — filtered by provider */}
                                     {(() => {
@@ -2704,7 +2691,7 @@ export default function ChatPage() {
                                                         }`}>
                                                         <div>
                                                             <span className="font-medium">{m.icon} {m.label}</span>
-                                                            <span className="block text-[10px] text-surface-200/40">{m.desc}</span>
+                                                            <span className="block text-[10px] text-surface-200/40">{t(`dashboard.chatPage.modelDesc.${m.id}`, m.desc)}</span>
                                                         </div>
                                                         <div className="flex items-center gap-1.5">
                                                             {modelUsageStats[m.id] > 0 && <span className="text-[8px] text-surface-200/25 tabular-nums">{modelUsageStats[m.id]}</span>}
@@ -2811,7 +2798,7 @@ export default function ChatPage() {
                                                 value={customPersonaInput}
                                                 onChange={(e) => {
                                                     setCustomPersonaInput(e.target.value);
-                                                    try { localStorage.setItem('XBOT_custom_persona', e.target.value); } catch {}
+                                                    try { localStorage.setItem('xbot_custom_persona', e.target.value); } catch {}
                                                 }}
                                                 placeholder={t('dashboard.chatPage.customPersonaPlaceholder', 'Describe how the AI should behave, its personality, tone, and style...')}
                                                 className="w-full bg-surface-900/50 border border-white/5 rounded-lg px-3 py-2 text-[11px] text-surface-100 placeholder-surface-200/25 resize-none focus:outline-none focus:border-brand-500/30 transition-colors"

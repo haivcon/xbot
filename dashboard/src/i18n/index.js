@@ -618,6 +618,29 @@ const dashboardResources = {
                 home: 'Home',
                 conversations: 'Conversations',
                 share: 'Share',
+                // Context menu
+                shareChat: 'Share Conversation',
+                pinChat: 'Pin',
+                renameChat: 'Rename',
+                deleteChat: 'Delete',
+                options: 'Options',
+                // Provider descriptions
+                providerDesc: { google: 'Multimodal, best for complex tasks', openai: 'Strong reasoning & code', groq: 'Ultra-fast inference' },
+                // Model descriptions
+                modelDesc: {
+                    'gemini-3.1-pro-preview': 'Best reasoning & complex tasks',
+                    'gemini-3-flash-preview': 'Powerful multimodal & agentic',
+                    'gemini-3.1-flash-lite-preview': 'Fastest, lowest cost',
+                    'gpt-5.4': 'Flagship, best intelligence',
+                    'gpt-5-mini': 'Fast & affordable',
+                    'gpt-4o': 'Reliable multimodal',
+                    'gpt-4o-mini': 'Budget-friendly',
+                    'openai/gpt-oss-120b': 'OpenAI flagship, reasoning',
+                    'openai/gpt-oss-20b': 'Fastest, 1000 t/s',
+                    'llama-3.3-70b-versatile': 'Best quality, versatile',
+                    'llama-3.1-8b-instant': 'Ultra-fast, 560 t/s',
+                    'meta-llama/llama-4-scout-17b-16e-instruct': 'Vision-capable',
+                },
             },
             chatHelp: {
                 title: 'Features Guide',
@@ -1552,6 +1575,29 @@ const dashboardResources = {
                 home: 'Trang chủ',
                 conversations: 'Hội thoại',
                 share: 'Chia sẻ',
+                // Context menu
+                shareChat: 'Chia sẻ cuộc trò chuyện',
+                pinChat: 'Ghim',
+                renameChat: 'Đổi tên',
+                deleteChat: 'Xoá',
+                options: 'Tuỳ chọn',
+                // Provider descriptions
+                providerDesc: { google: 'Đa phương thức, tốt nhất cho tác vụ phức tạp', openai: 'Suy luận & lập trình mạnh mẽ', groq: 'Phản hồi siêu tốc' },
+                // Model descriptions
+                modelDesc: {
+                    'gemini-3.1-pro-preview': 'Suy luận tốt nhất & tác vụ phức tạp',
+                    'gemini-3-flash-preview': 'Đa phương thức mạnh mẽ & tác tử',
+                    'gemini-3.1-flash-lite-preview': 'Nhanh nhất, chi phí thấp nhất',
+                    'gpt-5.4': 'Flagship, trí tuệ cao nhất',
+                    'gpt-5-mini': 'Nhanh & tiết kiệm',
+                    'gpt-4o': 'Đa phương thức ổn định',
+                    'gpt-4o-mini': 'Tiết kiệm chi phí',
+                    'openai/gpt-oss-120b': 'OpenAI flagship, suy luận',
+                    'openai/gpt-oss-20b': 'Nhanh nhất, 1000 t/s',
+                    'llama-3.3-70b-versatile': 'Chất lượng cao, đa năng',
+                    'llama-3.1-8b-instant': 'Siêu nhanh, 560 t/s',
+                    'meta-llama/llama-4-scout-17b-16e-instruct': 'Hỗ trợ hình ảnh',
+                },
             },
             chatHelp: {
                 title: 'Hướng dẫn Tính năng',
