@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import api from '@/api/client';
+import useAuthStore from '@/stores/authStore';
 import CustomSelect from '@/components/ui/CustomSelect';
 import {
     Wallet, Plus, Trash2, Star, RefreshCw, Eye, EyeOff, Copy, Check,
@@ -179,89 +180,159 @@ function PortfolioChart({ days = 30 }) {
 }
 
 /* ── Create Wallet Modal ── */
-function CreateWalletModal({ onClose, onCreated }) {
+function CreateWalletModal({ currentCount, limit, onClose, onCreated }) {
+    const { user } = useAuthStore();
     const { t } = useTranslation();
+    const [chainIndex, setChainIndex] = useState('196');
     const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState(null);
-    const [copied, setCopied] = useState(false);
+    const [results, setResults] = useState(null);
+    const [count, setCount] = useState(1);
     const [showKey, setShowKey] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const maxCreate = Math.max(0, limit - currentCount);
 
     const create = async () => {
+        if (count < 1 || count > maxCreate) return;
         setLoading(true);
+        const newResults = [];
+        let errMessage = null;
         try {
-            const data = await api.createWallet();
-            setResult(data);
+            for (let i = 0; i < count; i++) {
+                const data = await api.createWallet();
+                if (data.error) throw new Error(data.error);
+                newResults.push(data);
+            }
         } catch (err) {
-            setResult({ error: err.message });
+            errMessage = err.message;
         } finally {
             setLoading(false);
+            if (newResults.length > 0 || errMessage) {
+                setResults({ items: newResults, error: errMessage });
+            }
         }
     };
 
-    const copyKey = () => {
-        navigator.clipboard.writeText(result.privateKey);
+    const copyAll = () => {
+        if (!results || !results.items) return;
+        const text = results.items.map(r => `${r.privateKey}  ${r.wallet?.name}  ${r.wallet?.address}`).join('\n');
+        navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const downloadCsv = () => {
+        if (!results || !results.items) return;
+        const timestamp = new Date().toLocaleString();
+        let text = 'Private Key,Wallet Name,Address,Creation Time\n';
+        text += results.items.map(r => `${r.privateKey},"${r.wallet?.name || ''}",${r.wallet?.address},"${timestamp}"`).join('\n');
+        const blob = new Blob(['\uFEFF' + text], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const uIdentifier = user?.username || user?.userId || 'user';
+        const dObj = new Date();
+        const dString = `${dObj.getFullYear()}${String(dObj.getMonth() + 1).padStart(2, '0')}${String(dObj.getDate()).padStart(2, '0')}_${String(dObj.getHours()).padStart(2, '0')}${String(dObj.getMinutes()).padStart(2, '0')}`;
+        const chainName = CHAIN_NAMES[chainIndex] || 'Chain';
+        const chainTag = `${chainName.replace(/\s+/g, '')}_${chainIndex}`;
+        a.download = `wallets_${uIdentifier}_${chainTag}_${results.items.length}_${dString}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-surface-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl animate-fadeIn" onClick={e => e.stopPropagation()}>
-                {!result ? (
+            <div className="bg-surface-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl animate-fadeIn max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                {!results ? (
                     <>
-                        <h3 className="text-lg font-bold text-surface-100 mb-2">Create New Wallet</h3>
-                        <p className="text-xs text-surface-200/50 mb-6">A new trading wallet will be created on X Layer. Save the private key securely — it will only be shown once.</p>
+                        <h3 className="text-lg font-bold text-surface-100 mb-2">{t('dashboard.walletPage.createTitle', 'Create New Wallet')}</h3>
+                        <p className="text-xs text-surface-200/50 mb-6">{t('dashboard.walletPage.createDesc', 'A new trading wallet will be created on X Layer. Save the private key securely — it will only be shown once.')}</p>
+                        
+                        <div className="mb-4">
+                            <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">Chain</label>
+                            <CustomSelect value={chainIndex} onChange={setChainIndex} size="sm" options={CHAIN_OPTIONS.map(c => ({ value: c.value, label: c.label }))} />
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">
+                                {t('dashboard.walletPage.walletAmount', 'Number of wallets to create')} (Max: {maxCreate})
+                            </label>
+                            <input 
+                                type="number" 
+                                min={1} 
+                                max={maxCreate} 
+                                value={count} 
+                                onChange={e => setCount(Math.min(maxCreate, Math.max(1, parseInt(e.target.value) || 1)))}
+                                className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-surface-100 outline-none focus:border-brand-500/50 transition-colors"
+                            />
+                        </div>
+
                         <div className="flex gap-3">
-                            <button onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
-                            <button onClick={create} disabled={loading} className="btn-primary flex-1 text-sm flex items-center justify-center gap-2">
+                            <button onClick={onClose} className="btn-secondary flex-1 text-sm">{t('dashboard.common.cancel', 'Cancel')}</button>
+                            <button onClick={create} disabled={loading || count < 1 || count > maxCreate} className="btn-primary flex-1 text-sm flex items-center justify-center gap-2">
                                 {loading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                                Create
+                                {t('dashboard.walletPage.createBtn', 'Create')}
                             </button>
                         </div>
-                    </>
-                ) : result.error ? (
-                    <>
-                        <div className="flex items-center gap-2 mb-4">
-                            <AlertTriangle className="text-red-400" size={20} />
-                            <h3 className="text-lg font-bold text-red-400">Error</h3>
-                        </div>
-                        <p className="text-sm text-surface-200/70 mb-4">{result.error}</p>
-                        <button onClick={onClose} className="btn-secondary w-full text-sm">Close</button>
                     </>
                 ) : (
                     <>
                         <div className="flex items-center gap-2 mb-4">
-                            <Shield className="text-emerald-400" size={20} />
-                            <h3 className="text-lg font-bold text-emerald-400">Wallet Created!</h3>
+                            {results.error && results.items.length === 0 ? (
+                                <AlertTriangle className="text-red-400" size={20} />
+                            ) : (
+                                <Shield className="text-emerald-400" size={20} />
+                            )}
+                            <h3 className={`text-lg font-bold ${results.error && results.items.length === 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                                {results.error && results.items.length === 0 ? t('dashboard.walletPage.errorTitle', 'Error') : t('dashboard.walletPage.createdTitle', 'Wallet Created!')}
+                            </h3>
                         </div>
-                        <div className="space-y-3 mb-4">
-                            <div>
-                                <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">Address</label>
-                                <code className="block bg-surface-800/80 px-3 py-2 rounded-lg text-xs text-brand-400 break-all">
-                                    {result.wallet?.address}
-                                </code>
-                            </div>
-                            <div>
-                                <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">Private Key</label>
-                                <div className="relative">
-                                    <code className="block bg-surface-800/80 px-3 py-2 rounded-lg text-xs text-amber-400/80 break-all pr-16">
-                                        {showKey ? result.privateKey : '••••••••••••••••••••••••••••••••••••••••••••••••'}
-                                    </code>
-                                    <div className="absolute right-1 top-1 flex gap-1">
-                                        <button onClick={() => setShowKey(!showKey)} className="p-1 rounded hover:bg-white/5">
-                                            {showKey ? <EyeOff size={12} className="text-surface-200/40" /> : <Eye size={12} className="text-surface-200/40" />}
-                                        </button>
-                                        <button onClick={copyKey} className="p-1 rounded hover:bg-white/5">
-                                            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="text-surface-200/40" />}
-                                        </button>
+                        
+                        {results.error && (
+                            <p className="text-sm text-red-400/80 mb-4 bg-red-500/10 p-3 rounded-xl border border-red-500/20">{results.error}</p>
+                        )}
+                        
+                        {results.items.length > 0 && (
+                            <div className="space-y-3 mb-4" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
+                                {results.items.map((r, i) => (
+                                    <div key={i} className="bg-surface-800/80 p-3 rounded-xl">
+                                        <div className="mb-2">
+                                            <span className="text-[10px] text-surface-200/40">{r.wallet?.name} • </span>
+                                            <code className="text-[10px] text-brand-400 break-all">
+                                                {r.wallet?.address}
+                                            </code>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">{t('dashboard.walletPage.privateKey', 'Private Key')}</label>
+                                            <code className="block bg-surface-900/50 px-3 py-2 rounded-lg text-xs text-amber-400/80 break-all">
+                                                {showKey ? r.privateKey : '••••••••••••••••••••••••••••••••••••••••••••••••'}
+                                            </code>
+                                        </div>
                                     </div>
-                                </div>
-                                <p className="text-[9px] text-amber-400/50 mt-1 flex items-center gap-1">
+                                ))}
+                            </div>
+                        )}
+                        
+                        {results.items.length > 0 && (
+                            <>
+                                <p className="text-[9px] text-amber-400/50 mb-3 flex items-center gap-1">
                                     <AlertTriangle size={8} /> {t('dashboard.walletPage.saveKeyWarning', 'Save this key! It will not be shown again.')}
                                 </p>
-                            </div>
-                        </div>
-                        <button onClick={() => { onCreated(); onClose(); }} className="btn-primary w-full text-sm">Done</button>
+                                <div className="flex gap-2 mb-4">
+                                    <button onClick={() => setShowKey(!showKey)} className="btn-secondary flex-1 text-xs flex items-center justify-center gap-1">
+                                        {showKey ? <EyeOff size={12} /> : <Eye size={12} />}
+                                        {showKey ? t('dashboard.walletPage.hide', 'Hide') : t('dashboard.walletPage.show', 'Show')}
+                                    </button>
+                                    <button onClick={copyAll} className="btn-secondary flex-1 text-xs flex items-center justify-center gap-1">
+                                        {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                        {t('dashboard.walletPage.copyAll', 'Copy All')}
+                                    </button>
+                                    <button onClick={downloadCsv} className="btn-secondary flex-1 text-xs flex items-center justify-center gap-1">
+                                        <FileText size={12} /> {t('dashboard.walletPage.saveCsv', 'Save CSV')}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                        <button onClick={() => { onCreated(); onClose(); }} className="btn-primary w-full text-sm">{t('dashboard.walletPage.done', 'Done')}</button>
                     </>
                 )}
             </div>
@@ -270,7 +341,7 @@ function CreateWalletModal({ onClose, onCreated }) {
 }
 
 /* ── Import Wallet Modal (Bulk + File) ── */
-function ImportWalletModal({ onClose, onImported }) {
+function ImportWalletModal({ currentCount, limit, onClose, onImported }) {
     const { t } = useTranslation();
     const [rows, setRows] = useState([{ key: '', name: '' }]);
     const [showKeys, setShowKeys] = useState(false);
@@ -279,11 +350,14 @@ function ImportWalletModal({ onClose, onImported }) {
     const [chainIndex, setChainIndex] = useState('196');
     const fileRef = useRef(null);
 
+    const maxCreate = Math.max(0, limit - currentCount);
+    const maxImport = maxCreate;
+
     const updateRow = (i, field, val) => {
         setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
     };
     const addRow = () => {
-        if (rows.length >= 50) return;
+        if (rows.length >= maxImport) return;
         setRows(prev => [...prev, { key: '', name: '' }]);
     };
     const removeRow = (i) => setRows(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i));
@@ -291,7 +365,7 @@ function ImportWalletModal({ onClose, onImported }) {
     const validCount = rows.filter(r => r.key.trim()).length;
 
     const handleImport = async () => {
-        const keys = rows.filter(r => r.key.trim()).map(r => ({ key: r.key.trim(), name: r.name.trim() || undefined }));
+        const keys = rows.filter(r => r.key.trim()).slice(0, maxImport).map(r => ({ key: r.key.trim(), name: r.name.trim() || undefined }));
         if (keys.length === 0) return;
         setLoading(true);
         try {
@@ -307,10 +381,15 @@ function ImportWalletModal({ onClose, onImported }) {
     // Parse lines into rows
     const parseLines = (text) => {
         const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
-        return lines.slice(0, 50).map(line => {
-            // Support: key,name  |  key\tname  |  key name(if name doesn't look like hex)
-            const csvMatch = line.match(/^([0-9a-fA-Fx]+)[,\t]\s*(.*)$/);
-            if (csvMatch) return { key: csvMatch[1], name: csvMatch[2].trim() };
+        return lines.slice(0, maxImport).map(line => {
+            // Support: key,name,address... | key\tname... | key name
+            const csvMatch = line.match(/^([0-9a-fA-Fx]+)[,\t]\s*([^,\t]*)/);
+            if (csvMatch) {
+                let name = csvMatch[2].trim();
+                // Remove surrounding quotes if they exist from CSV
+                if (name.startsWith('"') && name.endsWith('"')) name = name.substring(1, name.length - 1);
+                return { key: csvMatch[1], name };
+            }
             const parts = line.split(/\s+/);
             const key = parts[0] || '';
             const rest = parts.slice(1).join(' ').trim();
@@ -354,22 +433,26 @@ function ImportWalletModal({ onClose, onImported }) {
                         <p className="text-xs text-surface-200/50 mb-1">
                             {t('dashboard.walletPage.importDesc', 'Paste or upload EVM private keys. Each will be encrypted with AES-256-CBC.')}
                         </p>
-                        <p className="text-[10px] text-surface-200/30 mb-4 flex items-center gap-1">
-                            <AlertTriangle size={9} /> {t('dashboard.walletPage.importHint', 'Max 50 keys per batch · Supports .txt/.csv (one per line: key or key,name)')}
-                        </p>
-
-                        {/* Chain selector */}
-                        <div className="mb-3">
-                            <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">{t('dashboard.walletPage.chain', 'Chain')}</label>
-                            <CustomSelect value={chainIndex} onChange={setChainIndex} size="sm"
-                                options={CHAIN_OPTIONS.map(c => ({ value: c.value, label: c.label }))} />
+                        
+                        <div className="bg-brand-500/10 border border-brand-500/20 rounded-xl p-3 mb-4 mt-2">
+                            <p className="text-[10px] text-brand-400 font-semibold mb-1 flex items-center gap-1">
+                                <AlertTriangle size={10} /> 
+                                {t('dashboard.walletPage.importLimitMax', 'Bạn có thể thêm tối đa {{max}} ví nữa', { max: maxImport })}
+                            </p>
+                            <p className="text-[10px] text-surface-200/60 leading-relaxed font-mono mt-1">
+                                {t('dashboard.walletPage.importFormatInfo', 'Định dạng hỗ trợ file TXT/CSV (mỗi ví 1 dòng):')}
+                                <br />• 0x123...abc <span className="text-surface-200/40">(chỉ có Private Key)</span>
+                                <br />• 0x123...abc, Wallet Name <span className="text-surface-200/40">(Private Key phẩy Tên ví)</span>
+                                <br />• 0x123...abc Wallet Name <span className="text-surface-200/40">(Private Key khoảng trắng Tên ví)</span>
+                            </p>
                         </div>
 
                         {/* File upload zone */}
                         <input ref={fileRef} type="file" accept=".txt,.csv" onChange={handleFile} className="hidden" />
                         <button
                             onClick={() => fileRef.current?.click()}
-                            className="w-full mb-3 py-3 border-2 border-dashed border-white/10 rounded-xl text-xs text-surface-200/40 hover:border-brand-500/30 hover:text-brand-400 transition-colors flex items-center justify-center gap-2"
+                            disabled={maxImport <= 0}
+                            className="w-full mb-3 py-3 border-2 border-dashed border-white/10 rounded-xl text-xs text-surface-200/40 hover:border-brand-500/30 hover:text-brand-400 transition-colors flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                             <Upload size={14} /> {t('dashboard.walletPage.uploadOrPaste', 'Upload file (.txt / .csv) or paste below')}
                         </button>
@@ -409,8 +492,8 @@ function ImportWalletModal({ onClose, onImported }) {
                         </div>
 
                         <div className="flex items-center gap-3 mb-5">
-                            <button onClick={addRow} disabled={rows.length >= 50} className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                                <Plus size={12} /> {t('dashboard.walletPage.addKey', 'Add key')} ({rows.length}/50)
+                            <button onClick={addRow} disabled={rows.length >= maxImport} className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                                <Plus size={12} /> {t('dashboard.walletPage.addKey', 'Add key')} ({rows.length}/{maxImport})
                             </button>
                             <button onClick={() => setShowKeys(!showKeys)} className="text-xs text-surface-200/30 hover:text-surface-200/60 flex items-center gap-1 transition-colors ml-auto">
                                 {showKeys ? <EyeOff size={12} /> : <Eye size={12} />}
@@ -616,8 +699,10 @@ function ExportKeyModal({ walletId, walletAddress, onClose }) {
 }
 
 /* ── Bulk Export Modal ── */
-function BulkExportModal({ walletIds, wallets, onClose }) {
+function BulkExportModal({ walletIds, wallets, balances, onClose }) {
+    const { user } = useAuthStore();
     const { t } = useTranslation();
+    const [chainIndex, setChainIndex] = useState('196');
     const [loading, setLoading] = useState(false);
     const [keys, setKeys] = useState(null);
     const [showKeys, setShowKeys] = useState(false);
@@ -676,11 +761,20 @@ function BulkExportModal({ walletIds, wallets, onClose }) {
     };
 
     const downloadFile = () => {
-        const text = keys.map(k => `${k.privateKey},${k.name},${k.address}`).join('\n');
-        const blob = new Blob([text], { type: 'text/csv' });
+        const timestamp = new Date().toLocaleString();
+        let text = 'Private Key,Wallet Name,Address,Balance ($),Export Time\n';
+        text += keys.map(k => `${k.privateKey},"${k.name || ''}",${k.address},${balances?.[k.id] || 0},"${timestamp}"`).join('\n');
+        const blob = new Blob(['\uFEFF' + text], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = 'wallets_export.csv'; a.click();
+        a.href = url;
+        const uIdentifier = user?.username || user?.userId || 'user';
+        const dObj = new Date();
+        const dString = `${dObj.getFullYear()}${String(dObj.getMonth() + 1).padStart(2, '0')}${String(dObj.getDate()).padStart(2, '0')}_${String(dObj.getHours()).padStart(2, '0')}${String(dObj.getMinutes()).padStart(2, '0')}`;
+        const chainName = CHAIN_NAMES[chainIndex] || 'Chain';
+        const chainTag = `${chainName.replace(/\s+/g, '')}_${chainIndex}`;
+        a.download = `wallets_${uIdentifier}_${chainTag}_${keys.length}_${dString}.csv`;
+        a.click();
         URL.revokeObjectURL(url);
     };
 
@@ -691,6 +785,13 @@ function BulkExportModal({ walletIds, wallets, onClose }) {
                     <Key className="text-amber-400" size={20} />
                     <h3 className="text-lg font-bold text-surface-100">{t('dashboard.walletPage.exportBulkTitle', 'Export {{count}} Wallets', { count: walletIds.length })}</h3>
                 </div>
+
+                {!keys && !loading && (
+                    <div className="mb-4">
+                        <label className="text-[10px] uppercase tracking-wider text-surface-200/40 mb-1 block">Chain tag for exported file name</label>
+                        <CustomSelect value={chainIndex} onChange={setChainIndex} size="sm" options={CHAIN_OPTIONS.map(c => ({ value: c.value, label: c.label }))} />
+                    </div>
+                )}
 
                 {error && !needPin ? (
                     <>
@@ -1564,15 +1665,16 @@ export default function WalletsPage() {
 
             {/* Modals */}
             {showCreate && (
-                <CreateWalletModal onClose={() => setShowCreate(false)} onCreated={loadWallets} />
+                <CreateWalletModal currentCount={wallets.length} limit={walletLimit} onClose={() => setShowCreate(false)} onCreated={loadWallets} />
             )}
             {showImport && (
-                <ImportWalletModal onClose={() => setShowImport(false)} onImported={loadWallets} />
+                <ImportWalletModal currentCount={wallets.length} limit={walletLimit} onClose={() => setShowImport(false)} onImported={loadWallets} />
             )}
             {showBulkExport && (
                 <BulkExportModal
                     walletIds={[...selectedIds]}
                     wallets={wallets}
+                    balances={balancesRef.current}
                     onClose={() => setShowBulkExport(false)}
                 />
             )}

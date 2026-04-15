@@ -31,6 +31,12 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
+### 🚀 What's New in v1.2.5 (Advanced Wallet Management & Analytics Export)
+- **Dynamic Limits Enforcement**: Unshackled wallet import and creation parameters from restrictive hardcoded bounds, implementing a fluid max-cap system completely synchronized with owner-defined user limits.
+- **Enterprise Excel Compatibility**: Integrated essential UTF-8 BOM byte-order marking into the client-side file blobs, outright ending character scrambling (mojibake) when visualizing multi-lingual names in commercial data viewers.
+- **Parametric Export Pipeline**: Expanded the flat CSV downloads into a comprehensive 5-column metric footprint (`Private Key`, `Wallet Name`, `Address`, `Balance ($)`, `Export Time/Creation Time`), dynamically polling live unified Portfolio values and device-native localized timestrings.
+- **Intelligent Filename Taxonomy**: Rewrote the export modules to programmatically inject deep contextual markers into filenames: connected `uid`/`username` tags, specifically bound network locators (e.g., `XLayer_196`), aggregate batch density counts, and granular sequence timestamps.
+
 ### 🚀 What's New in v1.2.4 (Professional Error Handling & Persistence)
 - **AI Settings Persistence**: AI preferences (Model, Provider, Persona, Thinking) are now seamlessly synchronized with `localStorage`, guaranteeing your session settings survive page reloads and browser restarts without reverting to server defaults.
 - **Localized Personal Assistant Error Protocol**: Deprecated raw, hardcoded API technical error messages. XBot now intercepts API/Auth faults and serves them through a dynamic, 6-language `i18n` localization matrix using a warm, personal assistant tone. 

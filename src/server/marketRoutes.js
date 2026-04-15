@@ -809,7 +809,7 @@ function createMarketRoutes() {
      * Body: { limit: 100 }
      */
     router.put('/admin/users/:id/wallet-limit', async (req, res) => {
-        if (!req.dashboardUser?.isOwner) return res.status(403).json({ error: 'Owner only' });
+        if (req.dashboardUser?.role !== 'owner') return res.status(403).json({ error: 'Owner only' });
         try {
             const { dbRun } = require('../../db/core');
             const newLimit = parseInt(req.body.limit) || 50;
