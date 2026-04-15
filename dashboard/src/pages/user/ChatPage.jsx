@@ -561,9 +561,35 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
 }
 
 /* ─── Conversation list item with preview & relative time ─── */
-function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
+function ConvItem({ conv, active, onLoad, onDelete, onRename, onPin, onShare, isMobile }) {
     const { t } = useTranslation();
     const [showMenu, setShowMenu] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editTitle, setEditTitle] = useState(conv.title || '');
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (isEditing) {
+            inputRef.current?.focus();
+            inputRef.current?.select();
+        }
+    }, [isEditing]);
+
+    const submitRename = () => {
+        if (editTitle.trim() !== '' && editTitle !== conv.title) {
+            onRename?.(conv, editTitle.trim());
+        }
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') submitRename();
+        if (e.key === 'Escape') {
+            setIsEditing(false);
+            setEditTitle(conv.title || '');
+        }
+    };
+
     // Relative time helper
     const relTime = (ts) => {
         if (!ts) return '';
@@ -580,15 +606,31 @@ function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
         <div className={`relative rounded-xl transition-colors group
             ${active ? 'bg-brand-500/10 border border-brand-500/20' : 'hover:bg-white/3 border border-transparent'}`}>
             <button
-                onClick={() => onLoad(conv.conversationId)}
+                onClick={() => !isEditing && onLoad(conv.conversationId)}
                 className="w-full text-left pl-3 pr-8 py-2.5 flex items-start gap-2.5"
             >
-                <MessageSquare size={12} className={`flex-shrink-0 mt-0.5 ${active ? 'text-brand-400' : 'text-surface-200/30'}`} />
+                {conv.isPinned ? (
+                    <Pin size={12} className={`flex-shrink-0 mt-0.5 ${active ? 'text-brand-400' : 'text-amber-400/80'}`} />
+                ) : (
+                    <MessageSquare size={12} className={`flex-shrink-0 mt-0.5 ${active ? 'text-brand-400' : 'text-surface-200/30'}`} />
+                )}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                        <span className={`text-xs truncate flex-1 ${active ? 'text-brand-400 font-medium' : 'text-surface-200/60'}`}>
-                            {conv.title || t('dashboard.chatPage.newChat', 'New Chat')}
-                        </span>
+                        {isEditing ? (
+                            <input
+                                ref={inputRef}
+                                value={editTitle}
+                                onChange={(e) => setEditTitle(e.target.value)}
+                                onBlur={submitRename}
+                                onKeyDown={handleKeyDown}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-full bg-surface-900 border border-white/20 rounded px-1.5 py-0.5 text-xs text-brand-400 focus:outline-none focus:border-brand-500/50"
+                            />
+                        ) : (
+                            <span className={`text-xs truncate flex-1 ${active ? 'text-brand-400 font-medium' : 'text-surface-200/60'}`}>
+                                {conv.title || t('dashboard.chatPage.newChat', 'New Chat')}
+                            </span>
+                        )}
                         <span className="text-[9px] text-surface-200/20 flex-shrink-0">
                             {relTime(conv.updatedAt || conv.createdAt)}
                         </span>
@@ -613,13 +655,13 @@ function ConvItem({ conv, active, onLoad, onDelete, isMobile }) {
                         <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
                         <div className="absolute top-8 right-0 w-44 bg-surface-800 border border-white/10 rounded-xl shadow-2xl z-50 py-1 overflow-hidden"
                              onClick={(e) => e.stopPropagation()}>
-                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                            <button onClick={(e) => { e.stopPropagation(); setShowMenu(false); onShare?.(conv); }} className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2">
                                 <Share2 size={12}/> {t('dashboard.chatPage.shareChat', 'Chia sẻ cuộc trò chuyện')}
                             </button>
-                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
-                                <Pin size={12}/> {t('dashboard.chatPage.pinChat', 'Ghim')}
+                            <button onClick={(e) => { e.stopPropagation(); setShowMenu(false); onPin?.(conv); }} className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2">
+                                {conv.isPinned ? <PinOff size={12}/> : <Pin size={12}/>} {conv.isPinned ? t('dashboard.chatPage.unpinChat', 'Bỏ ghim') : t('dashboard.chatPage.pinChat', 'Ghim')}
                             </button>
-                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                            <button onClick={(e) => { e.stopPropagation(); setShowMenu(false); setIsEditing(true); }} className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2">
                                 <Edit size={12}/> {t('dashboard.chatPage.renameChat', 'Đổi tên')}
                             </button>
                             <div className="h-px bg-white/5 my-1" />
@@ -929,7 +971,9 @@ export default function ChatPage() {
     const [isListening, setIsListening] = useState(false);
     const [imagePreview, setImagePreview] = useState(null);
     const [messageFeedback, setMessageFeedback] = useState({});
-    const [selectedModel, setSelectedModel] = useState('gemini-3-flash-preview');
+    const [selectedModel, setSelectedModel] = useState(() => {
+        try { return localStorage.getItem('xbot_ai_model') || 'gemini-3-flash-preview'; } catch { return 'gemini-3-flash-preview'; }
+    });
     const [showModelPicker, setShowModelPicker] = useState(false);
     const [modelOptions, setModelOptions] = useState(FALLBACK_MODELS);
     const [modelMeta, setModelMeta] = useState({ hasPersonalKey: false, hasServerKey: false, isOwner: false });
@@ -940,10 +984,22 @@ export default function ChatPage() {
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
     const [showAiTrader, setShowAiTrader] = useState(false);
     const [settingsTab, setSettingsTab] = useState('model');
-    const [selectedPersona, setSelectedPersona] = useState('default');
-    const [selectedProvider, setSelectedProvider] = useState('google');
-    const [selectedThinking, setSelectedThinking] = useState('medium');
+    const [selectedPersona, setSelectedPersona] = useState(() => {
+        try { return localStorage.getItem('xbot_ai_persona') || 'default'; } catch { return 'default'; }
+    });
+    const [selectedProvider, setSelectedProvider] = useState(() => {
+        try { return localStorage.getItem('xbot_ai_provider') || 'google'; } catch { return 'google'; }
+    });
+    const [selectedThinking, setSelectedThinking] = useState(() => {
+        try { return localStorage.getItem('xbot_ai_thinking') || 'medium'; } catch { return 'medium'; }
+    });
     const [apiKeyProvider, setApiKeyProvider] = useState('google');
+
+    // Persist AI settings to localStorage
+    useEffect(() => { try { localStorage.setItem('xbot_ai_model', selectedModel); } catch {} }, [selectedModel]);
+    useEffect(() => { try { localStorage.setItem('xbot_ai_provider', selectedProvider); } catch {} }, [selectedProvider]);
+    useEffect(() => { try { localStorage.setItem('xbot_ai_persona', selectedPersona); } catch {} }, [selectedPersona]);
+    useEffect(() => { try { localStorage.setItem('xbot_ai_thinking', selectedThinking); } catch {} }, [selectedThinking]);
 
     // #18 Saved Prompts
     const [savedPrompts, setSavedPrompts] = useState(() => {
@@ -965,6 +1021,7 @@ export default function ChatPage() {
     const [compareMode, setCompareMode] = useState(false);
     const [loadingConv, setLoadingConv] = useState(false);
     const [inputShake, setInputShake] = useState(false);
+    const [shareModal, setShareModal] = useState(null); // { url, title, loading }
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     // U3: Model usage tracking
     const [modelUsageStats, setModelUsageStats] = useState(() => {
@@ -1015,7 +1072,12 @@ export default function ChatPage() {
                     hasServerGroqKey: data.hasServerGroqKey,
                     defaultModel: data.defaultModel,
                 });
-                if (data.defaultModel && !data.models.find(m => m.id === selectedModel)) {
+                // Only reset model if the current model doesn't exist in ANY provider's model list
+                const savedModel = localStorage.getItem('xbot_ai_model');
+                const savedProvider = localStorage.getItem('xbot_ai_provider') || 'google';
+                const allKnownModels = Object.values(MODEL_OPTIONS_BY_PROVIDER).flat().map(m => m.id);
+                const currentModel = savedModel || selectedModel;
+                if (data.defaultModel && !allKnownModels.includes(currentModel) && !data.models.find(m => m.id === currentModel)) {
                     setSelectedModel(data.defaultModel);
                 }
             }
@@ -1186,9 +1248,16 @@ export default function ChatPage() {
         }
     };
 
-    // ── Auto-load last conversation on mount (restore after tab switch) ──
+    // ── Auto-load last conversation on mount (restore after tab switch / deep link) ──
     useEffect(() => {
-        if (conversationId && messages.length === 0 && !loading) {
+        // Deep link: /chat?conv=xxx
+        const params = new URLSearchParams(window.location.search);
+        const deepConv = params.get('conv');
+        if (deepConv) {
+            loadConversation(deepConv);
+            // Clean URL
+            window.history.replaceState({}, '', '/chat');
+        } else if (conversationId && messages.length === 0 && !loading) {
             loadConversation(conversationId);
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1215,6 +1284,38 @@ export default function ChatPage() {
             if (convId === conversationId) startNewChat();
             loadConversations();
         } catch { /* ignore */ }
+    };
+
+    const handleRename = async (conv, newTitle) => {
+        if (newTitle && newTitle.trim() !== '') {
+            try {
+                await api.renameConversation(conv.conversationId, newTitle.trim());
+                loadConversations();
+            } catch (err) {
+                console.error('Failed to rename conversation:', err);
+            }
+        }
+    };
+
+    const handleShare = async (conv) => {
+        setShareModal({ url: null, title: conv.title || 'Chat', loading: true });
+        try {
+            const res = await api.shareConversation(conv.conversationId);
+            const shareUrl = `${window.location.origin}/shared/${res.shareId}`;
+            setShareModal({ url: shareUrl, title: conv.title || 'Chat', loading: false });
+        } catch (err) {
+            console.error('Failed to share:', err);
+            setShareModal(null);
+        }
+    };
+
+    const handlePin = async (conv) => {
+        try {
+            await api.pinConversation(conv.conversationId, !conv.isPinned);
+            loadConversations();
+        } catch (err) {
+            console.error('Failed to pin conversation:', err);
+        }
     };
 
     const sendMessage = async (text) => {
@@ -1342,9 +1443,27 @@ export default function ChatPage() {
                     setSessionTokens(prev => ({ ...prev, received: prev.received + Math.ceil(fullText.length / 4) }));
                 },
                 onError: (data) => {
+                    let rawErr = data.error || 'Stream failed';
+                    // Sanitize: strip API keys and detect auth/quota errors
+                    rawErr = rawErr.replace(/sk-[a-zA-Z0-9*_-]{10,}/g, 'sk-***').replace(/https?:\/\/[^\s)]+/g, '').trim();
+                    const errLower = rawErr.toLowerCase();
+                    const isAuth = errLower.includes('401') || errLower.includes('403') || errLower.includes('incorrect api key') || errLower.includes('invalid api key') || errLower.includes('authentication');
+                    const isQuota = errLower.includes('429') || errLower.includes('quota') || errLower.includes('rate limit') || errLower.includes('resource_exhausted');
+                    
+                    let errContent;
+                    if (isAuth || isQuota) {
+                        const pName = selectedProvider === 'google' ? 'Gemini' : selectedProvider === 'openai' ? 'OpenAI' : selectedProvider === 'groq' ? 'Groq' : 'AI';
+                        const pLink = selectedProvider === 'google' ? 'aistudio.google.com/app/apikey' : selectedProvider === 'openai' ? 'platform.openai.com/api-keys' : 'console.groq.com/keys';
+                        const errTitle = t('dashboard.chatPage.err_authTitle', `Lỗi kết nối {{pName}}`, { pName });
+                        const errReason = isQuota ? t('dashboard.chatPage.err_quotaUser', 'Dạ, tài khoản API của bạn hình như đã dùng hết hạn mức (quota) rồi ạ.') : t('dashboard.chatPage.err_authUser', 'Dạ, khóa API của bạn có vẻ đã hết hạn hoặc không chính xác mất rồi.');
+                        errContent = `\u274c **${errTitle}**\n\n${errReason}\n\n${t('dashboard.chatPage.err_openSettingsHint', '💡 Bạn có thể nhấn vào nút **⚙️ Cài đặt AI** bên dưới để kiểm tra và cập nhật lại API key nhé.')} [${t('dashboard.chatPage.err_getKey', 'Lấy key miễn phí')}](https://${pLink})`;
+                    } else {
+                        errContent = `\u274c ${t('dashboard.chatPage.err_generic', 'Dạ, có chút trục trặc nhỏ:')} ${rawErr.substring(0, 200)}`;
+                    }
+                    
                     setMessages(prev => {
                         const copy = [...prev];
-                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], content: `\u274c ${data.error || 'Stream failed'}` };
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], content: errContent };
                         return copy;
                     });
                 },
@@ -1355,9 +1474,13 @@ export default function ChatPage() {
             hapticNotification('error');
             
             let errMsg = err.message || 'Lỗi kết nối. Vui lòng thử lại sau.';
-            const isRateLimit = errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit');
-            const isAuthError = errMsg.includes('401') || errMsg.includes('403') || errMsg.toLowerCase().includes('invalid api key') || errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('api_key_invalid');
+            const errLower = errMsg.toLowerCase();
+            const isRateLimit = errMsg.includes('429') || errLower.includes('quota') || errLower.includes('rate limit') || errLower.includes('resource_exhausted') || errLower.includes('tokens per min');
+            const isAuthError = errMsg.includes('401') || errMsg.includes('403') || errLower.includes('invalid api key') || errLower.includes('incorrect api key') || errLower.includes('unauthorized') || errLower.includes('api_key_invalid') || errLower.includes('authentication') || errLower.includes('permission denied');
             
+            // Always sanitize raw error — strip API keys and technical URLs
+            const sanitized = errMsg.replace(/sk-[a-zA-Z0-9*_-]{10,}/g, 'sk-***').replace(/https?:\/\/[^\s)]+/g, '').trim();
+
             if (isRateLimit || isAuthError) {
                 const hasUserKey = (() => {
                     try {
@@ -1370,13 +1493,15 @@ export default function ChatPage() {
                 const pLink = selectedProvider === 'google' ? 'aistudio.google.com/app/apikey' : selectedProvider === 'openai' ? 'platform.openai.com/api-keys' : 'console.groq.com/keys';
 
                 if (hasUserKey) {
-                   const errReason = isRateLimit ? t('dashboard.chatPage.err_quotaUser', 'Account has reached its quota.') : t('dashboard.chatPage.err_authUser', 'API key is invalid.');
-                   errMsg = `\u274c **${t('dashboard.chatPage.err_titleUser', `Personal {{pName}} API Key Error:`, { pName })}**\n${errReason}\n\n💡 **${t('dashboard.chatPage.err_fixHint', 'How to fix:')}** ${t('dashboard.chatPage.err_fixUserDesc', 'Please open [AI Settings ⚙️] > [API Keys] to update your key or delete it to use the default XBot server connection.')}`;
+                   const errTitle = t('dashboard.chatPage.err_authTitle', `Lỗi kết nối {{pName}}`, { pName });
+                   const errReason = isRateLimit ? t('dashboard.chatPage.err_quotaUser', 'Dạ, tài khoản API của bạn hình như đã dùng hết hạn mức (quota) rồi ạ.') : t('dashboard.chatPage.err_authUser', 'Dạ, khóa API của bạn có vẻ đã hết hạn hoặc không chính xác mất rồi.');
+                   errMsg = `\u274c **${errTitle}**\n\n${errReason}\n\n${t('dashboard.chatPage.err_openSettingsHint', '💡 Bạn có thể nhấn vào nút **⚙️ Cài đặt AI** bên dưới để kiểm tra và cập nhật lại API key nhé.')}`;
                 } else {
-                   errMsg = `\u274c **${t('dashboard.chatPage.err_titleServer', `Server {{pName}} connection is overloaded:`, { pName })}**\n${t('dashboard.chatPage.err_descServer', 'Current usage has exceeded the free quota of the XBot system.')}\n\n💡 **${t('dashboard.chatPage.err_tipServer', 'Tip to avoid interruptions:')}**\n${t('dashboard.chatPage.err_tipServerDesc', 'You can set up your own personal API key to get instant processing, highest speed, and completely for free!')}\n\n**${t('dashboard.chatPage.err_guideServer', 'Guide:')}**\n${t('dashboard.chatPage.err_guideServer1', '1. Get a free API key at:')} [${pLink}](https://${pLink})\n${t('dashboard.chatPage.err_guideServer2', '2. On the top right of the Chat screen, click [AI Settings ⚙️] > switch to the [API Keys 🔑] tab')}\n${t('dashboard.chatPage.err_guideServer3', '3. Paste your key and enjoy a dedicated connection.')}`;
+                   errMsg = `\u274c **${t('dashboard.chatPage.err_titleServer', `Máy chủ {{pName}} đang quá tải`, { pName })}**\n\n${t('dashboard.chatPage.err_descServer', 'Dạ, hiện tại lượng truy cập đang vượt quá hạn mức miễn phí của hệ thống XBot.')}\n\n💡 **${t('dashboard.chatPage.err_tipServer', 'Mẹo để không bị gián đoạn:')}**\n${t('dashboard.chatPage.err_tipServerDesc', 'Bạn có thể tự thiết lập API key cá nhân để được xử lý ngay lập tức, tốc độ cao nhất và hoàn toàn miễn phí nhé!')}\n\n**${t('dashboard.chatPage.err_guideServer', 'Hướng dẫn nhanh:')}**\n${t('dashboard.chatPage.err_guideServer1', '1. Lấy key miễn phí tại:')} [${pLink}](https://${pLink})\n${t('dashboard.chatPage.err_guideServer2', '2. Nhấn nút [Cài đặt AI] bên dưới > chuyển sang tab [Khóa API]')}\n${t('dashboard.chatPage.err_guideServer3', '3. Dán key của bạn vào và tận hưởng đường truyền riêng biệt ạ.')}`;
                 }
             } else {
-                errMsg = `\u274c ${t('dashboard.chatPage.err_generic', 'Error:')} ${errMsg}`;
+                // Safely wrap any remaining error without leaking raw technical details
+                errMsg = `\u274c ${t('dashboard.chatPage.err_generic', 'Dạ, có chút trục trặc nhỏ:')} ${sanitized.substring(0, 200)}`;
             }
 
             // Update the existing streaming placeholder instead of adding a duplicate
@@ -1908,7 +2033,7 @@ export default function ChatPage() {
                         filteredConversations.forEach(conv => {
                             const ts = conv.updatedAt || conv.createdAt || 0;
                             const time = typeof ts === 'string' ? new Date(ts).getTime() : ts;
-                            if (conv._pinned) groups.pinned.push(conv);
+                            if (conv.isPinned) groups.pinned.push(conv);
                             else if (time >= today) groups.today.push(conv);
                             else if (time >= yesterday) groups.yesterday.push(conv);
                             else if (time >= weekAgo) groups.week.push(conv);
@@ -1926,7 +2051,7 @@ export default function ChatPage() {
                         if (!hasDateInfo) {
                             return filteredConversations.map(conv => (
                                 <ConvItem key={conv.conversationId} conv={conv} active={conv.conversationId === conversationId}
-                                    onLoad={loadConversation} onDelete={deleteConversation} isMobile={isMobile} />
+                                    onLoad={loadConversation} onDelete={deleteConversation} onRename={handleRename} onPin={handlePin} onShare={handleShare} isMobile={isMobile} />
                             ));
                         }
                         return groupLabels.map(g => (
@@ -1934,7 +2059,7 @@ export default function ChatPage() {
                                 <p className="text-[9px] text-surface-200/25 font-semibold uppercase tracking-wider px-2 pt-2 pb-1">{g.label}</p>
                                 {g.items.map(conv => (
                                     <ConvItem key={conv.conversationId} conv={conv} active={conv.conversationId === conversationId}
-                                        onLoad={loadConversation} onDelete={deleteConversation} isMobile={isMobile} />
+                                        onLoad={loadConversation} onDelete={deleteConversation} onRename={handleRename} onPin={handlePin} onShare={handleShare} isMobile={isMobile} />
                                 ))}
                             </div>
                         ));
@@ -2335,13 +2460,20 @@ export default function ChatPage() {
                                     />
                                     {/* Always-visible retry button on error messages */}
                                     {msg.role === 'assistant' && msg.content?.startsWith('\u274c') && (
-                                        <div className="ml-11 mt-1.5 animate-fadeIn">
+                                        <div className="ml-11 mt-1.5 animate-fadeIn flex items-center gap-2 flex-wrap">
                                             <button onClick={retryLastMessage}
                                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px]
                                                     bg-amber-500/10 text-amber-400 border border-amber-500/20
                                                     hover:bg-amber-500/20 transition-all">
                                                 <RefreshCw size={11} />
-                                                {t('dashboard.chatPage.retry', 'Retry')}
+                                                {t('dashboard.chatPage.retryBtn', 'Thử lại')}
+                                            </button>
+                                            <button onClick={() => { setShowSettingsPanel(true); setSettingsTab('keys'); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px]
+                                                    bg-brand-500/10 text-brand-400 border border-brand-500/20
+                                                    hover:bg-brand-500/20 transition-all">
+                                                <Settings size={11} />
+                                                {t('dashboard.chatPage.openAiSettings', 'Cài đặt AI')}
                                             </button>
                                         </div>
                                     )}
@@ -2945,10 +3077,74 @@ export default function ChatPage() {
         </div>
         {/* AI Trader Panel */}
         <AiTraderPanel visible={showAiTrader} onClose={() => setShowAiTrader(false)} />
+
+        {/* ── Share Link Modal ── */}
+        {shareModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn" onClick={() => setShareModal(null)}>
+                <div className="bg-surface-800 border border-white/10 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-brand-500/15 flex items-center justify-center">
+                                <Share2 size={14} className="text-brand-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-surface-100">{t('dashboard.chatPage.shareChat', 'Share Chat')}</h3>
+                                <p className="text-[10px] text-surface-200/40 truncate max-w-[200px]">{shareModal.title}</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setShareModal(null)} className="p-1.5 rounded-lg hover:bg-white/5 text-surface-200/40 hover:text-surface-100 transition-colors">
+                            <X size={16} />
+                        </button>
+                    </div>
+                    <div className="px-5 py-5 space-y-4">
+                        {shareModal.loading ? (
+                            <div className="flex items-center justify-center py-6 gap-3">
+                                <Loader2 size={16} className="text-brand-400 animate-spin" />
+                                <span className="text-sm text-surface-200/50">{t('dashboard.chatPage.shareGenerating', 'Creating public link...')}</span>
+                            </div>
+                        ) : shareModal.url ? (
+                            <>
+                                <p className="text-xs text-surface-200/50">{t('dashboard.chatPage.shareDesc', 'Anyone with this link can view a read-only snapshot of this conversation.')}</p>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        readOnly
+                                        value={shareModal.url}
+                                        className="flex-1 bg-surface-900 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-surface-200/80 select-all focus:outline-none focus:border-brand-500/30"
+                                        onFocus={e => e.target.select()}
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard?.writeText(shareModal.url);
+                                            const btn = document.getElementById('share-copy-btn');
+                                            if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
+                                        }}
+                                        id="share-copy-btn"
+                                        className="px-4 py-2.5 rounded-xl bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold hover:bg-brand-500/30 transition-colors flex-shrink-0"
+                                    >Copy</button>
+                                </div>
+                                <div className="flex items-center gap-3 pt-1">
+                                    <a href={shareModal.url} target="_blank" rel="noopener noreferrer"
+                                        className="flex items-center gap-1 text-[11px] text-brand-400/70 hover:text-brand-400 transition-colors">
+                                        <ExternalLink size={11} /> {t('dashboard.chatPage.sharePreview', 'Preview')}
+                                    </a>
+                                    <span className="text-surface-200/10">|</span>
+                                    <span className="text-[10px] text-surface-200/25 flex items-center gap-1">
+                                        <Lock size={9} /> {t('dashboard.chatPage.shareReadOnly', 'Read-only • Snapshot')}
+                                    </span>
+                                </div>
+                            </>
+                        ) : null}
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* Animation CSS */}
         <style>{`
             @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
             .animate-slide-in-right { animation: slideInRight 0.25s ease-out; }
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
         `}</style>
         </>
     );

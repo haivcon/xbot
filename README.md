@@ -31,6 +31,12 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
+### 🚀 What's New in v1.2.4 (Professional Error Handling & Persistence)
+- **AI Settings Persistence**: AI preferences (Model, Provider, Persona, Thinking) are now seamlessly synchronized with `localStorage`, guaranteeing your session settings survive page reloads and browser restarts without reverting to server defaults.
+- **Localized Personal Assistant Error Protocol**: Deprecated raw, hardcoded API technical error messages. XBot now intercepts API/Auth faults and serves them through a dynamic, 6-language `i18n` localization matrix using a warm, personal assistant tone. 
+- **Frictionless Error Resolution**: Introduced intuitive, direct-action "⚙️ AI Settings" shortcuts embedded within API error notifications, allowing users a one-click path to instantly rotate expired or invalid API keys.
+- **Refined Welcome Broadcast Links**: Synchronized the global `/start` command payload across all 6 core languages, updating the ecosystem creator handle and cementing the definitive Xbot Official X presence.
+
 ### 🚀 What's New in v1.2.3 (AI Chat Mobile UX Optimization)
 - **Responsive Navigation Upgrade**: Resolved AI Chat Page usability bottlenecks by replacing cramped components with large (44px) touch-friendly action targets, including a dedicated "Conversations" toggle with an integrated unread counter.
 - **Dynamic Header Resizing**: Alleviated severe mobile overflow clipping by restructuring the core header toolbar to conditionally hide non-essential desktop modules (e.g. Compare, Export), securely wrapping long AI persona strings.

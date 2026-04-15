@@ -41,6 +41,7 @@ const TreasuryPage = lazy(() => import('@/pages/user/TreasuryPage'));
 const SmartCopyPage = lazy(() => import('@/pages/user/SmartCopyPage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+const SharedChatPage = lazy(() => import('@/pages/SharedChatPage'));
 
 function SuspenseWrapper({ children }) {
     return (
@@ -81,6 +82,17 @@ export default function App() {
                     <p className="text-sm text-surface-200/50">Loading {config.appName} {config.appTagline}...</p>
                 </div>
             </div>
+        );
+    }
+
+    // Shared chat page — accessible without auth
+    if (location.pathname.startsWith('/shared/')) {
+        return (
+            <Suspense fallback={<PageSkeleton />}>
+                <Routes>
+                    <Route path="/shared/:shareId" element={<SharedChatPage />} />
+                </Routes>
+            </Suspense>
         );
     }
 

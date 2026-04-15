@@ -1,7 +1,7 @@
 {
     "connect_success": "✅ **Connection Successful!**\n\nYour wallet:\n`{walletAddress}`\n...has been added to your watchlist.",
     "connect_fail_token": "❌ **Invalid link token.**\n\nPlease go back to [banmao.fun](https://banmao.fun) and press \"Open bot\" to try again.",
-    "welcome_generic": "Welcome to Xlayer BOT AI 🤖\n– the dedicated assistant for OKX's Xlayer community!\n\n✨ This BOT provides market information, Web3 guides, and Xlayer community support.\n\n🎶 Faith & dreams will overcome greed & fear 🎶\n\n🔗 **Official Links:**\n   🔹 Xlayer X Account: https://x.com/XLayerOfficial\n   🌐 OKX Web3: https://web3.okx.com/\n\n🛠️ **Support:**\n   ➡️ Use **/help** to view the full instruction panel (right below).\n\n⚠️ **Safety Disclaimer:**\n   This is a community AI assistant and not official financial advice from OKX. Always Do Your Own Research (DYOR).\n\n✨ Developed by ＤＯＲＥＭＯＮ\n   Developer X: https://x.com/haivcon",
+    "welcome_generic": "Welcome to Xlayer BOT AI 🤖\n– the dedicated assistant for OKX's Xlayer community!\n\n✨ This BOT provides market information, Web3 guides, and Xlayer community support.\n\n🎶 Faith & dreams will overcome greed & fear 🎶\n\n🔗 **Official Links:**\n   🔹 Xlayer X Account: https://x.com/XLayerOfficial\n   🌐 OKX Web3: https://web3.okx.com/\n\n🛠️ **Support:**\n   ➡️ Use **/help** to view the full instruction panel (right below).\n\n⚠️ **Safety Disclaimer:**\n   This is a community AI assistant and not official financial advice from OKX. Always Do Your Own Research (DYOR).\n\n✨ Developed by ＤＯＲＥＭＯＮ\n   Developer X: https://x.com/haivcon_X\n   XBOT Official: https://x.com/XlayerAi_bot",
     "select_language": "Please select your desired language:",
     "select_group_language": "Admins: choose the language for this group's feed notifications:",
     "language_changed_success": "✅ Language successfully changed to English.",
@@ -1397,7 +1397,7 @@
     "ai_provider_source_user": "personal key",
     "ai_provider_source_server": "bot key",
     "ai_provider_active": "🔑 API {provider}",
-    "ai_support_reminder": "💙 Support /ai improvements: https://x.com/haivcon",
+    "ai_support_reminder": "💙 Support /ai improvements: https://x.com/haivcon_X\n   XBOT Official: https://x.com/XlayerAi_bot",
     "ai_support_reminder_html": "💙 Support /ai improvements: <a href=\"https://x.com/haivcon\">x.com/haivcon</a>",
     "ai_provider_media_hint": "Groq mode is text-only. Use Google Ai for images or switch providers in /api.",
     "owner_group_member_count": "Members: {count}",

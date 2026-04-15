@@ -257,6 +257,30 @@ class ApiClient {
         return this.delete(`/ai/history/${conversationId}`);
     }
 
+    renameConversation(conversationId, title) {
+        return this.put(`/ai/history/${conversationId}`, { title });
+    }
+
+    pinConversation(conversationId, isPinned) {
+        return this.put(`/ai/history/${conversationId}`, { isPinned });
+    }
+
+    shareConversation(conversationId) {
+        return this.post(`/ai/history/${conversationId}/share`);
+    }
+
+    unshareConversation(conversationId) {
+        return this.delete(`/ai/history/${conversationId}/share`);
+    }
+
+    getSharedChat(shareId) {
+        // Public endpoint — no auth required
+        return fetch(`${API_BASE}/shared/${shareId}`).then(r => {
+            if (!r.ok) throw new Error('Shared chat not found');
+            return r.json();
+        });
+    }
+
     clearAllChats() {
         return this.delete('/ai/history');
     }

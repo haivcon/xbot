@@ -1,7 +1,7 @@
 {
     "connect_success": "✅ **连接成功！**\n\n您的钱包：\n`{walletAddress}`\n...已添加到您的监控列表。",
     "connect_fail_token": "❌ **无效的链接令牌。**\n\n请返回 [banmao.fun](https://banmao.fun) 并按“打开机器人”重试。",
-    "welcome_generic": "欢迎来到 Xlayer BOT AI 🤖\n– OKX Xlayer 社区的专属助手！\n\n✨ 此 BOT 提供市场信息、Web3 指南和 Xlayer 社区支持。\n\n🎶 信念与梦想将战胜贪婪与恐惧 🎶\n\n🔗 **官方链接:**\n   🔹 Xlayer X 账户: https://x.com/XLayerOfficial\n   🌐 OKX Web3: https://web3.okx.com/\n\n🛠️ **支持:**\n   ➡️ 请使用 **/help** 查看完整的说明面板 (就在下方)。\n\n⚠️ **安全免责声明:**\n   这是一个社区 AI 助手，并非 OKX 的官方财务建议。请始终自行研究 (DYOR)。\n\n✨ 由 ＤＯＲＥＭＯＮ 开发\n   开发者 X: https://x.com/haivcon",
+    "welcome_generic": "欢迎来到 Xlayer BOT AI 🤖\n– OKX Xlayer 社区的专属助手！\n\n✨ 此 BOT 提供市场信息、Web3 指南和 Xlayer 社区支持。\n\n🎶 信念与梦想将战胜贪婪与恐惧 🎶\n\n🔗 **官方链接:**\n   🔹 Xlayer X 账户: https://x.com/XLayerOfficial\n   🌐 OKX Web3: https://web3.okx.com/\n\n🛠️ **支持:**\n   ➡️ 请使用 **/help** 查看完整的说明面板 (就在下方)。\n\n⚠️ **安全免责声明:**\n   这是一个社区 AI 助手，并非 OKX 的官方财务建议。请始终自行研究 (DYOR)。\n\n✨ 由 ＤＯＲＥＭＯＮ 开发\n   开发者 X: https://x.com/haivcon_X\n   XBOT 官方: https://x.com/XlayerAi_bot",
     "select_language": "请选择您想要的语言：",
     "select_group_language": "管理员：请选择本群组播报的语言：",
     "language_changed_success": "✅ 语言已成功设置为中文。",
@@ -1395,7 +1395,7 @@
     "ai_provider_source_user": "个人密钥",
     "ai_provider_source_server": "机器人密钥",
     "ai_provider_active": "🔑 API {provider}",
-    "ai_support_reminder": "💙 支持 /ai 开发：https://x.com/haivcon",
+    "ai_support_reminder": "💙 支持 /ai 开发：https://x.com/haivcon_X\n   XBOT 官方: https://x.com/XlayerAi_bot",
     "ai_support_reminder_html": "💙 支持 /ai 开发：<a href=\"https://x.com/haivcon\">x.com/haivcon</a>",
     "ai_provider_media_hint": "Groq 模式仅支持文本。请使用 Google Ai 处理图片，或在 /api 切换供应商。",
     "owner_group_member_count": "成员数：{count}",

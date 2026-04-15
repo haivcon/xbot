@@ -653,6 +653,22 @@ async function init() {
     )`);
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_web_chat_user ON web_chat_sessions(userId, updatedAt DESC)`);
 
+    // Migration: add isPinned to web_chat_sessions
+    try {
+        await dbRun(`ALTER TABLE web_chat_sessions ADD COLUMN isPinned INTEGER DEFAULT 0`);
+    } catch (e) { /* Column likely exists already */ }
+
+    // Shared conversations (public read-only snapshots)
+    await dbRun(`CREATE TABLE IF NOT EXISTS shared_conversations (
+        id TEXT PRIMARY KEY,
+        conversationId TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        title TEXT DEFAULT 'Shared Chat',
+        messages TEXT DEFAULT '[]',
+        createdAt INTEGER
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_shared_conv ON shared_conversations(conversationId, userId)`);
+
     // Wallet templates (named address lists for batch operations)
     await dbRun(`CREATE TABLE IF NOT EXISTS wallet_templates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

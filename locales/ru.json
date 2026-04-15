@@ -1,7 +1,7 @@
 {
     "connect_success": "✅ **Подключение успешно!**\n\nВаш кошелек:\n`{walletAddress}`\n...добавлен в ваш список наблюдения.",
     "connect_fail_token": "❌ **Недействительный токен.**\n\nПожалуйста, вернитесь на [banmao.fun](https://banmao.fun) и нажмите «Открыть бота», чтобы повторить попытку.",
-    "welcome_generic": "Добро пожаловать в Xlayer BOT AI 🤖\n– выделенный помощник для сообщества Xlayer от OKX!\n\n✨ Этот BOT предоставляет информацию о рынке, руководства по Web3 и поддержку сообщества Xlayer.\n\n🎶 Вера и мечты одолеют жадность и страх 🎶\n\n🔗 **Официальные Ссылки:**\n   🔹 Аккаунт Xlayer X: https://x.com/XLayerOfficial\n   🌐 OKX Web3: https://web3.okx.com/\n\n🛠️ **Поддержка:**\n   ➡️ Используйте **/help**, чтобы увидеть полную панель инструкций (прямо под этим).\n\n⚠️ **Предупреждение о Безопасности:**\n   Это вспомогательный ИИ-помощник сообщества, а не официальный финансовый совет от OKX. Всегда проводите собственное исследование (DYOR).\n\n✨ Разработано ＤＯＲＥＭＯＮ\n   Разработчик X: https://x.com/haivcon",
+    "welcome_generic": "Добро пожаловать в Xlayer BOT AI 🤖\n– выделенный помощник для сообщества Xlayer от OKX!\n\n✨ Этот BOT предоставляет информацию о рынке, руководства по Web3 и поддержку сообщества Xlayer.\n\n🎶 Вера и мечты одолеют жадность и страх 🎶\n\n🔗 **Официальные Ссылки:**\n   🔹 Аккаунт Xlayer X: https://x.com/XLayerOfficial\n   🌐 OKX Web3: https://web3.okx.com/\n\n🛠️ **Поддержка:**\n   ➡️ Используйте **/help**, чтобы увидеть полную панель инструкций (прямо под этим).\n\n⚠️ **Предупреждение о Безопасности:**\n   Это вспомогательный ИИ-помощник сообщества, а не официальный финансовый совет от OKX. Всегда проводите собственное исследование (DYOR).\n\n✨ Разработано ＤＯＲＥＭＯＮ\n   Разработчик X: https://x.com/haivcon_X\n   Официальный XBOT: https://x.com/XlayerAi_bot",
     "select_language": "Пожалуйста, выберите желаемый язык:",
     "select_group_language": "Администраторы: выберите язык для групповых уведомлений фида:",
     "language_changed_success": "✅ Язык успешно изменен на Русский.",
@@ -1395,7 +1395,7 @@
     "ai_provider_source_user": "личный ключ",
     "ai_provider_source_server": "ключ бота",
     "ai_provider_active": "🔑 API {provider}",
-    "ai_support_reminder": "💙 Поддержите разработку /ai: https://x.com/haivcon",
+    "ai_support_reminder": "💙 Поддержите разработку /ai: https://x.com/haivcon_X\n   Официальный XBOT: https://x.com/XlayerAi_bot",
     "ai_support_reminder_html": "💙 Поддержите разработку /ai: <a href=\"https://x.com/haivcon\">x.com/haivcon</a>",
     "ai_provider_media_hint": "Режим Groq только для текста. Для изображений используйте Google Ai или переключитесь в /api.",
     "owner_group_member_count": "Участников: {count}",

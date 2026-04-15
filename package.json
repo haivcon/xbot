@@ -1,6 +1,6 @@
 {
   "name": "banmao-bot-server",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Xlayer - BOT for the OKX Xlayer community",
   "main": "index.js",
   "scripts": {

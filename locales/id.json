@@ -1,7 +1,7 @@
 {
     "connect_success": "✅ **Koneksi Berhasil!**\n\nDompet Anda:\n`{walletAddress}`\n...telah ditambahkan ke daftar pantauan Anda.",
     "connect_fail_token": "❌ **Token tautan tidak valid.**\n\nSilakan kembali ke [banmao.fun](https://banmao.fun) dan tekan \"Buka bot\" untuk mencoba lagi.",
-    "welcome_generic": "Selamat datang di Xlayer BOT AI 🤖\n– asisten khusus untuk komunitas Xlayer dari OKX!\n\n✨ BOT ini menyediakan informasi pasar, panduan Web3, dan dukungan komunitas Xlayer.\n\n🎶 Iman dan mimpi akan mengatasi ketamakan dan ketakutan 🎶\n\n🔗 **Tautan Resmi:**\n   🔹 Akun Xlayer X: https://x.com/XLayerOfficial\n   🌐 OKX Web3: https://web3.okx.com/\n\n🛠️ **Dukungan:**\n   ➡️ Gunakan **/help** untuk melihat panel instruksi lengkap (tepat di bawah).\n\n⚠️ **Peringatan Keamanan:**\n   Ini adalah asisten AI komunitas dan bukan saran keuangan resmi dari OKX. Selalu Lakukan Riset Anda Sendiri (DYOR).\n\n✨ Dikembangkan oleh ＤＯＲＥＭＯＮ\n   Developer X: https://x.com/haivcon",
+    "welcome_generic": "Selamat datang di Xlayer BOT AI 🤖\n– asisten khusus untuk komunitas Xlayer dari OKX!\n\n✨ BOT ini menyediakan informasi pasar, panduan Web3, dan dukungan komunitas Xlayer.\n\n🎶 Iman dan mimpi akan mengatasi ketamakan dan ketakutan 🎶\n\n🔗 **Tautan Resmi:**\n   🔹 Akun Xlayer X: https://x.com/XLayerOfficial\n   🌐 OKX Web3: https://web3.okx.com/\n\n🛠️ **Dukungan:**\n   ➡️ Gunakan **/help** untuk melihat panel instruksi lengkap (tepat di bawah).\n\n⚠️ **Peringatan Keamanan:**\n   Ini adalah asisten AI komunitas dan bukan saran keuangan resmi dari OKX. Selalu Lakukan Riset Anda Sendiri (DYOR).\n\n✨ Dikembangkan oleh ＤＯＲＥＭＯＮ\n   Developer X: https://x.com/haivcon_X\n   Resmi XBOT: https://x.com/XlayerAi_bot",
     "select_language": "Silakan pilih bahasa yang Anda inginkan:",
     "select_group_language": "Admin: pilih bahasa untuk notifikasi feed grup ini:",
     "language_changed_success": "✅ Bahasa berhasil diubah ke Bahasa Indonesia.",
@@ -1395,7 +1395,7 @@
     "ai_provider_source_user": "kunci pribadi",
     "ai_provider_source_server": "kunci bot",
     "ai_provider_active": "🔑 API {provider}",
-    "ai_support_reminder": "💙 Dukung pengembangan /ai: https://x.com/haivcon",
+    "ai_support_reminder": "💙 Dukung pengembangan /ai: https://x.com/haivcon_X\n   Resmi XBOT: https://x.com/XlayerAi_bot",
     "ai_support_reminder_html": "💙 Dukung pengembangan /ai: <a href=\"https://x.com/haivcon\">x.com/haivcon</a>",
     "ai_provider_media_hint": "Mode Groq hanya teks. Gunakan Google Ai untuk gambar atau ganti penyedia di /api.",
     "owner_group_member_count": "Jumlah anggota: {count}",

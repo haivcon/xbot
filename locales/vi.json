@@ -1,7 +1,7 @@
 {
     "connect_success": "✅ **Kết nối thành công!**\n\nVí của bạn:\n`{walletAddress}`\n...đã được thêm vào danh sách theo dõi của bạn.",
     "connect_fail_token": "❌ **Token liên kết không hợp lệ.**\n\nVui lòng quay lại [banmao.fun](https://banmao.fun) và nhấn \"Mở bot\" để thử lại.",
-    "welcome_generic": "Chào mừng bạn đến với Xlayer BOT Ai 🤖\n– trợ lý dành riêng cho cộng đồng Xlayer của OKX!\n\n✨ BOT này cung cấp thông tin thị trường, hướng dẫn Web3 và hỗ trợ cộng đồng Xlayer.\n\n🎶 Niềm tin và ước mơ sẽ vượt qua lòng tham và nỗi sợ hãi 🎶\n\n🔗 **Liên kết Chính Thức:**\n   🔹 Tài khoản Xlayer: https://x.com/XLayerOfficial\n   🌐 Web3 OKX: https://web3.okx.com/\n\n🛠️ **Hỗ Trợ:**\n   ➡️ Dùng **/help** để xem bảng hướng dẫn đầy đủ (ở ngay dưới).\n\n⚠️ **Lưu ý An Toàn:**\n   Đây là trợ lý AI cộng đồng và không phải là lời khuyên tài chính chính thức từ OKX. Luôn tự nghiên cứu (DYOR).\n\n✨ Được phát triển bởi ＤＯＲＥＭＯＮ\n   Developer X: https://x.com/haivcon",
+    "welcome_generic": "Chào mừng bạn đến với Xlayer BOT Ai 🤖\n– trợ lý dành riêng cho cộng đồng Xlayer của OKX!\n\n✨ BOT này cung cấp thông tin thị trường, hướng dẫn Web3 và hỗ trợ cộng đồng Xlayer.\n\n🎶 Niềm tin và ước mơ sẽ vượt qua lòng tham và nỗi sợ hãi 🎶\n\n🔗 **Liên kết Chính Thức:**\n   🔹 Tài khoản Xlayer: https://x.com/XLayerOfficial\n   🌐 Web3 OKX: https://web3.okx.com/\n\n🛠️ **Hỗ Trợ:**\n   ➡️ Dùng **/help** để xem bảng hướng dẫn đầy đủ (ở ngay dưới).\n\n⚠️ **Lưu ý An Toàn:**\n   Đây là trợ lý AI cộng đồng và không phải là lời khuyên tài chính chính thức từ OKX. Luôn tự nghiên cứu (DYOR).\n\n✨ Được phát triển bởi ＤＯＲＥＭＯＮ\n   Developer X: https://x.com/haivcon_X\n   XBOT Chính thức: https://x.com/XlayerAi_bot",
     "select_language": "Vui lòng chọn ngôn ngữ bạn muốn sử dụng:",
     "select_group_language": "Admin: chọn ngôn ngữ cho thông báo feed của nhóm:",
     "language_changed_success": "✅ Đã đổi ngôn ngữ thành công sang Tiếng Việt.",
@@ -1358,7 +1358,7 @@
     "ai_provider_source_user": "khóa cá nhân",
     "ai_provider_source_server": "khóa của bot",
     "ai_provider_active": "🔑 API {provider}",
-    "ai_support_reminder": "💙 Ủng hộ phát triển /ai: https://x.com/haivcon",
+    "ai_support_reminder": "💙 Ủng hộ phát triển /ai: https://x.com/haivcon_X\n   XBOT Chính thức: https://x.com/XlayerAi_bot",
     "ai_support_reminder_html": "💙 Ủng hộ phát triển /ai: <a href=\"https://x.com/haivcon\">x.com/haivcon</a>",
     "ai_provider_media_hint": "Chế độ Groq chỉ hỗ trợ văn bản. Dùng Google Ai cho ảnh hoặc đổi nhà cung cấp trong /api.",
     "owner_command_limit_menu": "⚙️ <b>Giới hạn lệnh</b>\nChọn thao tác để quản lý số lệnh dùng mỗi ngày.",

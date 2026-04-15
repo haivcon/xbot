@@ -16,6 +16,7 @@ const { WEB_TOOL_DECLARATIONS, executeWebToolCall } = require('./webToolExecutor
 const { buildAIAPrompt } = require('../config/prompts');
 const { t } = require('../core/i18n');
 const db = require('../../db.js');
+const crypto = require('crypto');
 
 // Debug: verify tools loaded correctly
 log.info(`ONCHAIN_TOOLS loaded: ${Array.isArray(ONCHAIN_TOOLS) ? ONCHAIN_TOOLS.length + ' tool groups' : 'FAILED'}, total declarations: ${Array.isArray(ONCHAIN_TOOLS) ? ONCHAIN_TOOLS.reduce((sum, g) => sum + (g.functionDeclarations?.length || 0), 0) : 0}`);
@@ -38,6 +39,8 @@ async function getSession(sessionId, userId) {
                 userId: row.userId,
                 title: row.title,
                 messages: JSON.parse(row.messages || '[]'),
+                isPinned: Boolean(row.isPinned),
+                createdAt: row.createdAt,
                 updatedAt: row.updatedAt || Date.now(),
             };
             chatSessionsCache.set(sessionId, session);
@@ -52,9 +55,9 @@ async function saveSession(session) {
     chatSessionsCache.set(session.id, session);
     try {
         await dbRun(
-            `INSERT OR REPLACE INTO web_chat_sessions (id, userId, title, messages, createdAt, updatedAt)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [session.id, session.userId, session.title, JSON.stringify(session.messages), session.createdAt || Date.now(), Date.now()]
+            `INSERT OR REPLACE INTO web_chat_sessions (id, userId, title, messages, createdAt, updatedAt, isPinned)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [session.id, session.userId, session.title, JSON.stringify(session.messages), session.createdAt || Date.now(), Date.now(), session.isPinned ? 1 : 0]
         );
     } catch (err) { log.warn('DB save session error:', err.message); }
 }
@@ -71,7 +74,7 @@ async function deleteSession(sessionId, userId) {
 async function listUserSessions(userId, limit = 20) {
     try {
         return await dbAll(
-            'SELECT id, title, updatedAt FROM web_chat_sessions WHERE userId = ? ORDER BY updatedAt DESC LIMIT ?',
+            'SELECT id, title, updatedAt, isPinned, createdAt FROM web_chat_sessions WHERE userId = ? ORDER BY isPinned DESC, updatedAt DESC LIMIT ?',
             [userId, limit]
         );
     } catch { return []; }
@@ -538,6 +541,8 @@ function createChatRoutes() {
         const conversations = rows.map(r => ({
             conversationId: r.id,
             title: r.title || 'New Chat',
+            isPinned: Boolean(r.isPinned),
+            createdAt: r.createdAt,
             updatedAt: r.updatedAt
         }));
         res.json({ conversations });
@@ -568,6 +573,28 @@ function createChatRoutes() {
     });
 
     /**
+     * PUT /history/:conversationId
+     * Update conversation properties (title, isPinned)
+     */
+    router.put('/history/:conversationId', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        const { conversationId } = req.params;
+        const { title, isPinned } = req.body;
+
+        if (!userId) return res.status(401).json({ error: 'Authentication required' });
+
+        const session = await getSession(conversationId, userId);
+        if (!session) return res.status(404).json({ error: 'Conversation not found' });
+
+        if (title !== undefined) session.title = String(title).substring(0, 100);
+        if (isPinned !== undefined) session.isPinned = Boolean(isPinned);
+        session.updatedAt = Date.now();
+        await saveSession(session);
+
+        res.json({ ok: true, title: session.title, isPinned: session.isPinned });
+    });
+
+    /**
      * DELETE /history/:conversationId
      * Clear a conversation
      */
@@ -578,6 +605,55 @@ function createChatRoutes() {
         if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
         await deleteSession(conversationId, userId);
+        res.json({ ok: true });
+    });
+
+    /**
+     * POST /history/:conversationId/share
+     * Create a public share link (snapshot) for a conversation
+     */
+    router.post('/history/:conversationId/share', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        const { conversationId } = req.params;
+
+        if (!userId) return res.status(401).json({ error: 'Authentication required' });
+
+        const session = await getSession(conversationId, userId);
+        if (!session) return res.status(404).json({ error: 'Conversation not found' });
+
+        // Check if already shared
+        const existing = await dbGet('SELECT id FROM shared_conversations WHERE conversationId = ? AND userId = ?', [conversationId, userId]);
+        if (existing) {
+            return res.json({ shareId: existing.id, shareUrl: `/shared/${existing.id}` });
+        }
+
+        // Generate short ID
+        const shareId = Array.from(crypto.randomBytes(6)).map(b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+
+        // Snapshot messages (strip content > 50KB to prevent abuse)
+        const displayMessages = (session.messages || []).filter(m => m.content && m.content.trim());
+        const messagesJson = JSON.stringify(displayMessages).substring(0, 200_000);
+
+        await dbRun(
+            `INSERT INTO shared_conversations (id, conversationId, userId, title, messages, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
+            [shareId, conversationId, userId, session.title || 'Shared Chat', messagesJson, Date.now()]
+        );
+
+        log.info(`[Share] User ${userId} shared conversation ${conversationId} → ${shareId}`);
+        res.json({ shareId, shareUrl: `/shared/${shareId}` });
+    });
+
+    /**
+     * DELETE /history/:conversationId/share
+     * Remove a public share link
+     */
+    router.delete('/history/:conversationId/share', async (req, res) => {
+        const userId = req.dashboardUser?.userId?.toString();
+        const { conversationId } = req.params;
+
+        if (!userId) return res.status(401).json({ error: 'Authentication required' });
+
+        await dbRun('DELETE FROM shared_conversations WHERE conversationId = ? AND userId = ?', [conversationId, userId]);
         res.json({ ok: true });
     });
 

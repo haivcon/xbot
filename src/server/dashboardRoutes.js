@@ -566,6 +566,23 @@ function createDashboardRoutes() {
         }
     });
 
+    // ── Public: Shared Conversation Viewer (NO AUTH) ──
+    router.get('/shared/:shareId', async (req, res) => {
+        try {
+            const { dbGet } = require('../../db/core');
+            const row = await dbGet('SELECT * FROM shared_conversations WHERE id = ?', [req.params.shareId]);
+            if (!row) return res.status(404).json({ error: 'Shared conversation not found or expired' });
+            res.json({
+                shareId: row.id,
+                title: row.title,
+                messages: JSON.parse(row.messages || '[]'),
+                sharedAt: row.createdAt,
+            });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to load shared conversation' });
+        }
+    });
+
     // ==================
     // PROTECTED ROUTES
     // ==================

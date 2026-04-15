@@ -228,17 +228,59 @@ const SUGGESTIONS = [
 ];
 
 /* ─── History item with MoreVertical dropdown (synced with ChatPage.ConvItem) ─── */
-function WidgetHistoryItem({ conv, active, onLoad, onDelete, t }) {
+function WidgetHistoryItem({ conv, active, onLoad, onDelete, onRename, onPin, onShare, t }) {
     const [showMenu, setShowMenu] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editTitle, setEditTitle] = useState(conv.title || '');
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (isEditing) {
+            inputRef.current?.focus();
+            inputRef.current?.select();
+        }
+    }, [isEditing]);
+
+    const submitRename = () => {
+        if (editTitle.trim() !== '' && editTitle !== conv.title) {
+            onRename?.(conv, editTitle.trim());
+        }
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') submitRename();
+        if (e.key === 'Escape') {
+            setIsEditing(false);
+            setEditTitle(conv.title || '');
+        }
+    };
+
     return (
         <div className={`relative rounded-xl border transition-all group
             ${active ? 'bg-brand-500/10 border-brand-500/20' : 'bg-surface-800/40 border-white/5 hover:bg-surface-800 hover:border-white/10'}`}>
-            <button onClick={() => onLoad(conv.id)} className="text-left w-full pl-3 pr-8 py-2.5">
+            <button onClick={() => !isEditing && onLoad(conv.id || conv.conversationId)} className="text-left w-full pl-3 pr-8 py-2.5">
                 <div className="flex items-center gap-2 mb-0.5">
-                    <MessageSquare size={12} className={active ? 'text-brand-400' : 'text-surface-200/40'} />
-                    <span className={`text-xs font-semibold truncate flex-1 ${active ? 'text-brand-400' : 'text-surface-100'}`}>
-                        {conv.title || t('dashboard.chatPage.newChat', 'New Chat')}
-                    </span>
+                    {conv.isPinned ? (
+                        <Pin size={12} className={active ? 'text-brand-400' : 'text-amber-400/80'} />
+                    ) : (
+                        <MessageSquare size={12} className={active ? 'text-brand-400' : 'text-surface-200/40'} />
+                    )}
+                    {isEditing ? (
+                        <input
+                            ref={inputRef}
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onBlur={submitRename}
+                            onKeyDown={handleKeyDown}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full bg-surface-900 border border-white/20 rounded px-1.5 py-0.5 text-xs text-brand-400 focus:outline-none focus:border-brand-500/50"
+                        />
+                    ) : (
+                        <span className={`text-xs font-semibold truncate flex-1 ${active ? 'text-brand-400' : 'text-surface-100'}`}>
+                            {conv.title || t('dashboard.chatPage.newChat', 'New Chat')}
+                        </span>
+                    )}
                 </div>
                 {conv.lastMessage && (
                     <div className="text-[10px] text-surface-200/50 truncate pl-5">{conv.lastMessage.substring(0, 60)}</div>
@@ -257,17 +299,17 @@ function WidgetHistoryItem({ conv, active, onLoad, onDelete, t }) {
                         <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
                         <div className="absolute top-8 right-0 w-40 bg-surface-800 border border-white/10 rounded-xl shadow-2xl z-50 py-1 overflow-hidden"
                              onClick={(e) => e.stopPropagation()}>
-                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                            <button onClick={(e) => { e.stopPropagation(); setShowMenu(false); onShare?.(conv); }} className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2">
                                 <Share2 size={12}/> {t('dashboard.chatPage.shareChat', 'Share')}
                             </button>
-                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
-                                <Pin size={12}/> {t('dashboard.chatPage.pinChat', 'Pin')}
+                            <button onClick={(e) => { e.stopPropagation(); setShowMenu(false); onPin?.(conv); }} className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2">
+                                <Pin size={12} className={conv.isPinned ? "opacity-50" : ""} /> {conv.isPinned ? t('dashboard.chatPage.unpinChat', 'Unpin') : t('dashboard.chatPage.pinChat', 'Pin')}
                             </button>
-                            <button className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2 disabled:opacity-30" disabled>
+                            <button onClick={(e) => { e.stopPropagation(); setShowMenu(false); setIsEditing(true); }} className="flex items-center w-full px-3 py-2 text-[11px] text-surface-200/50 hover:bg-white/5 gap-2">
                                 <Edit size={12}/> {t('dashboard.chatPage.renameChat', 'Rename')}
                             </button>
                             <div className="h-px bg-white/5 my-1" />
-                            <button onClick={(e) => { onDelete(conv.id, e); setShowMenu(false); }}
+                            <button onClick={(e) => { onDelete(conv.id || conv.conversationId, e); setShowMenu(false); }}
                                 className="flex items-center w-full px-3 py-2 text-[11px] text-red-400 hover:bg-red-500/10 gap-2">
                                 <Trash2 size={12}/> {t('dashboard.chatPage.deleteChat', 'Delete')}
                             </button>
@@ -428,17 +470,57 @@ export default function ChatWidget() {
 
     const loadOldChat = async (convId) => {
         setLoading(true);
-        setShowHistory(false);
         abortRef.current?.abort();
         
         try {
             const res = await api.getChatMessages(convId);
             setMessages(res.messages || []);
             setConversationId(convId);
+            setShowHistory(false);
         } catch (err) {
-            console.error(err);
+            console.error('loadOldChat error:', err);
+            setShowHistory(false);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleRename = async (conv, newTitle) => {
+        if (newTitle && newTitle.trim() !== '') {
+            try {
+                await api.renameConversation(conv.id || conv.conversationId, newTitle.trim());
+                if (showHistory) {
+                    const res = await api.getChatHistory();
+                    setHistoryConvs(res.conversations || []);
+                }
+            } catch (err) {
+                console.error('Failed to rename conversation:', err);
+            }
+        }
+    };
+
+    const handleShare = async (conv) => {
+        try {
+            const res = await api.shareConversation(conv.id || conv.conversationId);
+            const shareUrl = `${window.location.origin}/shared/${res.shareId}`;
+            if (navigator.clipboard) {
+                await navigator.clipboard.writeText(shareUrl);
+                alert(t('dashboard.chatPage.shareLinkCopied', 'Public share link copied to clipboard!'));
+            }
+        } catch (err) {
+            console.error('Failed to share:', err);
+        }
+    };
+
+    const handlePin = async (conv) => {
+        try {
+            await api.pinConversation(conv.id || conv.conversationId, !conv.isPinned);
+            if (showHistory) {
+                const res = await api.getChatHistory();
+                setHistoryConvs(res.conversations || []);
+            }
+        } catch (err) {
+            console.error('Failed to pin conversation:', err);
         }
     };
 
@@ -536,8 +618,10 @@ export default function ChatWidget() {
                                     <div className="text-center p-8 text-xs text-surface-200/40">{t('widget.noHistory', 'No chat history found.')}</div>
                                 ) : (
                                     historyConvs.map(conv => (
-                                        <WidgetHistoryItem key={conv.id} conv={conv} active={conv.id === conversationId}
-                                            onLoad={loadOldChat} onDelete={async (id, e) => { e?.stopPropagation(); try { await api.deleteConversation(id); setHistoryConvs(prev => prev.filter(c => c.id !== id)); if (id === conversationId) { setMessages([]); setConversationId(null); } } catch {} }} t={t} />)
+                                        <WidgetHistoryItem key={conv.id || conv.conversationId} conv={conv} active={(conv.id || conv.conversationId) === conversationId}
+                                            onLoad={loadOldChat} 
+                                            onRename={handleRename} onPin={handlePin} onShare={handleShare}
+                                            onDelete={async (id, e) => { e?.stopPropagation(); try { await api.clearChat(id); setHistoryConvs(prev => prev.filter(c => (c.id || c.conversationId) !== id)); if (id === conversationId) { setMessages([]); setConversationId(null); } } catch {} }} t={t} />)
                                     )
                                 )}
                             </div>
