@@ -96,7 +96,7 @@ async function discoverLeaders(chainIndex = XLAYER_CHAIN, options = {}) {
     try {
         // 1. Get Smart Money + Whale signals
         const signals = await onchainos.getSignalList(chainIndex, {
-            walletType: '1,3,4' // Smart Money, Whale, KOL
+            walletType: '1,2,3' // Smart Money, KOL, Whale
         });
 
         if (!Array.isArray(signals)) return leaders;
@@ -108,6 +108,14 @@ async function discoverLeaders(chainIndex = XLAYER_CHAIN, options = {}) {
             if (Array.isArray(addrs)) {
                 for (const addr of addrs.slice(0, 5)) {
                     if (addr && addr.startsWith('0x')) walletSet.add(addr.toLowerCase());
+                }
+            }
+            // Also check comma-separated triggerWalletAddress
+            const triggerStr = sig.triggerWalletAddress || '';
+            if (triggerStr) {
+                const parts = triggerStr.split(',');
+                for (const addr of parts) {
+                    if (addr && addr.trim().startsWith('0x')) walletSet.add(addr.trim().toLowerCase());
                 }
             }
             // Also check single address fields
@@ -132,24 +140,27 @@ async function discoverLeaders(chainIndex = XLAYER_CHAIN, options = {}) {
             const portfolio = Array.isArray(data) ? data[0] : data;
             if (!portfolio) continue;
 
-            const winRate = Number(portfolio.winRate || portfolio.profitableRate || 0);
-            const pnl = Number(portfolio.totalPnlUsd || portfolio.realizedPnl || 0);
-            const trades = Number(portfolio.totalTrades || portfolio.tradeCount || 0);
+            const winRateStr = portfolio.winRate || portfolio.profitableRate || portfolio.tokenWinRate || '0';
+            let winRateInfo = Number(winRateStr);
+            if (winRateInfo > 1 && winRateInfo <= 100) winRateInfo = winRateInfo / 100; // normalize to 0-1
+
+            const pnl = Number(portfolio.totalPnlUsd || portfolio.realizedPnlUsd || portfolio.realizedPnl || 0);
+            const trades = Number(portfolio.totalTrades || portfolio.tradeCount || (Number(portfolio.buyTxCount || 0) + Number(portfolio.sellTxCount || 0)));
 
             // Score: combination of win rate, PnL, and trade count
             const score = Math.round(
-                (winRate * 40) +                        // 40% weight on win rate
-                (Math.min(pnl / 1000, 30)) +           // 30% weight on PnL (capped)
-                (Math.min(trades / 10, 30))            // 30% weight on activity
+                (winRateInfo * 40) +                        // 40 max points from win rate
+                (Math.min(pnl / 1000, 30)) +                // 30 max points from PnL
+                (Math.min(trades / 10, 30))                 // 30 max points from activity
             );
 
             leaders.push({
                 address,
-                winRate: winRate * 100,
+                winRate: winRateInfo * 100, // store as percentage 0-100
                 totalPnlUsd: pnl,
                 totalTrades: trades,
                 aiScore: Math.min(100, Math.max(0, score)),
-                tag: winRate > 0.6 ? 'Smart Money' : pnl > 500 ? 'Whale' : 'Active Trader'
+                tag: winRateInfo > 0.6 ? 'Smart Money' : pnl > 500 ? 'Whale' : 'Active Trader'
             });
         }
 

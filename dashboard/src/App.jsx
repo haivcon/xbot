@@ -36,7 +36,6 @@ const MemeScannerPage = lazy(() => import('@/pages/user/MemeScannerPage'));
 const DiscoveryPage = lazy(() => import('@/pages/user/DiscoveryPage'));
 const AiTraderPage = lazy(() => import('@/pages/user/AiTraderPage'));
 const UserGroupsPage = lazy(() => import('@/pages/user/UserGroupsPage'));
-const TreasuryPage = lazy(() => import('@/pages/user/TreasuryPage'));
 const SmartCopyPage = lazy(() => import('@/pages/user/SmartCopyPage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
@@ -147,7 +146,6 @@ export default function App() {
                     <Route path="meme-scanner" element={<Navigate to="/trading" />} />
                     <Route path="discovery" element={<SuspenseWrapper><DiscoveryPage /></SuspenseWrapper>} />
                     <Route path="my-groups" element={<SuspenseWrapper><UserGroupsPage /></SuspenseWrapper>} />
-                    <Route path="treasury" element={<SuspenseWrapper><TreasuryPage /></SuspenseWrapper>} />
                     <Route path="smart-copy" element={<SuspenseWrapper><SmartCopyPage /></SuspenseWrapper>} />
                     <Route path="checkin-admin" element={isOwnerView() ? <SuspenseWrapper><CheckinAdminPage /></SuspenseWrapper> : <Navigate to="/" />} />
                     <Route path="audit-log" element={isOwnerView() ? <SuspenseWrapper><AuditLogPage /></SuspenseWrapper> : <Navigate to="/" />} />

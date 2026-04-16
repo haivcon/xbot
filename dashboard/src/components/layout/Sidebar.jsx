@@ -226,7 +226,6 @@ export default function Sidebar({ open, onClose }) {
             items: [
                 { to: '/chat', icon: Bot, label: t('dashboard.sidebar.aiChat') || 'AI Chat' },
                 { to: '/ai-trader', icon: TrendingUp, label: t('dashboard.sidebar.aiTrader') || 'AI Trader', badge: 'β' },
-                { to: '/treasury', icon: Building2, label: 'Treasury & Pet', badge: '★' },
                 { to: '/smart-copy', icon: Copy, label: 'Smart Copy', badge: '★' },
             ],
         },

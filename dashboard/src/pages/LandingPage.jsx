@@ -502,7 +502,6 @@ export default function LandingPage({ onLogin }) {
         { name: t('dashboard.sidebar.aiChat') || 'AI Chat', desc: t('dashboard.landing.pageAiChatDesc'), owner: false },
         { name: t('dashboard.sidebar.aiMemory') || 'AI Memory', desc: t('dashboard.landing.pageAiMemoryDesc'), owner: false },
         { name: t('dashboard.sidebar.aiTrader') || 'AI Trader', desc: t('dashboard.landing.pageAiTraderDesc'), owner: false },
-        { name: 'Treasury & Pet', desc: t('dashboard.landing.pageTreasuryDesc'), owner: false },
         { name: 'Smart Copy', desc: t('dashboard.landing.pageSmartCopyDesc'), owner: false },
         { name: t('dashboard.sidebar.mySpace') || 'My Space', desc: t('dashboard.landing.pageMySpaceDesc'), owner: false },
         { name: t('dashboard.sidebar.wallets') || 'Wallets', desc: t('dashboard.landing.pageWalletsDesc'), owner: false },

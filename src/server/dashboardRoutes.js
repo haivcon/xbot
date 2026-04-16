@@ -2027,6 +2027,7 @@ function createDashboardRoutes() {
                 await db.setUserLanguage?.(uid, lang, 'dashboard');
             } else {
                 await db.updateGroupBotSettings?.(chatId, { groupLanguage: lang });
+            }
             // Also update subscription language if exists
             try { await db.updateGroupSubscriptionLanguage?.(chatId, lang); } catch {}
             log.info(`Dashboard: User ${req.dashboardUser.userId} set group ${chatId} language to ${lang}`);
