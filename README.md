@@ -31,6 +31,11 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
+### 🚀 What's New in v1.2.8 (Modal Portal Architecture & Leaderboard i18n Fix)
+- **React Portal Modal Architecture**: Migrated all full-screen modal overlays (`GroupDetailModal`, `UserGroupDetailModal`, `BroadcastModal`) from inline rendering to `ReactDOM.createPortal(modal, document.body)`. This eliminates a critical CSS containing-block bug where `position: fixed` backdrops were visually clipped by parent elements with active CSS animations (`fadeIn`, `pageEnter`), leaving an uncovered white strip above the modal overlay covering the Header and Sidebar.
+- **CSS Animation Containing-Block Fix**: Stripped `transform` properties from `@keyframes fadeIn` and `@keyframes pageEnter` in `index.css`. Per CSS spec, any element with an active animation involving `transform` creates a new containing block, which causes `position: fixed` descendants to be positioned relative to that element instead of the viewport. Animations now use `opacity`-only transitions to avoid this browser behavior.
+- **Checkin Leaderboard i18n Completion**: Injected missing translation keys (`streak`, `monthly`, `allTime`) into the `checkinPage` block across all 6 language dictionaries (`en`, `vi`, `zh`, `ko`, `ru`, `id`). Previously, the leaderboard tabs rendered raw i18n key paths (e.g., `dashboard.checkinPage.streak`) instead of localized labels.
+
 ### 🚀 What's New in v1.2.7 (Group Admin Dashboard & Deep i18n Parity)
 - **Dynamic Scope Resolution (Topic/User)**: Re-architected the Group Language Tab to dynamically expose numeric input fields for `Topic ID` and `User ID`. The Web Dashboard now cleanly communicates with Telegram's strict thread mechanics by passing direct integer identifiers down to the backend `db.setTopicLanguage` and `db.setUserLanguage` engines.
 - **Deep Component i18n Auditing**: Methodically unhardcoded over 20 embedded English strings scattered across `WelcomeTab.jsx` (Difficulty sliders, Sync status), `ModerationTab.jsx` (Action confirmations, placeholders), and `CheckinTab.jsx` (Leaderboard modes). Every textual artifact is now routed safely through the `useTranslation` hook.

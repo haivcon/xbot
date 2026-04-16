@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -484,7 +485,7 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
         setModSavingLocks(false);
     };
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
             <div className="bg-surface-900 border border-white/10 shadow-2xl rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-fadeIn" onClick={e => e.stopPropagation()}>
                 {/* Header */}
@@ -677,7 +678,8 @@ function UserGroupDetailModal({ group, onClose, onRefresh }) {
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 

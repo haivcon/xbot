@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import api from '@/api/client';
@@ -152,7 +153,7 @@ function GroupDetailModal({ group, onClose, onDelete, onRefresh }) {
         { id: 'activity', icon: History, label: t('dashboard.groupDetail.activity') || 'Activity' },
     ];
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
             <div className="bg-surface-900 border border-white/10 shadow-2xl rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-fadeIn" onClick={e => e.stopPropagation()}>
                 {/* Header */}
@@ -403,7 +404,8 @@ function GroupDetailModal({ group, onClose, onDelete, onRefresh }) {
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
@@ -635,8 +637,7 @@ export default function GroupsPage() {
             )}
 
             {/* Broadcast Modal */}
-            {showBroadcast && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            {showBroadcast && createPortal(<div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="glass-card w-full max-w-lg p-6 space-y-4 animate-fadeIn">
                         <div className="flex items-center justify-between">
                             <h3 className="text-lg font-bold text-surface-100 flex items-center gap-2">
@@ -706,8 +707,7 @@ export default function GroupsPage() {
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
+                </div>, document.body)}
         </div>
     );
 }
