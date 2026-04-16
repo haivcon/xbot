@@ -31,6 +31,16 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
+### 🚀 What's New in v1.2.9 (Smart Copy-Trader Revamp & Treasury Deprecation)
+- **Treasury Feature Deprecation**: Successfully removed the experimental 'Treasury & Pet' feature from the entire ecosystem (UI routing, sidebars, internal APIs) to streamline the Web Dashboard experience.
+- **Smart Copy-Trader UI Overhaul**: Completely modernized the Smart Copy-Trader interface using scalable Tailwind CSS and beautiful glassmorphism gradients. Eliminated rigid inline styles, integrated dynamic budget bars, and upgraded the UI to feature an elegant top-traders leaderboard.
+- **Universal Localized i18n Integration**: Fully decoupled hardcoded strings from the Smart Copy-Trader module. Injected the deep `smartCopyPage` namespace across all 6 core language dictionaries (English, Vietnamese, Chinese, Korean, Russian, Indonesian), ensuring native translation parity for every interactive element.
+- **OnchainOS API Backend Alignment**: Refactored the core background `discoverLeaders` algorithm in `smartCopyEngine.js`. Aligned the parser to dynamically digest comma-separated address payloads (`triggerWalletAddress`) and accurately cross-reference decoupled API traits (`buyTxCount`, `sellTxCount`, `realizedPnlUsd`), fixing systemic leader scoring errors.
+- **Critical Process Stabilization**: Patched an unclosed syntax block inside `dashboardRoutes.js` that was inducing continuous backend PM2 crash loops, significantly boosting system uptime.
+
+<details>
+<summary>📜 Click to view previous Release Notes (v1.2.0 - v1.2.8)</summary>
+
 ### 🚀 What's New in v1.2.8 (Modal Portal Architecture & Leaderboard i18n Fix)
 - **React Portal Modal Architecture**: Migrated all full-screen modal overlays (`GroupDetailModal`, `UserGroupDetailModal`, `BroadcastModal`) from inline rendering to `ReactDOM.createPortal(modal, document.body)`. This eliminates a critical CSS containing-block bug where `position: fixed` backdrops were visually clipped by parent elements with active CSS animations (`fadeIn`, `pageEnter`), leaving an uncovered white strip above the modal overlay covering the Header and Sidebar.
 - **CSS Animation Containing-Block Fix**: Stripped `transform` properties from `@keyframes fadeIn` and `@keyframes pageEnter` in `index.css`. Per CSS spec, any element with an active animation involving `transform` creates a new containing block, which causes `position: fixed` descendants to be positioned relative to that element instead of the viewport. Animations now use `opacity`-only transitions to avoid this browser behavior.
@@ -84,6 +94,8 @@
 - **UX Form & Function Polish**: Dropped CSS rendering bugs (maskImage blur), replaced blocked creator handles (`@haivcon_X`), and implemented one-click token address copying for supreme user experience.
 
 ---
+
+</details>
 
 ### 🌟 Features at a Glance
 
