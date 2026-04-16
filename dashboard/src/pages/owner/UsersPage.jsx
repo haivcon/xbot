@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 /* ─── Send Message Modal ─── */
-function SendMessageModal({ open, onClose, targetUsers, allUsersCount, onSend }) {
+function SendMessageModal({ open, onClose, targetUsers, allUsers, onSend }) {
     const { t } = useTranslation();
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
@@ -27,20 +27,48 @@ function SendMessageModal({ open, onClose, targetUsers, allUsersCount, onSend })
     if (!open) return null;
 
     const isAll = !targetUsers || targetUsers.length === 0;
-    const targetCount = isAll ? allUsersCount : targetUsers.length;
+    const targetCount = isAll ? allUsers?.length || 0 : targetUsers.length;
 
     const handleSend = async () => {
         if (!text.trim() || sending) return;
         setSending(true);
         setResult(null);
-        try {
-            const res = await onSend(isAll ? [] : targetUsers, text.trim());
-            setResult({ type: 'success', sent: res.sent, failed: res.failed, total: res.total });
-        } catch (err) {
-            setResult({ type: 'error', message: err.message });
-        } finally {
-            setSending(false);
+
+        const ids = isAll ? allUsers.map(u => u.chatId || u.userId).filter(Boolean) : targetUsers;
+        
+        let sent = 0;
+        let failed = 0;
+        const logs = [];
+
+        setResult({ type: 'progress', current: 0, total: ids.length, logs });
+
+        for (let i = 0; i < ids.length; i++) {
+            const id = ids[i];
+            const user = allUsers?.find(u => u.chatId === id || u.userId === id);
+            const name = user?.firstName || user?.username || id;
+
+            try {
+                await onSend([id], text.trim());
+                sent++;
+                logs.unshift({ id, name, status: 'success' });
+            } catch (err) {
+                failed++;
+                logs.unshift({ id, name, status: 'error', error: err.message });
+            }
+
+            if (logs.length > 50) logs.pop();
+
+            setResult({
+                type: 'progress',
+                current: i + 1,
+                total: ids.length,
+                sent, failed,
+                logs: [...logs]
+            });
         }
+
+        setResult({ type: 'success', sent, failed, total: ids.length, logs });
+        setSending(false);
     };
 
     const insertTag = (tag) => {
@@ -118,7 +146,7 @@ function SendMessageModal({ open, onClose, targetUsers, allUsersCount, onSend })
                     {/* Character count */}
                     <div className="flex items-center justify-between">
                         <p className="text-[10px] text-surface-200/30">
-                            Supports: <code className="text-brand-400/50">&lt;b&gt;</code> <code className="text-brand-400/50">&lt;i&gt;</code> <code className="text-brand-400/50">&lt;u&gt;</code> <code className="text-brand-400/50">&lt;code&gt;</code> <code className="text-brand-400/50">&lt;a href&gt;</code>
+                            {t('dashboard.users.supportsHtml', 'Supports:')} <code className="text-brand-400/50">&lt;b&gt;</code> <code className="text-brand-400/50">&lt;i&gt;</code> <code className="text-brand-400/50">&lt;u&gt;</code> <code className="text-brand-400/50">&lt;code&gt;</code> <code className="text-brand-400/50">&lt;a href&gt;</code>
                         </p>
                         <span className={`text-[10px] ${text.length > 4000 ? 'text-red-400' : 'text-surface-200/30'}`}>
                             {text.length}/4096
@@ -129,7 +157,7 @@ function SendMessageModal({ open, onClose, targetUsers, allUsersCount, onSend })
                     {text.trim() && (
                         <div className="border border-white/5 rounded-xl p-3 bg-surface-800/30">
                             <p className="text-[10px] text-surface-200/30 mb-1.5 flex items-center gap-1">
-                                <Eye size={10} /> Preview
+                                <Eye size={10} /> {t('dashboard.users.preview', 'Preview')}
                             </p>
                             <div className="text-xs text-surface-200/70 leading-relaxed"
                                 dangerouslySetInnerHTML={{ __html: text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -145,14 +173,40 @@ function SendMessageModal({ open, onClose, targetUsers, allUsersCount, onSend })
 
                     {/* Result */}
                     {result && (
-                        <div className={`flex items-center gap-2 p-3 rounded-xl text-xs font-medium ${
-                            result.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                                'bg-red-500/10 text-red-400 border border-red-500/20'
+                        <div className={`mt-2 p-3 rounded-xl text-xs font-medium ${
+                            result.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20' :
+                            result.type === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                            'bg-brand-500/10 border border-brand-500/20'
                         }`}>
-                            {result.type === 'success'
-                                ? <><Check size={14} /> Sent {result.sent}/{result.total} {result.failed > 0 ? `(${result.failed} failed)` : ''}</>
-                                : <><AlertTriangle size={14} /> {result.message}</>
-                            }
+                            {result.type === 'error' ? (
+                                <div className="flex items-center gap-2"><AlertTriangle size={14} /> {result.message}</div>
+                            ) : (
+                                <div>
+                                    <div className="flex items-center mb-2 gap-2 text-surface-100 font-semibold">
+                                        {result.type === 'success' ? <Check size={14} className="text-emerald-400"/> : <Loader2 size={14} className="animate-spin text-brand-400"/>}
+                                        {result.type === 'success' 
+                                            ? t('dashboard.users.sendComplete', 'Finished sending to {{total}} users.', { total: result.total }) 
+                                            : t('dashboard.users.sendProgress', 'Sending: {{current}}/{{total}}...', { current: result.current, total: result.total })
+                                        }
+                                        <span className="ml-auto text-emerald-400">{t('dashboard.common.ok', 'OK')}: {result.sent || 0}</span>
+                                        <span className="text-red-400 text-[10px] ml-1">{t('dashboard.common.failed', 'Failed')}: {result.failed || 0}</span>
+                                    </div>
+                                    <div className="max-h-32 overflow-y-auto space-y-1 bg-black/20 rounded p-2 text-[10px] font-mono">
+                                        {result.logs?.map((log, idx) => (
+                                            <div key={idx} className="flex justify-between border-b border-white/5 pb-1">
+                                                <span className="text-surface-200 truncate pr-2 flex-1">{log.name}</span>
+                                                {log.status === 'success' ? (
+                                                    <span className="text-emerald-400">{t('dashboard.users.sendSuccess', 'Success')}</span>
+                                                ) : (
+                                                    <span className="text-red-400 truncate max-w-[120px]" title={log.error}>
+                                                        {t('dashboard.users.sendFailed', 'Failed')} ({log.error})
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -167,7 +221,7 @@ function SendMessageModal({ open, onClose, targetUsers, allUsersCount, onSend })
                         <button onClick={handleSend} disabled={!text.trim() || sending || text.length > 4096}
                             className="px-5 py-2 rounded-xl text-xs font-semibold bg-brand-500/20 text-brand-400 border border-brand-500/20
                                 hover:bg-brand-500/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5">
-                            {sending ? <><Loader2 size={12} className="animate-spin" /> Sending...</> : <><Send size={12} /> Send</>}
+                            {sending ? <><Loader2 size={12} className="animate-spin" /> {t('dashboard.common.sending', 'Sending...')}</> : <><Send size={12} /> {t('dashboard.common.send', 'Send')}</>}
                         </button>
                     )}
                 </div>
@@ -295,6 +349,123 @@ function AiLimitModal({ open, onClose, targetUsers, allUsersCount, onSetLimit })
     );
 }
 
+/* ─── Wallet Limit Modal ─── */
+function WalletLimitModal({ open, onClose, targetUsers, allUsersCount, onSetLimit }) {
+    const { t } = useTranslation();
+    const [limit, setLimit] = useState(50);
+    const [saving, setSaving] = useState(false);
+    const [result, setResult] = useState(null);
+
+    useEffect(() => {
+        if (open) { setLimit(50); setResult(null); }
+    }, [open]);
+
+    if (!open) return null;
+
+    const isAll = !targetUsers || targetUsers.length === 0;
+    const targetCount = isAll ? allUsersCount : targetUsers.length;
+
+    const limitOptions = [
+        { value: 50, label: '50' },
+        { value: 100, label: '100' },
+        { value: 200, label: '200' },
+        { value: 300, label: '300' },
+        { value: 500, label: '500' },
+        { value: 1000, label: '1000' },
+    ];
+
+    const handleSave = async () => {
+        setSaving(true);
+        setResult(null);
+        try {
+            const res = await onSetLimit(isAll ? [] : targetUsers, limit);
+            setResult({ type: 'success', updated: res.updated || targetCount });
+        } catch (err) {
+            setResult({ type: 'error', message: err.message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div className="relative w-full max-w-md bg-surface-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/50 animate-[fadeIn_0.2s_ease]"
+                onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                            <Wallet size={16} className="text-emerald-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-semibold text-surface-100">
+                                {t('dashboard.users.setWalletLimit', 'Set Wallet Limit')}
+                            </h3>
+                            <p className="text-[10px] text-surface-200/40">
+                                {isAll
+                                    ? t('dashboard.users.walletLimitAll', 'Apply to all {{count}} users', { count: targetCount })
+                                    : t('dashboard.users.walletLimitSelected', 'Apply to {{count}} selected users', { count: targetCount })}
+                            </p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-lg text-surface-200/40 hover:text-surface-200/70 hover:bg-white/5 transition-all">
+                        <X size={16} />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-5 space-y-3">
+                    <p className="text-xs text-surface-200/50">
+                        {t('dashboard.users.walletLimitDesc', 'Set the max number of wallets a user can create.')}
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                        {limitOptions.map(opt => (
+                            <button key={opt.value} onClick={() => setLimit(opt.value)}
+                                className={`p-2.5 rounded-xl border text-center transition-all ${
+                                    limit === opt.value
+                                        ? 'bg-brand-500/15 border-brand-500/30 ring-1 ring-brand-500/20'
+                                        : 'bg-surface-800/50 border-white/5 hover:border-white/10 hover:bg-surface-800'
+                                }`}>
+                                <span className={`text-sm font-bold block ${limit === opt.value ? 'text-brand-400' : 'text-surface-100'}`}>
+                                    {opt.label}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {result && (
+                        <div className={`flex items-center gap-2 p-3 rounded-xl text-xs font-medium ${
+                            result.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                'bg-red-500/10 text-red-400 border border-red-500/20'
+                        }`}>
+                            {result.type === 'success'
+                                ? <><Check size={14} /> Updated {result.updated} users</>
+                                : <><AlertTriangle size={14} /> {result.message}</>
+                            }
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/5">
+                    <button onClick={onClose}
+                        className="px-4 py-2 rounded-xl text-xs font-medium text-surface-200/50 hover:text-surface-200/70 hover:bg-white/5 transition-all">
+                        {result?.type === 'success' ? 'Close' : 'Cancel'}
+                    </button>
+                    {result?.type !== 'success' && (
+                        <button onClick={handleSave} disabled={saving}
+                            className="px-5 py-2 rounded-xl text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/20
+                                hover:bg-emerald-500/30 transition-all disabled:opacity-30 flex items-center gap-1.5">
+                            {saving ? <><Loader2 size={12} className="animate-spin" /> Saving...</> : <><Zap size={12} /> Apply</>}
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 /* ─── AI Limit Display Badge ─── */
 function AiLimitBadge({ limit }) {
     if (limit === undefined || limit === null || limit === 50) {
@@ -322,6 +493,7 @@ export default function UsersPage() {
     // Modal states
     const [showMessageModal, setShowMessageModal] = useState(false);
     const [showAiLimitModal, setShowAiLimitModal] = useState(false);
+    const [showWalletLimitModal, setShowWalletLimitModal] = useState(false);
     const [messageTargets, setMessageTargets] = useState(null); // null = all, [...ids] = selected
 
     const switchTab = (newTab) => {
@@ -409,6 +581,22 @@ export default function UsersPage() {
         const res = await api.setUserAiLimit(userIds, limit);
         fetchData(); // Refresh to show updated limits
         return res;
+    };
+
+    const handleSetWalletLimit = async (userIds, limit) => {
+        let targetIds = userIds;
+        if (!targetIds || targetIds.length === 0) {
+            targetIds = users.map(u => u.chatId || u.userId);
+        }
+        let updated = 0;
+        for (const id of targetIds) {
+            try {
+                await api.setUserWalletLimit(id, limit);
+                updated++;
+            } catch {}
+        }
+        fetchData(); // Refresh to show updated limits
+        return { updated };
     };
 
     const formatDate = (ts) => ts ? new Date(ts * 1000).toLocaleDateString() : '—';
@@ -683,6 +871,14 @@ export default function UsersPage() {
                             </button>
                         )}
 
+                        {/* Set Wallet Limit */}
+                        {tab !== 'banned' && (
+                            <button onClick={() => { setMessageTargets([...selected]); setShowWalletLimitModal(true); }}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-all flex items-center gap-1.5">
+                                <Wallet size={11} /> {t('dashboard.users.setWalletLimit', 'Wallet Limit')}
+                            </button>
+                        )}
+
                         {/* Ban / Unban */}
                         {tab === 'banned' ? (
                             <button onClick={handleBulkUnban} className="px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-all">
@@ -705,7 +901,7 @@ export default function UsersPage() {
                 open={showMessageModal}
                 onClose={() => setShowMessageModal(false)}
                 targetUsers={messageTargets}
-                allUsersCount={users.length}
+                allUsers={users}
                 onSend={handleSendMessage}
             />
             <AiLimitModal
@@ -714,6 +910,13 @@ export default function UsersPage() {
                 targetUsers={messageTargets}
                 allUsersCount={users.length}
                 onSetLimit={handleSetAiLimit}
+            />
+            <WalletLimitModal
+                open={showWalletLimitModal}
+                onClose={() => setShowWalletLimitModal(false)}
+                targetUsers={messageTargets}
+                allUsersCount={users.length}
+                onSetLimit={handleSetWalletLimit}
             />
         </div>
     );

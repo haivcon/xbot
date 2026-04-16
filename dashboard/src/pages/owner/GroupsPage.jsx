@@ -1,13 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import api from '@/api/client';
 import CustomSelect from '@/components/ui/CustomSelect';
+import CheckinTab from '@/components/groups/CheckinTab';
+import WelcomeTab from '@/components/groups/WelcomeTab';
+import ModerationTab from '@/components/groups/ModerationTab';
+import PriceAlertsTab from '@/components/groups/PriceAlertsTab';
+import LanguageTab from '@/components/groups/LanguageTab';
 import useToastStore from '@/stores/toastStore';
 import {
     MessageSquare, Search, Settings, RefreshCw, Users as UsersIcon, X, Send,
     Shield, Trash2, Download, ChevronRight, Loader2,
-    Bell, BellOff, FileText, Ban, Zap, Gamepad2, TrendingUp, Clock, Radio, History
+    Bell, BellOff, FileText, Ban, Zap, Gamepad2, TrendingUp, Clock, Radio, History,
+    CalendarCheck, UserCheck, Globe
 } from 'lucide-react';
 
 const LANG_FLAGS = { en: '🇺🇸', vi: '🇻🇳', zh: '🇨🇳', ko: '🇰🇷', ru: '🇷🇺', id: '🇮🇩' };
@@ -34,6 +40,7 @@ function GroupDetailModal({ group, onClose, onDelete, onRefresh }) {
     const [message, setMessage] = useState('');
     const [sendingMsg, setSendingMsg] = useState(false);
     const [msgSent, setMsgSent] = useState(false);
+    const textRef = useRef(null);
     const [rulesText, setRulesText] = useState('');
     const [blacklistInput, setBlacklistInput] = useState('');
     const [blacklist, setBlacklist] = useState([]);
@@ -96,6 +103,21 @@ function GroupDetailModal({ group, onClose, onDelete, onRefresh }) {
         setSendingMsg(false);
     };
 
+    const insertTag = (tag) => {
+        const ta = textRef.current;
+        if (!ta) return;
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const selected = message.substring(start, end);
+        const wrapped = `<${tag}>${selected}</${tag}>`;
+        setMessage(message.substring(0, start) + wrapped + message.substring(end));
+        setTimeout(() => {
+            ta.focus();
+            ta.selectionStart = start + tag.length + 2;
+            ta.selectionEnd = start + tag.length + 2 + selected.length;
+        }, 0);
+    };
+
     const addBlacklistWord = () => {
         const word = blacklistInput.trim().toLowerCase();
         if (word && !blacklist.includes(word)) {
@@ -116,18 +138,23 @@ function GroupDetailModal({ group, onClose, onDelete, onRefresh }) {
         } catch (e) { toast.error(e?.message || t('dashboard.common.toastError')); }
     };
 
-    const tabs = [
+        const tabs = [
         { id: 'settings', icon: Settings, label: t('dashboard.groupDetail.settings') || 'Settings' },
+        { id: 'checkin', icon: CalendarCheck, label: t('dashboard.userGroups.checkin') || 'Check-in' },
+        { id: 'welcome', icon: UserCheck, label: t('dashboard.userGroups.welcome') || 'Welcome' },
+        { id: 'language', icon: Globe, label: t('dashboard.groupDetail.language') || 'Language' },
         { id: 'rules', icon: FileText, label: t('dashboard.groupDetail.rules') || 'Rules' },
         { id: 'filters', icon: Ban, label: t('dashboard.groupDetail.filters') || 'Filters' },
         { id: 'subscription', icon: Bell, label: t('dashboard.groupDetail.subscription') || 'Subscription' },
+        { id: 'moderation', icon: Shield, label: t('dashboard.userGroups.moderation') || 'Moderation' },
+        { id: 'pricealerts', icon: TrendingUp, label: t('dashboard.userGroups.priceAlerts') || 'Price Alerts' },
         { id: 'message', icon: Send, label: t('dashboard.groupDetail.sendMessage') || 'Message' },
         { id: 'activity', icon: History, label: t('dashboard.groupDetail.activity') || 'Activity' },
     ];
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-            <div className="glass-card w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-fadeIn" onClick={e => e.stopPropagation()}>
+            <div className="bg-surface-900 border border-white/10 shadow-2xl rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-fadeIn" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="p-5 border-b border-white/5 flex items-center justify-between">
                     <div className="flex-1 min-w-0">
@@ -144,10 +171,10 @@ function GroupDetailModal({ group, onClose, onDelete, onRefresh }) {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-white/5 px-2 overflow-x-auto">
+                <div className="flex flex-wrap gap-y-1 border-b border-white/5 px-2">
                     {tabs.map(tb => (
                         <button key={tb.id} onClick={() => setTab(tb.id)}
-                            className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-all border-b-2 whitespace-nowrap ${tab === tb.id
+                            className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-all border-b-2 ${tab === tb.id
                                 ? 'border-brand-400 text-brand-400'
                                 : 'border-transparent text-surface-200/40 hover:text-surface-200'
                             }`}>
@@ -280,7 +307,26 @@ function GroupDetailModal({ group, onClose, onDelete, onRefresh }) {
                             {tab === 'message' && (
                                 <div className="space-y-3">
                                     <p className="text-xs text-surface-200/40">{t('dashboard.groupDetail.msgDesc') || 'Send a message to this group via the bot'}</p>
+                                    
+                                    {/* Formatting toolbar */}
+                                    <div className="flex gap-1">
+                                        {[
+                                            { tag: 'b', label: 'B', title: t('dashboard.groupDetail.fmtBold') || 'Bold' },
+                                            { tag: 'i', label: 'I', title: t('dashboard.groupDetail.fmtItalic') || 'Italic' },
+                                            { tag: 'u', label: 'U', title: t('dashboard.groupDetail.fmtUnderline') || 'Underline' },
+                                            { tag: 'code', label: '</>', title: t('dashboard.groupDetail.fmtCode') || 'Code' },
+                                            { tag: 'pre', label: 'P', title: t('dashboard.groupDetail.fmtPre') || 'Preformatted' },
+                                            { tag: 's', label: 'S̶', title: t('dashboard.groupDetail.fmtStrike') || 'Strikethrough' },
+                                        ].map(btn => (
+                                            <button key={btn.tag} onClick={() => insertTag(btn.tag)} title={btn.title}
+                                                className="px-2 py-1 rounded text-xs font-bold text-surface-200/50 hover:text-surface-100 hover:bg-white/5 border border-white/5 transition-all">
+                                                {btn.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
                                     <textarea
+                                        ref={textRef}
                                         value={message}
                                         onChange={e => setMessage(e.target.value)}
                                         placeholder={t('dashboard.groupDetail.msgPlaceholder') || 'Type your message (HTML supported)...'}
@@ -322,6 +368,21 @@ function GroupDetailModal({ group, onClose, onDelete, onRefresh }) {
                                     )}
                                 </div>
                             )}
+
+                            {/* Checkin Tab */}
+                            {tab === 'checkin' && <CheckinTab group={group} onRefresh={onRefresh} />}
+
+                            {/* Welcome Tab */}
+                            {tab === 'welcome' && <WelcomeTab group={group} onRefresh={onRefresh} />}
+
+                            {/* Language Tab */}
+                            {tab === 'language' && <LanguageTab group={group} onRefresh={onRefresh} />}
+
+                            {/* Moderation Tab */}
+                            {tab === 'moderation' && <ModerationTab group={group} detail={detail} />}
+
+                            {/* Price Alerts Tab */}
+                            {tab === 'pricealerts' && <PriceAlertsTab group={group} />}
                         </>
                     )}
                 </div>
@@ -410,6 +471,22 @@ export default function GroupsPage() {
     const [broadcastText, setBroadcastText] = useState('');
     const [broadcasting, setBroadcasting] = useState(false);
     const [broadcastResult, setBroadcastResult] = useState(null);
+    const broadcastTextRef = useRef(null);
+
+    const insertBroadcastTag = (tag) => {
+        const ta = broadcastTextRef.current;
+        if (!ta) return;
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const selected = broadcastText.substring(start, end);
+        const wrapped = `<${tag}>${selected}</${tag}>`;
+        setBroadcastText(broadcastText.substring(0, start) + wrapped + broadcastText.substring(end));
+        setTimeout(() => {
+            ta.focus();
+            ta.selectionStart = start + tag.length + 2;
+            ta.selectionEnd = start + tag.length + 2 + selected.length;
+        }, 0);
+    };
 
     const fetchGroups = useCallback(async () => {
         try {
@@ -573,7 +650,24 @@ export default function GroupsPage() {
                         <p className="text-xs text-surface-200/50">
                             {t('dashboard.groupDetail.broadcastDesc') || `Send a message to all ${groups.length} groups`}
                         </p>
+                        {/* Formatting toolbar */}
+                        <div className="flex gap-1">
+                            {[
+                                { tag: 'b', label: 'B', title: 'Bold' },
+                                { tag: 'i', label: 'I', title: 'Italic' },
+                                { tag: 'u', label: 'U', title: 'Underline' },
+                                { tag: 'code', label: '</>', title: 'Code' },
+                                { tag: 'pre', label: 'P', title: 'Preformatted' },
+                                { tag: 's', label: 'S̶', title: 'Strikethrough' },
+                            ].map(btn => (
+                                <button key={btn.tag} onClick={() => insertBroadcastTag(btn.tag)} title={btn.title}
+                                    className="px-2 py-1 rounded text-xs font-bold text-surface-200/50 hover:text-surface-100 hover:bg-white/5 border border-white/5 transition-all">
+                                    {btn.label}
+                                </button>
+                            ))}
+                        </div>
                         <textarea
+                            ref={broadcastTextRef}
                             value={broadcastText}
                             onChange={(e) => setBroadcastText(e.target.value)}
                             placeholder={t('dashboard.groupDetail.msgPlaceholder') || 'Type message (HTML supported)...'}

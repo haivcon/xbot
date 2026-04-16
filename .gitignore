@@ -47,3 +47,6 @@ cleanup_history.js
 
 # ─── PM2 ───
 ecosystem.config.js
+
+# ─── Scripts ───
+*.cjs

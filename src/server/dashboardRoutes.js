@@ -1713,6 +1713,12 @@ function createDashboardRoutes() {
             const chatId = decodeURIComponent(req.params.chatId);
             if (!chatId) return res.status(400).json({ error: 'chatId required' });
 
+            // Allow Owner to bypass completely
+            if (req.dashboardUser.role === 'owner') {
+                req.groupChatId = chatId;
+                return next();
+            }
+
             // Fast DB check first
             const inDb = await db.isGroupAdminInDb?.(chatId, userId);
             if (inDb) {
@@ -2008,11 +2014,19 @@ function createDashboardRoutes() {
     router.put('/user/groups/:chatId/language', userGroupGuard, async (req, res) => {
         try {
             const chatId = req.groupChatId;
-            const { lang } = req.body;
+            const { lang, scope, targetId } = req.body;
             if (!lang) return res.status(400).json({ error: 'lang required' });
             const validLangs = ['en', 'vi', 'zh', 'ko', 'ru', 'id'];
             if (!validLangs.includes(lang)) return res.status(400).json({ error: 'Invalid language code' });
-            await db.updateGroupBotSettings?.(chatId, { groupLanguage: lang });
+
+            if (scope === 'topic') {
+                if (!targetId) return res.status(400).json({ error: 'Topic ID required' });
+                await db.setTopicLanguage?.(chatId, targetId.toString(), lang);
+            } else if (scope === 'user') {
+                const uid = targetId || req.dashboardUser.userId;
+                await db.setUserLanguage?.(uid, lang, 'dashboard');
+            } else {
+                await db.updateGroupBotSettings?.(chatId, { groupLanguage: lang });
             // Also update subscription language if exists
             try { await db.updateGroupSubscriptionLanguage?.(chatId, lang); } catch {}
             log.info(`Dashboard: User ${req.dashboardUser.userId} set group ${chatId} language to ${lang}`);

@@ -31,6 +31,12 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
+### 🚀 What's New in v1.2.7 (Group Admin Dashboard & Deep i18n Parity)
+- **Dynamic Scope Resolution (Topic/User)**: Re-architected the Group Language Tab to dynamically expose numeric input fields for `Topic ID` and `User ID`. The Web Dashboard now cleanly communicates with Telegram's strict thread mechanics by passing direct integer identifiers down to the backend `db.setTopicLanguage` and `db.setUserLanguage` engines.
+- **Deep Component i18n Auditing**: Methodically unhardcoded over 20 embedded English strings scattered across `WelcomeTab.jsx` (Difficulty sliders, Sync status), `ModerationTab.jsx` (Action confirmations, placeholders), and `CheckinTab.jsx` (Leaderboard modes). Every textual artifact is now routed safely through the `useTranslation` hook.
+- **Universal 6-Language Parity Enforcement**: Eliminated a critical translation bleed-over where English keys forcibly overwrote the `groupDetail` taxonomy block across all localized files. Restored strict phonetic accuracy for Vietnamese, Chinese, Korean, Russian, and Indonesian translation matrices.
+- **UI/UX Modal Standardization**: Stripped out legacy sticky footers and enforced cohesive `rounded-2xl` glassmorphism styling across all internal Group Management pop-ups (`Welcome`, `Checkin`, `Moderation`, `Price Alerts`).
+
 ### 🚀 What's New in v1.2.6 (Mobile CSS Architecture Refactoring & Responsive UX)
 - **CSS Grid Architecture Overhaul**: Rectified a critical flex-layout anomaly causing excessive, uncontrolled vertical stretching on dynamic glass-cards across the web dashboard by enforcing strict `items-start` parameters across all grid containers. 
 - **Restricted Modifier Scoping**: Identified and neutralized a cascading CSS leakage where a ubiquitous `.fixed.inset-0` modal wrapper rule was inadvertently forcing a brutal `min-h-screen` parameter across the entire app footprint. The fix strictly confines the max-height override uniquely to standard backdrop-blurred overlays.
