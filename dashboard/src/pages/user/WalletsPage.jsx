@@ -42,7 +42,7 @@ function formatUsd(val) {
 }
 
 function shortAddr(addr) {
-    return addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : '—';
+    return addr || '—';
 }
 
 /* ── Set PIN Modal ── */
