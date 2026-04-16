@@ -50,3 +50,10 @@ ecosystem.config.js
 
 # ─── Scripts ───
 *.cjs
+
+# Temporary script files
+fix*.js
+test_*.js
+update_*.js
+insert_*.js
+cleanup_*.js
