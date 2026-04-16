@@ -909,6 +909,7 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
     const [isVisible, setIsVisible] = useState(false);
     const nameInputRef = useRef(null);
     const chainBtnRef = useRef(null);
+    const tagBtnRef = useRef(null);
     const cardRef = useRef(null);
     const hasLoadedRef = useRef(false);
 
@@ -1157,22 +1158,28 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
                         {hasPinCode && <Lock size={6} className="absolute -top-0.5 -right-0.5 text-amber-400" />}
                     </button>
                     <div className="relative">
-                        <button onClick={() => setShowTagMenu(!showTagMenu)} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-purple-400 transition-colors" title={t('dashboard.walletPage.tags', 'Tags')}>
+                        <button ref={tagBtnRef} onClick={() => setShowTagMenu(!showTagMenu)} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-purple-400 transition-colors" title={t('dashboard.walletPage.tags', 'Tags')}>
                             <Tag size={11} />
                         </button>
-                        {showTagMenu && (
+                        {showTagMenu && createPortal(
                             <>
-                                <div className="fixed inset-0 z-40" onClick={() => setShowTagMenu(false)} />
-                                <div className="absolute bottom-full left-0 mb-1 bg-surface-800 border border-white/10 rounded-xl shadow-2xl z-50 py-1 min-w-[120px]">
+                                <div className="fixed inset-0 z-[90]" onClick={() => setShowTagMenu(false)} />
+                                <div className="fixed z-[91] bg-surface-800 border border-white/10 rounded-xl shadow-2xl py-1 min-w-[120px]"
+                                    style={(() => {
+                                        const r = tagBtnRef.current?.getBoundingClientRect();
+                                        // Position above the button, anchored left
+                                        return r ? { bottom: window.innerHeight - r.top + 4, left: r.left } : {};
+                                    })()}>
                                     {PRESET_TAGS.map(tag => (
-                                        <button key={tag} onClick={() => handleToggleTag(tag)}
+                                        <button key={tag} onClick={() => { handleToggleTag(tag); setShowTagMenu(false); }}
                                             className={`w-full text-left px-3 py-1.5 text-[10px] hover:bg-white/5 transition-colors flex items-center gap-2 ${walletTags.includes(tag) ? 'text-brand-400' : 'text-surface-200/50'}`}>
                                             {walletTags.includes(tag) ? <Check size={9} /> : <span className="w-[9px]" />}
                                             {tag}
                                         </button>
                                     ))}
                                 </div>
-                            </>
+                            </>,
+                            document.body
                         )}
                     </div>
                     <button onClick={() => navigate('/trading')} className="p-1 rounded-lg hover:bg-white/5 text-surface-200/30 hover:text-emerald-400 transition-colors" title={t('dashboard.walletPage.quickTrade', 'Quick Trade')}>
