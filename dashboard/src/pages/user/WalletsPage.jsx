@@ -9,7 +9,7 @@ import {
     Wallet, Plus, Trash2, Star, RefreshCw, Eye, EyeOff, Copy, Check,
     ExternalLink, AlertTriangle, Loader2, ChevronDown, Shield, Download,
     Key, Pencil, Send, X, ArrowUpDown, Upload, FileText, CheckSquare, Square,
-    Lock, Tag, BarChart3, Search, LayoutGrid, List, GripVertical, Link
+    Lock, Tag, BarChart3, Search, LayoutGrid, List, GripVertical, Link, Globe
 } from 'lucide-react';
 
 const CHAIN_NAMES = { '1': 'Ethereum', '56': 'BSC', '196': 'X Layer', '137': 'Polygon', '42161': 'Arbitrum', '8453': 'Base', '501': 'Solana' };
@@ -892,7 +892,7 @@ function BulkExportModal({ walletIds, wallets, balances, onClose }) {
 }
 
 /* ── Wallet Card ── */
-function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTagsChange, selected, onToggleSelect, hasPinCode, onBalanceUpdate }) {
+function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTagsChange, selected, onToggleSelect, hasPinCode, onBalanceUpdate, globalChain }) {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const [balance, setBalance] = useState(null);
@@ -903,9 +903,15 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
     const [editName, setEditName] = useState(wallet.walletName || '');
     const [showExport, setShowExport] = useState(false);
     const [showTagMenu, setShowTagMenu] = useState(false);
-    const [selectedChain, setSelectedChain] = useState(wallet.chainIndex || '196');
+    const [selectedChain, setSelectedChain] = useState(globalChain || wallet.chainIndex || '196');
     const [showChainMenu, setShowChainMenu] = useState(false);
     const [settingDefault, setSettingDefault] = useState(false);
+
+    useEffect(() => {
+        if (globalChain) {
+            setSelectedChain(globalChain);
+        }
+    }, [globalChain]);
     const [isVisible, setIsVisible] = useState(false);
     const nameInputRef = useRef(null);
     const chainBtnRef = useRef(null);
@@ -1237,6 +1243,14 @@ export default function WalletsPage() {
     const [walletOrder, setWalletOrder] = useState(() => {
         try { return JSON.parse(localStorage.getItem('walletOrder') || '[]'); } catch { return []; }
     });
+    const [globalChain, setGlobalChain] = useState(() => localStorage.getItem('walletPageGlobalChain') || '');
+    const [showGlobalChainMenu, setShowGlobalChainMenu] = useState(false);
+
+    const handleGlobalChainSelect = (chainValue) => {
+        setGlobalChain(chainValue);
+        localStorage.setItem('walletPageGlobalChain', chainValue);
+        setShowGlobalChainMenu(false);
+    };
 
     const loadWallets = useCallback(async () => {
         setLoading(true);
@@ -1506,6 +1520,41 @@ export default function WalletsPage() {
                         {selectedIds.size === wallets.length ? t('dashboard.walletPage.deselectAll') : t('dashboard.walletPage.selectAll')}
                     </button>
 
+                    {/* Global Chain select */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowGlobalChainMenu(!showGlobalChainMenu)}
+                            className="btn-secondary text-[11px] flex items-center gap-1.5 px-2.5 py-1.5"
+                            title={t('dashboard.walletPage.globalChainDesc', 'Select chain for all wallets')}
+                        >
+                            <Globe size={11} />
+                            {globalChain ? (CHAIN_OPTIONS.find(c => c.value === globalChain)?.label || 'All Chains') : t('dashboard.walletPage.globalChain', 'Global Chain')}
+                        </button>
+                        {showGlobalChainMenu && (
+                            <>
+                                <div className="fixed inset-0 z-40" onClick={() => setShowGlobalChainMenu(false)} />
+                                <div className="absolute top-full left-0 mt-1 bg-surface-800 border border-white/10 rounded-xl shadow-2xl z-50 py-1 min-w-[140px]">
+                                    <button
+                                        onClick={() => handleGlobalChainSelect('')}
+                                        className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-white/5 transition-colors ${!globalChain ? 'text-brand-400' : 'text-surface-200/60'}`}
+                                    >
+                                        {t('dashboard.walletPage.individualChains', 'Individual Chains')}
+                                    </button>
+                                    <div className="h-px bg-white/5 my-1" />
+                                    {CHAIN_OPTIONS.map(c => (
+                                        <button
+                                            key={c.value}
+                                            onClick={() => handleGlobalChainSelect(c.value)}
+                                            className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-white/5 transition-colors ${globalChain === c.value ? 'text-brand-400' : 'text-surface-200/60'}`}
+                                        >
+                                            {c.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+
                     {/* Bulk export */}
                     {selectedIds.size > 0 && (
                         <button
@@ -1631,7 +1680,7 @@ export default function WalletsPage() {
                                 <span className="text-xs font-medium text-surface-100 truncate block">{w.walletName || 'Unnamed'}</span>
                             </div>
                             <span className="text-[10px] text-surface-200/40 font-mono hidden sm:block">{shortAddr(w.address)}</span>
-                            <span className="text-[10px] text-surface-200/30 hidden md:block">{CHAIN_NAMES[w.chainIndex] || 'Chain'}</span>
+                            <span className="text-[10px] text-surface-200/30 hidden md:block">{CHAIN_NAMES[globalChain || w.chainIndex] || 'Chain'}</span>
                             <span className="text-xs font-bold text-emerald-400 min-w-[60px] text-right">{formatUsd(balancesRef.current[w.id] || 0)}</span>
                             <div className="flex items-center gap-1 flex-shrink-0">
                                 <button onClick={() => handleSetDefault(w.id)} className={`p-1 rounded hover:bg-white/5 ${w.isDefault ? 'text-amber-400' : 'text-surface-200/20 hover:text-amber-400'}`}>
@@ -1663,6 +1712,7 @@ export default function WalletsPage() {
                             onToggleSelect={toggleSelect}
                             onBalanceUpdate={handleBalanceUpdate}
                             hasPinCode={hasPinCode}
+                            globalChain={globalChain}
                         />
                         </div>
                     ))}
