@@ -42,7 +42,7 @@ function formatUsd(val) {
 }
 
 function shortAddr(addr) {
-    return addr || '—';
+    return addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : '—';
 }
 
 /* ── Set PIN Modal ── */
@@ -540,7 +540,7 @@ function ImportWalletModal({ currentCount, limit, onClose, onImported }) {
                                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
                                     <p className="text-xs font-bold text-amber-400 mb-1">⚠️ {t('dashboard.walletPage.duplicates', 'Duplicates')} ({result.results.duplicates.length})</p>
                                     {result.results.duplicates.map((w, i) => (
-                                        <p key={i} className="text-[11px] text-surface-200/50 font-mono">{shortAddr(w.address)} — {t('dashboard.walletPage.alreadyExists', 'already exists')}</p>
+                                        <p key={i} className="text-[10px] text-surface-200/50 font-mono break-all">{w.address} — {t('dashboard.walletPage.alreadyExists', 'already exists')}</p>
                                     ))}
                                 </div>
                             )}
@@ -635,7 +635,7 @@ function ExportKeyModal({ walletId, walletAddress, onClose }) {
                             </p>
                         </div>
                         <p className="text-xs text-surface-200/50 mb-3">
-                            Wallet: <code className="text-brand-400">{shortAddr(walletAddress)}</code>
+                            Wallet: <code className="text-brand-400 text-[10px] break-all">{walletAddress}</code>
                         </p>
                         <input type="password" maxLength={6} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
                             onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
@@ -658,7 +658,7 @@ function ExportKeyModal({ walletId, walletAddress, onClose }) {
                             </p>
                         </div>
                         <p className="text-xs text-surface-200/50 mb-4">
-                            Wallet: <code className="text-brand-400">{shortAddr(walletAddress)}</code>
+                            Wallet: <code className="text-brand-400 text-[10px] break-all">{walletAddress}</code>
                         </p>
                         <div className="flex gap-3">
                             <button onClick={onClose} className="btn-secondary flex-1 text-sm">{t('dashboard.common.cancel')}</button>
@@ -904,6 +904,7 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
     const [showExport, setShowExport] = useState(false);
     const [showTagMenu, setShowTagMenu] = useState(false);
     const [newTagInput, setNewTagInput] = useState('');
+    const [showFullAddr, setShowFullAddr] = useState(false);
     const [selectedChain, setSelectedChain] = useState(globalChain || wallet.chainIndex || '196');
     const [showChainMenu, setShowChainMenu] = useState(false);
     const [settingDefault, setSettingDefault] = useState(false);
@@ -1069,11 +1070,17 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
                                     document.body
                                 )}
                             </div>
-                            <button onClick={loadBalance} className="text-surface-200/30 hover:text-brand-400 transition-colors" title={t('dashboard.walletPage.refresh')}>
+                            <button onClick={loadBalance} className="text-surface-200/30 hover:text-brand-400 transition-colors flex-shrink-0" title={t('dashboard.walletPage.refresh')}>
                                 <RefreshCw size={9} className={loading ? 'animate-spin' : ''} />
                             </button>
-                            <code className="text-[10px] text-surface-200/40">{shortAddr(wallet.address)}</code>
-                            <button onClick={copyAddr} className="text-surface-200/30 hover:text-brand-400 transition-colors">
+                            <code 
+                                onClick={(e) => { e.stopPropagation(); setShowFullAddr(!showFullAddr); }}
+                                className={`text-[9px] text-surface-200/40 cursor-pointer hover:text-brand-400 transition-colors ${showFullAddr ? 'break-all' : ''}`}
+                                title={showFullAddr ? t('dashboard.walletPage.hide', 'Hide') : t('dashboard.walletPage.show', 'Show full address')}
+                            >
+                                {showFullAddr ? wallet.address : shortAddr(wallet.address)}
+                            </code>
+                            <button onClick={copyAddr} className="text-surface-200/30 hover:text-brand-400 transition-colors flex-shrink-0">
                                 {copied ? <Check size={9} className="text-emerald-400" /> : <Copy size={9} />}
                             </button>
                             <a href={`${explorer}/address/${wallet.address}`} target="_blank" rel="noopener" className="text-surface-200/30 hover:text-brand-400 transition-colors">
@@ -1719,7 +1726,7 @@ export default function WalletsPage() {
                             <div className="flex-1 min-w-0">
                                 <span className="text-xs font-medium text-surface-100 truncate block">{w.walletName || 'Unnamed'}</span>
                             </div>
-                            <span className="text-[10px] text-surface-200/40 font-mono hidden sm:block">{shortAddr(w.address)}</span>
+                            <span className="text-[9px] text-surface-200/40 font-mono hidden sm:block">{shortAddr(w.address)}</span>
                             <span className="text-[10px] text-surface-200/30 hidden md:block">{CHAIN_NAMES[globalChain || w.chainIndex] || 'Chain'}</span>
                             <span className="text-xs font-bold text-emerald-400 min-w-[60px] text-right">{formatUsd(balancesRef.current[w.id] || 0)}</span>
                             <div className="flex items-center gap-1 flex-shrink-0">
