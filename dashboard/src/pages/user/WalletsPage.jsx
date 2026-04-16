@@ -892,7 +892,7 @@ function BulkExportModal({ walletIds, wallets, balances, onClose }) {
 }
 
 /* ── Wallet Card ── */
-function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTagsChange, selected, onToggleSelect, hasPinCode, onBalanceUpdate, globalChain }) {
+function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTagsChange, selected, onToggleSelect, hasPinCode, onBalanceUpdate, globalChain, availableTags }) {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const [balance, setBalance] = useState(null);
@@ -903,6 +903,7 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
     const [editName, setEditName] = useState(wallet.walletName || '');
     const [showExport, setShowExport] = useState(false);
     const [showTagMenu, setShowTagMenu] = useState(false);
+    const [newTagInput, setNewTagInput] = useState('');
     const [selectedChain, setSelectedChain] = useState(globalChain || wallet.chainIndex || '196');
     const [showChainMenu, setShowChainMenu] = useState(false);
     const [settingDefault, setSettingDefault] = useState(false);
@@ -1176,13 +1177,41 @@ function WalletCard({ wallet, onRefresh, onSetDefault, onDelete, onRename, onTag
                                         // Position above the button, anchored left
                                         return r ? { bottom: window.innerHeight - r.top + 4, left: r.left } : {};
                                     })()}>
-                                    {PRESET_TAGS.map(tag => (
-                                        <button key={tag} onClick={() => { handleToggleTag(tag); setShowTagMenu(false); }}
-                                            className={`w-full text-left px-3 py-1.5 text-[10px] hover:bg-white/5 transition-colors flex items-center gap-2 ${walletTags.includes(tag) ? 'text-brand-400' : 'text-surface-200/50'}`}>
-                                            {walletTags.includes(tag) ? <Check size={9} /> : <span className="w-[9px]" />}
-                                            {tag}
-                                        </button>
-                                    ))}
+                                    <div className="px-2 py-1.5 border-b border-white/10 mb-1">
+                                        <input
+                                            type="text"
+                                            value={newTagInput}
+                                            onChange={e => setNewTagInput(e.target.value)}
+                                            placeholder={t('dashboard.common.searchPlaceholder', 'Search or create...')}
+                                            className="w-full bg-surface-700/50 border border-white/10 rounded px-2 py-1.5 text-[10px] text-surface-100 placeholder-surface-200/50 focus:outline-none focus:border-brand-500/50 transition-colors"
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter' && newTagInput.trim()) {
+                                                    handleToggleTag(newTagInput.trim());
+                                                    setNewTagInput('');
+                                                    setShowTagMenu(false);
+                                                }
+                                            }}
+                                            onClick={e => e.stopPropagation()}
+                                        />
+                                    </div>
+                                    <div className="max-h-[160px] overflow-y-auto custom-scrollbar">
+                                        {availableTags.filter(t => t.toLowerCase().includes(newTagInput.toLowerCase())).map(tag => (
+                                            <button key={tag} onClick={() => { handleToggleTag(tag); setShowTagMenu(false); setNewTagInput(''); }}
+                                                className={`w-full text-left px-3 py-1.5 text-[10px] hover:bg-white/5 transition-colors flex items-center gap-2 ${walletTags.includes(tag) ? 'text-brand-400' : 'text-surface-200/50'}`}>
+                                                {walletTags.includes(tag) ? <Check size={9} /> : <span className="w-[9px]" />}
+                                                {tag}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {newTagInput.trim() && !availableTags.some(t => t.toLowerCase() === newTagInput.trim().toLowerCase()) && (
+                                        <div className="px-2 pt-1 border-t border-white/10 mt-1">
+                                            <button onClick={() => { handleToggleTag(newTagInput.trim()); setShowTagMenu(false); setNewTagInput(''); }}
+                                                className="w-full text-left px-2 py-1.5 text-[10px] bg-brand-500/10 hover:bg-brand-500/20 rounded text-brand-400 font-medium flex items-center gap-1.5 transition-colors">
+                                                <Plus size={10} />
+                                                "{newTagInput.trim()}"
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </>,
                             document.body
@@ -1288,6 +1317,17 @@ export default function WalletsPage() {
 
     useEffect(() => {
         if (wallets.length === 0) { setTotalPortfolio(0); balancesRef.current = {}; snapshotSavedRef.current = false; }
+    }, [wallets]);
+
+    const availableTags = useMemo(() => {
+        const custom = new Set();
+        wallets.forEach(w => {
+            try {
+                const tags = JSON.parse(w.tags || '[]');
+                tags.forEach(t => { if (!PRESET_TAGS.includes(t)) custom.add(t); });
+            } catch {}
+        });
+        return [...PRESET_TAGS, ...Array.from(custom)];
     }, [wallets]);
 
     // Sorted + filtered wallets
@@ -1568,7 +1608,7 @@ export default function WalletsPage() {
                     {/* Tag filter */}
                     <div className="flex items-center gap-1 ml-auto">
                         <Tag size={10} className="text-surface-200/25" />
-                        {PRESET_TAGS.map(tag => (
+                        {availableTags.map(tag => (
                             <button key={tag} onClick={() => setFilterTag(filterTag === tag ? '' : tag)}
                                 className={`text-[9px] px-1.5 py-0.5 rounded-full border transition-colors ${filterTag === tag ? (TAG_COLORS[tag] || 'bg-brand-500/15 text-brand-400 border-brand-500/20') : 'bg-surface-700/20 text-surface-200/30 border-white/5 hover:border-white/10'}`}>
                                 {tag}
@@ -1713,6 +1753,7 @@ export default function WalletsPage() {
                             onBalanceUpdate={handleBalanceUpdate}
                             hasPinCode={hasPinCode}
                             globalChain={globalChain}
+                            availableTags={availableTags}
                         />
                         </div>
                     ))}
