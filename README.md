@@ -31,11 +31,11 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
-### 🚀 What's New in v1.3.0 (Interactive Mini-Games Suite & Deep Localization)
-- **Stateful Mini-Games Ecosystem**: Transformed the static Mini-Games Dashboard into a fully functional, stateful gaming suite. Implemented native playable logic for complex games including Gomoku AI, Sudoku generators, and recursive Minesweeper engines.
-- **Native AI Chess Engine**: Rewrote the Chess module with complete 8x8 rulesets, valid move validation for all pieces (Pawn, Knight, Bishop, Rook, Queen, King), and an interactive heuristic bot AI opponent.
-- **Deep Fortune i18n Localization**: Synchronized backend fortune-telling dictionaries (`randomFortunes.js`) with the unified React Frontend. Decoupled rigid English strings and enabled real-time translated fortunes mapping to all 6 core languages.
-- **Strict UI Resiliency**: Re-architected interactive game hooks with strict `useCallback` and dependency array tracking to eliminate stale closure bugs, ensuring highly responsive and clean local game states across multiple sessions without browser lag.
+### 🚀 What's New in v1.3.1 (Batch Swap UX Overhaul & Localization Fidelity)
+- **Comprehensive Batch Swap "Get Quote" Flow**: Completely overhauled the batch swap capability by embedding a robust Pre-Swap Quote mechanism. Users can now preview detailed DEX routes, estimated output, price impact, and gas fees across multiple wallets before executing, moving away from blind batch execution.
+- **Intelligent Wallet Selection UI**: Re-engineered the trading wallet selector to dynamically assess token balances. It now provides instant visual feedback, displaying live balances or rendering hard warnings (`0 Bal`, `Insufficient Funds`) if the designated swap amounts exceed a single wallet's liquidity.
+- **Granular Custom Amount Control**: Refined the "Custom Each" and "Same for all" input capabilities, enabling complex batch routing where each selected wallet can swap distinctly tailored amounts of tokens in one unified transaction block.
+- **100% Trading UI Localization**: Completed a full rigorous localization pass over the trading dashboard interface. Extrapolated dozens of hardcoded strings into the i18n dictionary, ensuring all multi-wallet transaction notifications, tables, and warnings gracefully resolve to English, Vietnamese (vi), Chinese (zh), Korean (ko), Russian (ru), and Indonesian (id).
 
 
 ### 🌟 Features at a Glance

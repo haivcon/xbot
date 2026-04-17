@@ -689,6 +689,10 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
     const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
     const [batchShowConfirm, setBatchShowConfirm] = useState(false);
     const [batchWalletBalances, setBatchWalletBalances] = useState({}); // {walletId: {balance, logoUrl}}
+    // Batch quote state
+    const [batchQuote, setBatchQuote] = useState(null);
+    const [batchQuoteLoading, setBatchQuoteLoading] = useState(false);
+    const [batchQuoteError, setBatchQuoteError] = useState(null);
     // U1: Wallet balance for selected token
     const [walletBalance, setWalletBalance] = useState(null);
     const [balanceLoading, setBalanceLoading] = useState(false);
@@ -735,6 +739,30 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
         if (showToast) showToast(ok > 0 && fail === 0 ? 'success' : ok > 0 ? 'warning' : 'error',
             `Batch Swap: ${ok}/${results.length} ${t('dashboard.tradingUx.success', 'success')}${fail > 0 ? `, ${fail} ${t('dashboard.tradingUx.failed', 'failed')}` : ''}`);
     };
+
+    // Get quote for batch swap (uses the batch amount for a single representative quote)
+    const getBatchQuote = useCallback(async () => {
+        const amt = batchAmount;
+        if (!amt || Number(amt) <= 0) return;
+        const from = tokens[fromSymbol];
+        const to = tokens[toSymbol];
+        if (!from || !to) { setBatchQuoteError('Unknown token'); return; }
+        if (fromSymbol === toSymbol) { setBatchQuoteError('Same token'); return; }
+        setBatchQuoteLoading(true);
+        setBatchQuoteError(null);
+        setBatchQuote(null);
+        try {
+            const res = await api.getSwapQuote({ chainIndex, fromTokenAddress: from.addr, toTokenAddress: to.addr, amount: amt, slippage });
+            const raw = res.data || res;
+            const arr = Array.isArray(raw) ? raw : (Array.isArray(raw.data) ? raw.data : [raw]);
+            const q = arr[0] || raw;
+            setBatchQuote(q);
+        } catch (err) { setBatchQuoteError(err.message || 'Quote failed'); }
+        setBatchQuoteLoading(false);
+    }, [batchAmount, fromSymbol, toSymbol, chainIndex, slippage, tokens]);
+
+    // Clear batch quote when tokens or amount changes
+    useEffect(() => { setBatchQuote(null); setBatchQuoteError(null); }, [fromSymbol, toSymbol, batchAmount, slippage]);
 
     // Fetch balance for each selected wallet (for batch display)
     useEffect(() => {
@@ -1392,21 +1420,104 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                                 <input type="checkbox" checked={!!batchSelectedWallets[w.id]} onChange={() => setBatchSelectedWallets(p => ({ ...p, [w.id]: !p[w.id] }))} className="w-3 h-3 rounded accent-orange-500" />
                                 <Wallet size={10} className={batchSelectedWallets[w.id] ? 'text-orange-400' : 'text-surface-200/20'} />
                                 <span className="flex-1 truncate">{w.name || `Wallet ${w.id}`}</span>
-                                {/* Per-wallet balance */}
-                                {batchSelectedWallets[w.id] && wb && (
-                                    <span className="text-[8px] font-mono text-surface-200/30">{parseFloat(Number(wb.balance).toFixed(4))} {fromSymbol}</span>
+                                {/* Per-wallet balance overview */}
+                                {wb !== undefined && (
+                                    <span className={`text-[8px] font-mono ${Number(wb?.balance || 0) > 0 ? 'text-surface-200/30' : 'text-red-400/60 font-medium'}`}>
+                                        {Number(wb?.balance || 0) > 0 ? `${parseFloat(Number(wb.balance).toFixed(4))} ${fromSymbol}` : t('dashboard.tradingUx.noTokenBalance', '0 Bal ⚠️')}
+                                    </span>
                                 )}
                                 <span className="text-[9px] font-mono text-surface-200/20">{w.address?.slice(0, 6)}...{w.address?.slice(-4)}</span>
                                 {!batchSameAmount && batchSelectedWallets[w.id] && (
+                                    <div className="relative">
                                     <input type="number" value={batchAmounts[w.id] || ''} onChange={e => setBatchAmounts(p => ({ ...p, [w.id]: e.target.value }))}
                                         placeholder={batchAmount} onClick={e => e.stopPropagation()}
-                                        className="w-16 bg-surface-800/80 border border-white/[0.08] rounded px-1 py-0.5 text-[10px] text-surface-100 text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        className={`w-16 bg-surface-800/80 border rounded px-1 py-0.5 text-[10px] text-surface-100 text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${Number(batchAmounts[w.id] || batchAmount || 0) > Number(wb?.balance || 0) ? 'border-red-500/40 bg-red-500/10' : 'border-white/[0.08]'}`} />
+                                    {Number(batchAmounts[w.id] || batchAmount || 0) > Number(wb?.balance || 0) && (
+                                        <div className="absolute -top-[14px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[7px] text-red-400 bg-red-500/10 px-1 rounded border border-red-500/20">{t('dashboard.tradingUx.insufficientFunds', 'Insufficient')}</div>
+                                    )}
+                                    </div>
                                 )}
                             </label>
                             );
                         })}
                     </div>
                 </div>
+
+                {/* ═══ Get Quote Button ═══ */}
+                <button onClick={getBatchQuote} disabled={batchQuoteLoading || batchSelectedCount === 0 || !batchAmount}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-brand-500 to-purple-500 text-white text-sm font-bold shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 hover:scale-[1.02] active:scale-95 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed">
+                    {batchQuoteLoading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                    {t('dashboard.tradingUx.getQuote', 'Get Quote')} — {batchSelectedCount} {t('dashboard.tradingUx.wallets', 'wallets')}
+                </button>
+
+                {batchQuoteError && <p className="text-xs text-red-400 text-center bg-red-500/10 rounded-lg py-2 border border-red-500/20">{batchQuoteError}</p>}
+
+                {/* ═══ Quote Result Display ═══ */}
+                {(() => {
+                    if (!batchQuote) return null;
+                    const bqRouter = batchQuote?.routerResult || batchQuote;
+                    const bqToAmount = Number(bqRouter?.toTokenAmount || 0) / Math.pow(10, Number(bqRouter?.toToken?.decimal || 18));
+                    const bqPriceImpact = bqRouter?.priceImpactPercentage || bqRouter?.priceImpactPercent;
+                    const bqGas = bqRouter?.estimateGasFee || batchQuote?.estimateGasFee;
+                    const bqDexRoutes = bqRouter?.quoteCompareList || batchQuote?.quoteCompareList || bqRouter?.dexRouterList || [];
+                    const totalEstOutput = batchSameAmount ? bqToAmount * batchSelectedCount : bqToAmount;
+                    if (bqToAmount <= 0) return null;
+                    return (
+                        <div className="bg-surface-900/60 rounded-xl p-4 border border-white/[0.06] space-y-2.5 animate-fadeIn">
+                            <div className="flex justify-between text-xs">
+                                <span className="text-surface-200/40 font-medium">{t('dashboard.tradingUx.youGet', 'You Get')} / {t('dashboard.tradingUx.wallet', 'wallet')}</span>
+                                <span className="text-surface-100 font-bold text-sm"><CountUp value={bqToAmount} decimals={6} /> {bqRouter?.toTokenSymbol || bqRouter?.toToken?.tokenSymbol || toSymbol}</span>
+                            </div>
+                            {batchSameAmount && batchSelectedCount > 1 && (
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-surface-200/40 font-medium">🔢 {t('dashboard.tradingUx.totalEstOutput', 'Total est. output')} (×{batchSelectedCount})</span>
+                                    <span className="text-emerald-400 font-bold text-sm"><CountUp value={totalEstOutput} decimals={6} /> {bqRouter?.toTokenSymbol || bqRouter?.toToken?.tokenSymbol || toSymbol}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between text-xs">
+                                <span className="text-surface-200/40 font-medium">{t('dashboard.tradingUx.rate', 'Rate')}</span>
+                                <span className="text-surface-200/50">1 {fromSymbol} ≈ {(bqToAmount / Number(batchAmount || 1)).toFixed(6)} {bqRouter?.toTokenSymbol || toSymbol}</span>
+                            </div>
+                            {bqPriceImpact && (
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-surface-200/40 font-medium">{t('dashboard.tradingUx.priceImpact', 'Price Impact')}</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className={`font-semibold ${Number(bqPriceImpact) <= 1 ? 'text-emerald-400' : Number(bqPriceImpact) <= 3 ? 'text-amber-400' : 'text-red-400'}`}>{Number(bqPriceImpact).toFixed(2)}%</span>
+                                        <span className={`text-[8px] ${Number(bqPriceImpact) <= 1 ? 'text-emerald-400/50' : Number(bqPriceImpact) <= 3 ? 'text-amber-400/50' : 'text-red-400/50'}`}>
+                                            {Number(bqPriceImpact) <= 1 ? t('dashboard.tradingUx.priceImpactLow', 'Low') : Number(bqPriceImpact) <= 3 ? t('dashboard.tradingUx.priceImpactMed', 'Moderate') : t('dashboard.tradingUx.priceImpactHigh', 'High!')}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                            {bqGas && (
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-surface-200/40 font-medium">{t('dashboard.tradingUx.estGas', 'Est. Gas')}</span>
+                                    <span className="text-surface-200/50">{Number(bqGas) > 1e6 ? `${(Number(bqGas) * 1e-9).toFixed(4)} Gwei` : bqGas}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between text-xs">
+                                <span className="text-surface-200/40 font-medium">{t('dashboard.tradingUx.slippage', 'Slippage')}</span>
+                                <span className="text-surface-200/50">{slippage}%</span>
+                            </div>
+                            {bqDexRoutes.length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-white/[0.04]">
+                                    <p className="text-[9px] text-surface-200/25 uppercase tracking-widest mb-1.5 font-semibold">{t('dashboard.tradingUx.dexRoutes', 'DEX Routes')}</p>
+                                    {bqDexRoutes.slice(0, 4).map((r, i) => {
+                                        const receiveAmt = Number(r.receiveAmount || 0) / Math.pow(10, Number(bqRouter?.toToken?.decimal || 18));
+                                        return (
+                                            <div key={i} className="flex justify-between text-[10px] py-0.5">
+                                                <span className={`font-medium ${i === 0 ? 'text-emerald-400' : 'text-surface-200/40'}`}>
+                                                    {i === 0 && '★ '}{r.dexName}
+                                                </span>
+                                                <span className="text-surface-200/50">{receiveAmt.toLocaleString('en-US', { maximumFractionDigits: 6 })}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {/* Confirmation dialog (P3) */}
                 {batchShowConfirm ? (
@@ -1428,7 +1539,7 @@ function SwapQuoteWidget({ chainIndex, onTokenSelect, wallets = [], selectedWall
                         </div>
                     </div>
                 ) : (
-                    <button onClick={() => setBatchShowConfirm(true)} disabled={batchExecuting || batchSelectedCount === 0 || !batchAmount}
+                    <button onClick={() => setBatchShowConfirm(true)} disabled={batchExecuting || batchSelectedCount === 0 || !batchAmount || !batchQuote}
                         className="w-full py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-lg hover:shadow-orange-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5">
                         <Zap size={12} /> {t('dashboard.tradingUx.batchSwap', 'Batch Swap')} ({batchSelectedCount} {t('dashboard.tradingUx.wallets', 'wallets')})
                     </button>

@@ -13,7 +13,7 @@ const config = {
     appDescription: import.meta.env.VITE_APP_DESCRIPTION || 'Manage your bot with a powerful web interface',
     appVersion: import.meta.env.VITE_APP_VERSION || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'),
     buildTime: typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : null,
-    footerText: import.meta.env.VITE_FOOTER_TEXT || 'Powered by Telegram',
+    footerText: import.meta.env.VITE_FOOTER_TEXT || 'Powered by Telegram + OKX Web 3',
 
     // ─── Developer ───
     devName: 'ＤＯＲＥＭＯＮ',

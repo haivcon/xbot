@@ -1455,7 +1455,7 @@ export default function WalletsPage() {
                         {t('dashboard.sidebar.wallets') || 'Wallets'}
                     </h1>
                     <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                        <p className="text-xs text-surface-200/40">{wallets.length}/{walletLimit} ví</p>
+                        <p className="text-xs text-surface-200/40">{wallets.length}/{walletLimit} {t('dashboard.tradingUx.wallets', 'wallets')}</p>
                         {totalPortfolio !== null && totalPortfolio > 0 && (
                             <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
                                 Total: {formatUsd(totalPortfolio)}
