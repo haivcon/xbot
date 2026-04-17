@@ -31,71 +31,12 @@
 - [Roadmap](#️-project-roadmap)
 - [Contributing](#-contributing)
 
-### 🚀 What's New in v1.2.9 (Smart Copy-Trader Revamp & Treasury Deprecation)
-- **Treasury Feature Deprecation**: Successfully removed the experimental 'Treasury & Pet' feature from the entire ecosystem (UI routing, sidebars, internal APIs) to streamline the Web Dashboard experience.
-- **Smart Copy-Trader UI Overhaul**: Completely modernized the Smart Copy-Trader interface using scalable Tailwind CSS and beautiful glassmorphism gradients. Eliminated rigid inline styles, integrated dynamic budget bars, and upgraded the UI to feature an elegant top-traders leaderboard.
-- **Universal Localized i18n Integration**: Fully decoupled hardcoded strings from the Smart Copy-Trader module. Injected the deep `smartCopyPage` namespace across all 6 core language dictionaries (English, Vietnamese, Chinese, Korean, Russian, Indonesian), ensuring native translation parity for every interactive element.
-- **OnchainOS API Backend Alignment**: Refactored the core background `discoverLeaders` algorithm in `smartCopyEngine.js`. Aligned the parser to dynamically digest comma-separated address payloads (`triggerWalletAddress`) and accurately cross-reference decoupled API traits (`buyTxCount`, `sellTxCount`, `realizedPnlUsd`), fixing systemic leader scoring errors.
-- **Critical Process Stabilization**: Patched an unclosed syntax block inside `dashboardRoutes.js` that was inducing continuous backend PM2 crash loops, significantly boosting system uptime.
+### 🚀 What's New in v1.3.0 (Interactive Mini-Games Suite & Deep Localization)
+- **Stateful Mini-Games Ecosystem**: Transformed the static Mini-Games Dashboard into a fully functional, stateful gaming suite. Implemented native playable logic for complex games including Gomoku AI, Sudoku generators, and recursive Minesweeper engines.
+- **Native AI Chess Engine**: Rewrote the Chess module with complete 8x8 rulesets, valid move validation for all pieces (Pawn, Knight, Bishop, Rook, Queen, King), and an interactive heuristic bot AI opponent.
+- **Deep Fortune i18n Localization**: Synchronized backend fortune-telling dictionaries (`randomFortunes.js`) with the unified React Frontend. Decoupled rigid English strings and enabled real-time translated fortunes mapping to all 6 core languages.
+- **Strict UI Resiliency**: Re-architected interactive game hooks with strict `useCallback` and dependency array tracking to eliminate stale closure bugs, ensuring highly responsive and clean local game states across multiple sessions without browser lag.
 
-<details>
-<summary>📜 Click to view previous Release Notes (v1.2.0 - v1.2.8)</summary>
-
-### 🚀 What's New in v1.2.8 (Modal Portal Architecture & Leaderboard i18n Fix)
-- **React Portal Modal Architecture**: Migrated all full-screen modal overlays (`GroupDetailModal`, `UserGroupDetailModal`, `BroadcastModal`) from inline rendering to `ReactDOM.createPortal(modal, document.body)`. This eliminates a critical CSS containing-block bug where `position: fixed` backdrops were visually clipped by parent elements with active CSS animations (`fadeIn`, `pageEnter`), leaving an uncovered white strip above the modal overlay covering the Header and Sidebar.
-- **CSS Animation Containing-Block Fix**: Stripped `transform` properties from `@keyframes fadeIn` and `@keyframes pageEnter` in `index.css`. Per CSS spec, any element with an active animation involving `transform` creates a new containing block, which causes `position: fixed` descendants to be positioned relative to that element instead of the viewport. Animations now use `opacity`-only transitions to avoid this browser behavior.
-- **Checkin Leaderboard i18n Completion**: Injected missing translation keys (`streak`, `monthly`, `allTime`) into the `checkinPage` block across all 6 language dictionaries (`en`, `vi`, `zh`, `ko`, `ru`, `id`). Previously, the leaderboard tabs rendered raw i18n key paths (e.g., `dashboard.checkinPage.streak`) instead of localized labels.
-
-### 🚀 What's New in v1.2.7 (Group Admin Dashboard & Deep i18n Parity)
-- **Dynamic Scope Resolution (Topic/User)**: Re-architected the Group Language Tab to dynamically expose numeric input fields for `Topic ID` and `User ID`. The Web Dashboard now cleanly communicates with Telegram's strict thread mechanics by passing direct integer identifiers down to the backend `db.setTopicLanguage` and `db.setUserLanguage` engines.
-- **Deep Component i18n Auditing**: Methodically unhardcoded over 20 embedded English strings scattered across `WelcomeTab.jsx` (Difficulty sliders, Sync status), `ModerationTab.jsx` (Action confirmations, placeholders), and `CheckinTab.jsx` (Leaderboard modes). Every textual artifact is now routed safely through the `useTranslation` hook.
-- **Universal 6-Language Parity Enforcement**: Eliminated a critical translation bleed-over where English keys forcibly overwrote the `groupDetail` taxonomy block across all localized files. Restored strict phonetic accuracy for Vietnamese, Chinese, Korean, Russian, and Indonesian translation matrices.
-- **UI/UX Modal Standardization**: Stripped out legacy sticky footers and enforced cohesive `rounded-2xl` glassmorphism styling across all internal Group Management pop-ups (`Welcome`, `Checkin`, `Moderation`, `Price Alerts`).
-
-### 🚀 What's New in v1.2.6 (Mobile CSS Architecture Refactoring & Responsive UX)
-- **CSS Grid Architecture Overhaul**: Rectified a critical flex-layout anomaly causing excessive, uncontrolled vertical stretching on dynamic glass-cards across the web dashboard by enforcing strict `items-start` parameters across all grid containers. 
-- **Restricted Modifier Scoping**: Identified and neutralized a cascading CSS leakage where a ubiquitous `.fixed.inset-0` modal wrapper rule was inadvertently forcing a brutal `min-h-screen` parameter across the entire app footprint. The fix strictly confines the max-height override uniquely to standard backdrop-blurred overlays.
-- **Adaptive Chat Widget Geometry**: Completely restructured the floating AI Chat widget's CSS geometry. Instead of breaking viewport boundaries with fixed rigid dimensions on small phones, the overlay now seamlessly morphs into a fluid, safe-area padded fullscreen view specifically calibrated for mobile viewports.
-- **Micro-Padding Compaction**: Implemented an aggressive mobile rhythm overhaul across the entire DashboardPage—substantially tightening component paddings (`p-5` to `p-3`), optimizing icon scalar containers, reducing visual gaps (`space-y-6` to `space-y-4`), and enforcing side-by-side metric stacking (`grid-cols-2`) for critical real-time portfolio data.
-
-### 🚀 What's New in v1.2.5 (Advanced Wallet Management & Analytics Export)
-- **Dynamic Limits Enforcement**: Unshackled wallet import and creation parameters from restrictive hardcoded bounds, implementing a fluid max-cap system completely synchronized with owner-defined user limits.
-- **Enterprise Excel Compatibility**: Integrated essential UTF-8 BOM byte-order marking into the client-side file blobs, outright ending character scrambling (mojibake) when visualizing multi-lingual names in commercial data viewers.
-- **Parametric Export Pipeline**: Expanded the flat CSV downloads into a comprehensive 5-column metric footprint (`Private Key`, `Wallet Name`, `Address`, `Balance ($)`, `Export Time/Creation Time`), dynamically polling live unified Portfolio values and device-native localized timestrings.
-- **Intelligent Filename Taxonomy**: Rewrote the export modules to programmatically inject deep contextual markers into filenames: connected `uid`/`username` tags, specifically bound network locators (e.g., `XLayer_196`), aggregate batch density counts, and granular sequence timestamps.
-
-### 🚀 What's New in v1.2.4 (Professional Error Handling & Persistence)
-- **AI Settings Persistence**: AI preferences (Model, Provider, Persona, Thinking) are now seamlessly synchronized with `localStorage`, guaranteeing your session settings survive page reloads and browser restarts without reverting to server defaults.
-- **Localized Personal Assistant Error Protocol**: Deprecated raw, hardcoded API technical error messages. XBot now intercepts API/Auth faults and serves them through a dynamic, 6-language `i18n` localization matrix using a warm, personal assistant tone. 
-- **Frictionless Error Resolution**: Introduced intuitive, direct-action "⚙️ AI Settings" shortcuts embedded within API error notifications, allowing users a one-click path to instantly rotate expired or invalid API keys.
-- **Refined Welcome Broadcast Links**: Synchronized the global `/start` command payload across all 6 core languages, updating the ecosystem creator handle and cementing the definitive Xbot Official X presence.
-
-### 🚀 What's New in v1.2.3 (AI Chat Mobile UX Optimization)
-- **Responsive Navigation Upgrade**: Resolved AI Chat Page usability bottlenecks by replacing cramped components with large (44px) touch-friendly action targets, including a dedicated "Conversations" toggle with an integrated unread counter.
-- **Dynamic Header Resizing**: Alleviated severe mobile overflow clipping by restructuring the core header toolbar to conditionally hide non-essential desktop modules (e.g. Compare, Export), securely wrapping long AI persona strings.
-- **Deep Component Localization**: Truncated 20+ persistent hardcoded English strings across deep UI components (ToolCallCards, ActionSheets, PasteDetectionBanners) by mapping them securely to the `i18n` dictionary.
-- **Universal Multi-Language Parity**: Extended translation block parity (`chatPage`) into all 6 core system languages (EN, VI, ZH, KO, RU, ID), guaranteeing immediate runtime localization for international users.
-
-### 🚀 What's New in v1.2.2 (Advanced User Management)
-- **Direct Messaging Engine**: Owners can now seamlessly broadcast HTML-formatted direct messages to individual users, selected groups, or the entire userbase directly from the Web Dashboard.
-- **Granular AI API Rate Limiting**: Introduced a dynamic per-user AI request quota system. Owners can easily throttle limits (0 to Unlimited) via new bulk-action modals or intuitive inline dropdowns to protect server API keys.
-- **Enhanced Dashboard UI**: Upgraded the `Users` page with a completely redesigned floating bulk-action bar, real-time AI usage statistical cards, and expanded multi-language translations explicitly supporting EN, VI, ZH, KO, RU, and ID.
-
-### 🚀 What's New in v1.2.1 (Ecosystem Auto-Discovery)
-- **Zero-Touch Community Listing**: Verified and documented the automated bot-integration pipeline. Telegram groups are instantly indexed and displayed on the Web Dashboard the moment `@XlayerAi_bot` is added as an administrator.
-- **Multilingual Onboarding UX**: Expanded the dashboard call-to-actions with detailed, 6-language (EN, VI, ZH, KO, RU, ID) typography instructing users on the automated bot-integration process.
-- **Real-Time Synergy**: Confirmed the dashboard's dynamic fetch-loops (member counts, avatars, and live integration statuses) operate synchronously with background Telegram Webhook events.
-
-### 🚀 What's New in v1.2.0 (XLayer Ecosystem Hub)
-- **Live Token Intelligence**: Integrated OKX OnchainOS directly into the Web Dashboard to stream real-time prices, 24h volatility, and external explorer links for established XLayer ecosystem tokens.
-- **Secure Community Proxy**: Implemented a backend proxy router to securely relay Telegram Group Avatars (Logos) using the Bot Token, completely shielding sensitive credentials from public client-side.
-- **Dynamic Member Sync**: The dashboard now automatically pulls live member counts and group invite links for registered Telegram Supergroups via the bot's background polling service.
-- **Multi-Language UI Expansion**: The entire Public Live Space, including all ecosystem metrics, CTA banners, and terminology, is now fully localized across 6 languages (EN, VI, ZH, KO, RU, ID).
-- **UX Form & Function Polish**: Dropped CSS rendering bugs (maskImage blur), replaced blocked creator handles (`@haivcon_X`), and implemented one-click token address copying for supreme user experience.
-
----
-
-</details>
 
 ### 🌟 Features at a Glance
 

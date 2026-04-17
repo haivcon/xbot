@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -2174,7 +2174,7 @@ export default function CommunityPage() {
     const [dmUnread, setDmUnread] = useState(0);
     const [dmInitialChat, setDmInitialChat] = useState(null); // { userId, displayName } for deep-link DM
 
-    const VALID_TABS = ['profile', 'communities', 'social', 'messages', 'leaderboard'];
+    const VALID_TABS = ['profile', 'communities', 'social', 'messages', 'leaderboard', 'minigames'];
     const urlTab = searchParams.get('tab');
     const viewMode = VALID_TABS.includes(urlTab) ? urlTab : 'profile';
 
@@ -2187,6 +2187,7 @@ export default function CommunityPage() {
     const tabs = useMemo(() => [
         { id: 'profile', icon: User, label: t('dashboard.socialHub.tabs.myProfile') },
         { id: 'communities', icon: Globe, label: t('dashboard.socialHub.tabs.communities') },
+        { id: 'minigames', icon: Gamepad2, label: t('dashboard.sidebar.games', 'Mini Games') },
         { id: 'social', icon: MessageCircle, label: t('dashboard.socialHub.tabs.socialFeed') },
         { id: 'messages', icon: Send, label: t('dashboard.socialHub.tabs.messages'), badge: dmUnread },
         { id: 'leaderboard', icon: Star, label: t('dashboard.socialHub.tabs.leaderboard') },
@@ -2282,6 +2283,10 @@ export default function CommunityPage() {
             {/* ── Tab Content ── */}
             {viewMode === 'communities' ? (
                 <LazyCommunitiesView t={t} navigate={navigate} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
+            ) : viewMode === 'minigames' ? (
+                <Suspense fallback={<div className="flex h-40 items-center justify-center"><Loader2 size={24} className="animate-spin text-brand-500" /></div>}>
+                    <MiniGamesPage />
+                </Suspense>
             ) : viewMode === 'social' ? (
                 <SocialFeedView onSwitchToMessages={(uid, name) => { setDmInitialChat({ userId: uid, displayName: name }); switchTab('messages'); }} />
             ) : viewMode === 'messages' ? (
@@ -2320,3 +2325,6 @@ function LazyCommunitiesView({ t, navigate, activeFilter, setActiveFilter }) {
         />
     );
 }
+
+// Lazy load MiniGamesPage to keep the main bundle thin
+const MiniGamesPage = lazy(() => import('./MiniGamesPage'));

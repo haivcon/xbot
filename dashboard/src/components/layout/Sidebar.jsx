@@ -257,7 +257,6 @@ export default function Sidebar({ open, onClose }) {
             icon: Gamepad2,
             items: [
                 { to: '/my-groups', icon: MessageSquare, label: t('dashboard.sidebar.myGroups') || 'My Groups' },
-                { to: '/games', icon: Gamepad2, label: t('dashboard.sidebar.games') || 'Mini Games' },
                 { to: '/settings', icon: Settings, label: t('dashboard.sidebar.settings') },
             ],
         },
