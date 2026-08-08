@@ -1,70 +1,91 @@
-# XBot
+# xBot
 
-XBot is an AI-powered Web3 Telegram bot and dashboard for the OKX X Layer ecosystem.
+AI-powered Telegram bot and web dashboard for the OKX X Layer ecosystem.
 
-## Current Version
+## Features
 
-- **Version:** `1.3.10`
-- **Focus:** copy-trade credential enforcement, price alert cost optimization, docs/dashboard UX refresh
+- **Telegram Bot** — AI chat, on-chain analytics, price alerts, portfolio tracking
+- **Web Dashboard** — user & admin panels, chat AI, trading, wallet management
+- **9Router** — unified model routing via `xlayerbot.fun/v1` (multi-model, tenant-aware)
+- **xBot Agent** — agent runtime with tool execution, approval flow, and SSE streaming
+- **OnchainOS** — on-chain tools (swap, bridge, DeFi, token research, security scan)
+- **Multi-language** — i18n support across bot and dashboard
 
-## What’s New
+## Architecture
 
-### v1.3.10
-- Refined the dashboard docs experience with a smaller, cleaner layout.
-- Replaced the language selector with a custom dropdown that matches the landing page style.
-- Updated docs visual hierarchy for better readability on compact screens.
-- Improved spacing, cards, headings, lists, code blocks, and table of contents density.
-- Kept the landing page style aligned with the dashboard/docs design direction.
-
-### v1.3.9
-- Enforced personal OKX API credentials for copy trading workflows.
-- Removed legacy auto trading backend modules and related routes/schemas.
-- Optimized group price alerts by switching to the lower-cost Basic Market API.
-- Restored missing market data metrics and localization support.
-
-## Key Features
-
-- AI-powered Telegram bot for Web3 workflows
-- Multi-language support
-- OKX X Layer focused trading utilities
-- Copy trading and portfolio workflows
-- Web dashboard for users and admins
-- Security-focused wallet and vault features
-- On-chain analytics and automated alerts
-
-## Dashboard Docs
-
-The dashboard documentation has been refreshed to:
-
-- feel more compact and modern
-- match the xLayer visual language
-- use a better language switcher
-- reduce unnecessary visual weight
-- improve scanning and navigation for long content
+```
+Telegram ──► xBot Node/Express ──► 9Router sidecar ──► AI models
+                 │                       │
+                 ├── Dashboard (Vite/React)
+                 ├── xBot Agent adapter (FastAPI)
+                 ├── OnchainOS tools
+                 └── SQLite DB
+```
 
 ## Project Layout
 
-- `src/` - backend bot and server logic
-- `dashboard/` - web dashboard and docs
-- `docs/` - media assets and supporting files
-
-## Build
-
-```bash
-npm install
-npm run build
+```
+src/                     # Backend — bot, server, services
+  app/                   # Telegram handlers
+  server/                # Express API routes
+  services/              # 9Router, xBot Agent, orchestrator
+  features/              # AI, on-chain, trading
+dashboard/               # Web dashboard (Vite + React)
+  xBot/src/              # Dashboard source
+services/
+  nine-router-sidecar/   # 9Router model routing service
+  hermes-api/            # xBot Agent adapter (FastAPI)
+scripts/                 # Deploy, backup, utilities
+__tests__/               # Jest test suite
 ```
 
-For the dashboard only:
+## Setup
 
 ```bash
+# Install dependencies
+npm install
 npm --prefix dashboard install
+
+# Configure
+cp .env.example .env   # Edit with your tokens and config
+
+# Run
+npm start              # Bot + API server
+```
+
+### Dashboard build
+
+```bash
 npm --prefix dashboard run build
 ```
 
-## Changelog Policy
+### Environment variables
 
-This README now keeps only the current, relevant updates. Older release history should be treated as archival and moved to release notes or GitHub tags when needed.
+| Variable | Description |
+|---|---|
+| `BOT_TOKEN` | Telegram bot token |
+| `NINEROUTER_BASE_URL` | 9Router service URL (private) |
+| `NINEROUTER_MODEL` | Default AI model |
+| `XBOT_AGENT_ENABLED` | Enable xBot Agent runtime (`true`/`false`) |
+| `XBOT_AGENT_INTERNAL_URL` | Agent service URL (private) |
+| `XBOT_AGENT_SERVICE_TOKEN` | Agent service auth token |
+| `XBOT_AGENT_CONTEXT_SECRET` | Agent context HMAC secret |
+
+## Testing
+
+```bash
+npm test -- --runInBand --no-coverage
+```
+
+## Deploy
+
+```bash
+# On VPS
+cd /root/xbot
+bash scripts/deploy.sh
+```
+
+See `scripts/deploy.sh` for PM2-based production deployment with backup, health check, and rollback.
 
 ## License
 
