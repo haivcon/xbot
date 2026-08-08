@@ -57,7 +57,7 @@ class ApiClient {
 
             if (res.status === 401) {
                 useAuthStore.getState().logout();
-                window.location.href = '/';
+                window.location.href = '/xBot/';
                 throw new Error('Unauthorized');
             }
 

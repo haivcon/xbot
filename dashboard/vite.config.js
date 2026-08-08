@@ -53,12 +53,8 @@ export default defineConfig(({ mode }) => ({
         emptyOutDir: true,
         rollupOptions: {
             input: {
-                main: path.resolve(__dirname, 'index.html'),
                 xbot: path.resolve(__dirname, 'xBot/index.html'),
-                xkey: path.resolve(__dirname, 'xKey/index.html'),
-                docs: path.resolve(__dirname, 'docs/index.html'),
             },
-
         },
     },
 }));

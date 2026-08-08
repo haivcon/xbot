@@ -44,6 +44,8 @@ dashboard/*.local
 /xKey/
 xbot-check/
 1/
+.hermes
+__tests__
 
 # ─── Logs ───
 *.log

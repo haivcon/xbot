@@ -230,7 +230,7 @@ function createDashboardRoutes() {
 
         res.json({
             botUsername: botUsername || null,
-            dashboardUrl: `${req.protocol}://${req.get('host')}/dashboard/`,
+            dashboardUrl: `${req.protocol}://${req.get('host')}/xBot/`,
             communities: _cachedCommunities,
             tokens: _cachedTokens,
         });
@@ -267,7 +267,7 @@ function createDashboardRoutes() {
                 return res.status(401).send(`
                     <html><body style="background:#0f172a;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:Inter,sans-serif">
                     <div style="text-align:center"><h2>⏰ Link expired</h2><p>Please type <code>/dashboard</code> in the bot to get a new link.</p>
-                    <a href="/dashboard/" style="color:#60a5fa">Go to Dashboard →</a></div></body></html>
+                    <a href="/xBot/" style="color:#60a5fa">Go to Dashboard →</a></div></body></html>
                 `);
             }
 

@@ -432,14 +432,16 @@ function startApiServer() {
     app.use('/api/dashboard', express.json({ limit: BODY_LIMIT }), createDashboardRoutes());
     log.child('Dashboard').info('Dashboard API routes mounted at /api/dashboard');
 
-    // === Serve Dashboard Static Files (at root /) ===
+    // === Serve the XBot dashboard ===
     const dashboardDist = path.join(__dirname, '../../dashboard/dist');
     if (fs.existsSync(dashboardDist)) {
         app.use(express.static(dashboardDist));
-        // SPA fallback: serve index.html for any unmatched non-API routes
+        app.get('/', (_req, res) => res.redirect('/xBot/'));
+        // SPA fallback: serve the XBot entry for dashboard client-side routes.
         app.get('*', (req, res, next) => {
             if (req.path.startsWith('/api/')) return next();
-            res.sendFile(path.join(dashboardDist, 'index.html'));
+            if (req.path !== '/xBot' && !req.path.startsWith('/xBot/')) return res.redirect('/xBot/');
+            res.sendFile(path.join(dashboardDist, 'xBot/index.html'));
         });
         log.child('Dashboard').info(`Serving dashboard from ${dashboardDist}`);
     } else {

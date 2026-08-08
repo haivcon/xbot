@@ -1,7 +1,7 @@
 // XBot Service Worker — offline shell caching with auto-versioning
 // Version is injected at build time via vite.config.js
 const CACHE_NAME = 'xbot-__BUILD_HASH__';
-const SHELL_URLS = ['/', '/index.html'];
+const SHELL_URLS = ['/xBot/', '/xBot/index.html'];
 
 self.addEventListener('install', (e) => {
     e.waitUntil(
@@ -32,6 +32,6 @@ self.addEventListener('fetch', (e) => {
                 caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
             }
             return res;
-        }).catch(() => caches.match(request).then(r => r || caches.match('/')))
+        }).catch(() => caches.match(request).then(r => r || caches.match('/xBot/')))
     );
 });
