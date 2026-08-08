@@ -102,7 +102,7 @@ export async function GET() {
   try {
     const installed = await checkHermesInstalled();
     if (!installed) {
-      return NextResponse.json({ installed: false, settings: null, message: "Hermes Agent is not installed" });
+      return NextResponse.json({ installed: false, settings: null, message: "xBot Agent is not installed" });
     }
     const yaml = await readConfigYaml();
     const model = parseModelBlock(yaml);
@@ -144,7 +144,7 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
-      message: "Hermes settings applied successfully!",
+      message: "xBot Agent settings applied successfully!",
       configPath: getHermesConfigPath(),
     });
   } catch (error) {

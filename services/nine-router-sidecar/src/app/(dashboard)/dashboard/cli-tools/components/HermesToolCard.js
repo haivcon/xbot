@@ -205,7 +205,7 @@ export default function HermesToolCard({
           {checking && (
             <div className="flex items-center gap-2 text-text-muted">
               <span className="material-symbols-outlined animate-spin">progress_activity</span>
-              <span>Checking Hermes Agent...</span>
+              <span>Checking xBot Agent...</span>
             </div>
           )}
 
@@ -215,7 +215,7 @@ export default function HermesToolCard({
                 <div className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-yellow-500">warning</span>
                   <div className="flex-1">
-                    <p className="font-medium text-yellow-600 dark:text-yellow-400">Hermes Agent not detected locally</p>
+                    <p className="font-medium text-yellow-600 dark:text-yellow-400">xBot Agent not detected locally</p>
                     <p className="text-sm text-text-muted">Install: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash</p>
                   </div>
                 </div>
@@ -303,13 +303,13 @@ export default function HermesToolCard({
         selectedModel={selectedModel}
         activeProviders={activeProviders}
         modelAliases={modelAliases}
-        title="Select Model for Hermes Agent"
+        title="Select Model for xBot Agent"
       />
 
       <ManualConfigModal
         isOpen={showManualConfigModal}
         onClose={() => setShowManualConfigModal(false)}
-        title="Hermes Agent - Manual Configuration"
+        title="xBot Agent - Manual Configuration"
         configs={getManualConfigs()}
       />
     </Card>

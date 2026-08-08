@@ -1,4 +1,4 @@
-"""Optional authenticated pass-through for the official Hermes Agent Runs API."""
+"""Optional authenticated pass-through for the xBot Agent Runs API."""
 
 import base64
 import hashlib
@@ -31,7 +31,7 @@ class ApprovalRequest(BaseModel):
     choice: str
 
 
-class HermesEngine(Protocol):
+class XBotEngine(Protocol):
     async def create_run(self, context: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]: ...
     async def approval(self, run_id: str, context: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]: ...
     async def events(self, run_id: str, context: dict[str, Any]): ...
@@ -40,7 +40,7 @@ class HermesEngine(Protocol):
 
 class UnconfiguredEngine:
     async def _fail(self, *args, **kwargs):
-        raise HTTPException(503, "Hermes engine is not configured")
+        raise HTTPException(503, "xBot agent engine is not configured")
     create_run = approval = events = stop_run = _fail
 
 
@@ -58,17 +58,17 @@ def _internal_base_url(value: str) -> str:
         or host.endswith(".local")
     )
     if parsed.scheme not in {"http", "https"} or not host or parsed.username or parsed.password or not private:
-        raise ValueError("HERMES_UPSTREAM_URL must be a private HTTP(S) service URL")
+        raise ValueError("XBOT_UPSTREAM_URL must be a private HTTP(S) service URL")
     return value.rstrip("/")
 
 
-class HttpHermesEngine:
-    """Pass through the official Hermes Runs API without importing Hermes core."""
+class HttpXBotEngine:
+    """Pass through the xBot Agent Runs API without importing agent core."""
 
     def __init__(self, base_url: str, token: str, timeout_seconds: float = 60, client: httpx.AsyncClient | None = None):
         self.base_url = _internal_base_url(base_url)
         if not token:
-            raise ValueError("HERMES_UPSTREAM_TOKEN is required")
+            raise ValueError("XBOT_UPSTREAM_TOKEN is required")
         self.token = token
         self.timeout = timeout_seconds
         self.client = client or httpx.AsyncClient(timeout=timeout_seconds)
@@ -90,16 +90,16 @@ class HttpHermesEngine:
                 json=payload, timeout=self.timeout,
             )
         except httpx.TimeoutException as error:
-            raise HTTPException(504, "Hermes upstream timed out") from error
+            raise HTTPException(504, "xBot upstream timed out") from error
         except httpx.HTTPError as error:
-            raise HTTPException(502, "Hermes upstream request failed") from error
+            raise HTTPException(502, "xBot upstream request failed") from error
         if response.status_code >= 400:
             status = response.status_code if response.status_code < 500 else 502
-            raise HTTPException(status, "Hermes upstream rejected the request")
+            raise HTTPException(status, "xBot upstream rejected the request")
         try:
             return response.json()
         except ValueError as error:
-            raise HTTPException(502, "Hermes upstream returned invalid JSON") from error
+            raise HTTPException(502, "xBot upstream returned invalid JSON") from error
 
     async def create_run(self, context: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         return await self._json("POST", "/v1/runs", context, payload)
@@ -116,15 +116,15 @@ class HttpHermesEngine:
                 ) as response:
                     if response.status_code >= 400:
                         status = response.status_code if response.status_code < 500 else 502
-                        raise HTTPException(status, "Hermes upstream rejected the event stream")
+                        raise HTTPException(status, "xBot upstream rejected the event stream")
                     if "text/event-stream" not in response.headers.get("content-type", "").lower():
-                        raise HTTPException(502, "Hermes upstream returned an invalid event stream")
+                        raise HTTPException(502, "xBot upstream returned an invalid event stream")
                     async for chunk in response.aiter_bytes():
                         yield chunk
             except httpx.TimeoutException as error:
-                raise HTTPException(504, "Hermes upstream event stream timed out") from error
+                raise HTTPException(504, "xBot upstream event stream timed out") from error
             except httpx.HTTPError as error:
-                raise HTTPException(502, "Hermes upstream event stream failed") from error
+                raise HTTPException(502, "xBot upstream event stream failed") from error
         return stream()
 
     async def stop_run(self, run_id: str, context: dict[str, Any]) -> dict[str, Any]:
@@ -158,18 +158,18 @@ def _decode_context(encoded: str, signature: str, settings: Settings) -> dict[st
     return context
 
 
-def create_app(engine: HermesEngine | None = None, settings: Settings | None = None) -> FastAPI:
-    app = FastAPI(title="xBot Hermes Adapter")
+def create_app(engine: XBotEngine | None = None, settings: Settings | None = None) -> FastAPI:
+    app = FastAPI(title="xBot Agent Adapter")
     config = settings or Settings(
-        os.getenv("HERMES_SERVICE_TOKEN", ""),
-        os.getenv("HERMES_CONTEXT_SECRET", ""),
-        upstream_url=os.getenv("HERMES_UPSTREAM_URL", ""),
-        upstream_token=os.getenv("HERMES_UPSTREAM_TOKEN", ""),
-        upstream_timeout_seconds=float(os.getenv("HERMES_UPSTREAM_TIMEOUT_SECONDS", "60")),
+        os.getenv("XBOT_SERVICE_TOKEN", ""),
+        os.getenv("XBOT_CONTEXT_SECRET", ""),
+        upstream_url=os.getenv("XBOT_UPSTREAM_URL", ""),
+        upstream_token=os.getenv("XBOT_UPSTREAM_TOKEN", ""),
+        upstream_timeout_seconds=float(os.getenv("XBOT_UPSTREAM_TIMEOUT_SECONDS", "60")),
     )
     app.state.settings = config
     app.state.engine = engine or (
-        HttpHermesEngine(config.upstream_url, config.upstream_token, config.upstream_timeout_seconds)
+        HttpXBotEngine(config.upstream_url, config.upstream_token, config.upstream_timeout_seconds)
         if config.upstream_url and config.upstream_token
         else UnconfiguredEngine()
     )
@@ -177,13 +177,13 @@ def create_app(engine: HermesEngine | None = None, settings: Settings | None = N
     async def context(
         request: Request,
         authorization: str = Header(default=""),
-        x_hermes_context: str = Header(default=""),
-        x_hermes_signature: str = Header(default=""),
+        x_xbot_context: str = Header(default=""),
+        x_xbot_signature: str = Header(default=""),
     ) -> dict[str, Any]:
         config = request.app.state.settings
         if not config.service_token or not hmac.compare_digest(authorization, f"Bearer {config.service_token}"):
             raise HTTPException(401, "Invalid service credential")
-        return _decode_context(x_hermes_context, x_hermes_signature, config)
+        return _decode_context(x_xbot_context, x_xbot_signature, config)
 
     def assert_run_context(run_id: str, ctx: dict[str, Any]) -> None:
         if ctx.get("runId") != run_id:

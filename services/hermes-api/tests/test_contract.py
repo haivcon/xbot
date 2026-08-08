@@ -7,7 +7,7 @@ import time
 import httpx
 from fastapi.testclient import TestClient
 
-from app.main import HttpHermesEngine, Settings, create_app
+from app.main import HttpXBotEngine, Settings, create_app
 
 
 class Engine:
@@ -42,7 +42,7 @@ CLIENT = TestClient(create_app(ENGINE, SETTINGS))
 def headers(context):
     encoded = base64.urlsafe_b64encode(json.dumps(context, separators=(",", ":")).encode()).decode().rstrip("=")
     signature = hmac.new(SETTINGS.context_secret.encode(), encoded.encode(), hashlib.sha256).hexdigest()
-    return {"Authorization": "Bearer service", "X-Hermes-Context": encoded, "X-Hermes-Signature": signature}
+    return {"Authorization": "Bearer service", "X-XBot-Context": encoded, "X-XBot-Signature": signature}
 
 
 def test_create_is_an_optional_passthrough_for_official_runs_payload():
@@ -120,7 +120,7 @@ def test_http_engine_passes_routes_and_internal_auth_to_official_runs_api():
         return httpx.Response(200, json={"run_id": "run-1", "status": "ok"})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    engine = HttpHermesEngine("http://hermes.internal", "upstream-token", client=client)
+    engine = HttpXBotEngine("http://xbot.internal", "upstream-token", client=client)
     context = {"tenantId": "tenant-a", "userId": "user-a", "requestId": "request-1"}
 
     import asyncio

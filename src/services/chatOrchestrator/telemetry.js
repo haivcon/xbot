@@ -1,7 +1,7 @@
 'use strict';
 
 const state = { requests: 0, active: 0, outcomes: new Map() };
-const ENGINES = new Set(['9router', 'hermes']);
+const ENGINES = new Set(['9router', 'xbot-agent']);
 const OUTCOMES = new Set(['completed', 'failed', 'cancelled']);
 
 function normalize(value, allowed, fallback) {

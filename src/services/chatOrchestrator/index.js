@@ -84,7 +84,7 @@ function createChatOrchestrator(options = {}) {
     const maxToolResultChars = Math.max(1, options.maxToolResultChars || 32_000);
     const activeByTenant = new Map();
     const tenantRates = new Map();
-    const pendingHermesApprovals = new Map();
+    const pendingAgentApprovals = new Map();
     let circuitFailures = 0;
     let circuitOpenedAt = 0;
 
@@ -238,7 +238,7 @@ function createChatOrchestrator(options = {}) {
         }
     }
 
-    async function streamHermes(input, hooks) {
+    async function streamXBotAgent(input, hooks) {
         const run = await options.hermesClient.createRun({
             tenantId: input.tenantId,
             userId: input.userId,
@@ -256,7 +256,7 @@ function createChatOrchestrator(options = {}) {
                 onEvent: async event => {
                     if (event.type === 'text-delta' && typeof event.text === 'string') text += event.text;
                     if (event.type === 'approval-required' && event.runId === run.runId && Array.isArray(event.choices)) {
-                        pendingHermesApprovals.set(run.runId, {
+                        pendingAgentApprovals.set(run.runId, {
                             tenantId: String(input.tenantId),
                             userId: String(input.userId),
                             choices: new Set(event.choices.filter(choice => ['once', 'session', 'always', 'deny'].includes(choice))),
@@ -265,16 +265,16 @@ function createChatOrchestrator(options = {}) {
                         });
                     }
                     if (event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled') {
-                        pendingHermesApprovals.delete(run.runId);
+                        pendingAgentApprovals.delete(run.runId);
                     }
                     await hooks.onEvent({ type: event.type, data: event });
                 }
             });
             if (!result?.completed) {
-                return { ...result, completed: false, text, engine: 'hermes', runId: run.runId };
+                return { ...result, completed: false, text, engine: 'xbot-agent', runId: run.runId };
             }
         } catch (error) {
-            // Once Hermes has accepted a run, never fall back to a second engine:
+            // Once xBot agent has accepted a run, never fall back to a second engine:
             // the run may still be executing even when its event stream fails.
             if (typeof options.hermesClient.cancelRun === 'function') {
                 await options.hermesClient.cancelRun({
@@ -284,34 +284,34 @@ function createChatOrchestrator(options = {}) {
                     requestId: crypto.randomUUID()
                 }).catch(() => {});
             }
-            error.hermesRunCreated = true;
+            error.agentRunCreated = true;
             throw error;
         } finally {
-            pendingHermesApprovals.delete(run.runId);
+            pendingAgentApprovals.delete(run.runId);
         }
-        await hooks.onEvent({ type: 'done', data: { engine: 'hermes', runId: run.runId } });
-        return { completed: true, text, engine: 'hermes', runId: run.runId };
+        await hooks.onEvent({ type: 'done', data: { engine: 'xbot-agent', runId: run.runId } });
+        return { completed: true, text, engine: 'xbot-agent', runId: run.runId };
     }
 
-    async function approveHermesRun(input, hooks = {}) {
+    async function approveAgentRun(input, hooks = {}) {
         if (!input?.tenantId || !input?.userId) throw orchestrationError('IDENTITY_REQUIRED', 'Tenant and user identity are required');
-        if (!input?.runId) throw orchestrationError('RUN_ID_REQUIRED', 'Hermes run ID is required');
-        const pending = pendingHermesApprovals.get(input.runId);
-        if (!pending) throw orchestrationError('APPROVAL_NOT_PENDING', 'No approval is pending for this Hermes run');
+        if (!input?.runId) throw orchestrationError('RUN_ID_REQUIRED', 'xBot agent run ID is required');
+        const pending = pendingAgentApprovals.get(input.runId);
+        if (!pending) throw orchestrationError('APPROVAL_NOT_PENDING', 'No approval is pending for this xBot agent run');
         if (pending.tenantId !== String(input.tenantId) || pending.userId !== String(input.userId)) {
             throw orchestrationError('RUN_TENANT_MISMATCH', 'Run does not belong to this tenant and user');
         }
         if (!pending.choices.has(input.choice)) {
-            throw orchestrationError('APPROVAL_CHOICE_INVALID', 'Hermes approval choice is invalid');
+            throw orchestrationError('APPROVAL_CHOICE_INVALID', 'xBot agent approval choice is invalid');
         }
-        if (pending.approving) throw orchestrationError('APPROVAL_IN_PROGRESS', 'Hermes approval is already being submitted');
+        if (pending.approving) throw orchestrationError('APPROVAL_IN_PROGRESS', 'xBot agent approval is already being submitted');
         if (!options.hermesEnabled || typeof options.hermesClient?.approveRun !== 'function') {
-            throw orchestrationError('HERMES_DISABLED', 'Hermes is not enabled');
+            throw orchestrationError('XBOT_AGENT_DISABLED', 'xBot Agent is not enabled');
         }
         pending.approving = true;
         try {
             const result = await options.hermesClient.approveRun({ ...input, requestId: pending.requestId }, { signal: hooks.signal });
-            pendingHermesApprovals.delete(input.runId);
+            pendingAgentApprovals.delete(input.runId);
             return result;
         } catch (error) {
             pending.approving = false;
@@ -345,7 +345,7 @@ function createChatOrchestrator(options = {}) {
         try {
             if (options.hermesEnabled && options.hermesClient) {
                 let emitted = false;
-                const hermesHooks = {
+                const agentHooks = {
                     signal: normalizedHooks.signal,
                     onEvent: async event => {
                         emitted = true;
@@ -353,14 +353,14 @@ function createChatOrchestrator(options = {}) {
                     }
                 };
                 try {
-                    return await streamHermes(input, hermesHooks);
+                    return await streamXBotAgent(input, agentHooks);
                 } catch (error) {
-                    if (emitted || error?.hermesRunCreated || error?.code === 'CLIENT_ABORTED') throw error;
+                    if (emitted || error?.agentRunCreated || error?.code === 'CLIENT_ABORTED') throw error;
                     const fallbackCodes = new Set([
-                        'HERMES_UPSTREAM_ERROR',
-                        'HERMES_TIMEOUT',
-                        'HERMES_STREAM_INVALID',
-                        'HERMES_STREAM_INCOMPLETE'
+                        'XBOT_UPSTREAM_ERROR',
+                        'XBOT_TIMEOUT',
+                        'XBOT_STREAM_INVALID',
+                        'XBOT_STREAM_INCOMPLETE'
                     ]);
                     if (!fallbackCodes.has(error?.code)) throw error;
                 }
@@ -373,7 +373,7 @@ function createChatOrchestrator(options = {}) {
         }
     }
 
-    return { streamChat, approveHermesRun };
+    return { streamChat, approveAgentRun };
 }
 
 module.exports = { createChatOrchestrator, orchestrationError, assertInternalUrl, parseCostOptions };

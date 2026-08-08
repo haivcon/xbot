@@ -78,10 +78,10 @@ describe('legacy AI and copy surfaces are retired', () => {
         expect(routes).toMatch(/if \(!result\.completed \|\| aborted\) \{[\s\S]*?return res\.end\(\);[\s\S]*?\}/);
     });
 
-    test('Hermes approvals are exposed through a tenant-bound Node route and all chat surfaces handle them', () => {
+    test('xBot agent approvals are exposed through a tenant-bound Node route and all chat surfaces handle them', () => {
         const routes = read('src/server/chatRoutes.js');
         const api = read('dashboard/xBot/src/api/client.js');
-        expect(routes).toContain("router.post('/chat/hermes/:runId/approval'");
+        expect(routes).toContain("router.post('/chat/agent/:runId/approval'");
         expect(routes).toContain('const tenantId = normalizeTenantId(userId)');
         expect(routes).toContain('tenantId, userId: tenantId, runId, choice');
         expect(routes).not.toMatch(/req\.(?:body|query|headers)[^\n]*tenantId/);
@@ -93,7 +93,7 @@ describe('legacy AI and copy surfaces are retired', () => {
             'dashboard/xBot/src/components/ChatWidget.jsx',
             'dashboard/xBot/src/components/chat/FloatingChat.jsx'
         ]) {
-            expect(read(file)).toContain('onApprovalRequired: data => api.confirmHermesApproval(data)');
+            expect(read(file)).toContain('onApprovalRequired: data => api.confirmAgentApproval(data)');
         }
     });
 

@@ -1,1 +1,1 @@
-"""xBot's thin Hermes service adapter contract."""
+"""xBot's thin agent service adapter contract."""

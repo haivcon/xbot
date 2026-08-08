@@ -11,20 +11,20 @@ function clientError(code, message, status) {
 
 function assertInternalUrl(value) {
     let url;
-    try { url = new URL(value); } catch { throw clientError('HERMES_CONFIG_INVALID', 'Hermes URL must be valid'); }
+    try { url = new URL(value); } catch { throw clientError('XBOT_CONFIG_INVALID', 'xBot agent URL must be valid'); }
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
-        throw clientError('HERMES_CONFIG_INVALID', 'Hermes URL must be a safe service URL');
+        throw clientError('XBOT_CONFIG_INVALID', 'xBot agent URL must be a safe service URL');
     }
     const host = url.hostname.toLowerCase();
     const privateHost = host === 'localhost' || host === '::1' || host === '[::1]' ||
         /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
         /^172\.(1[6-9]|2\d|3[01])\./.test(host) || !host.includes('.') ||
         host.endsWith('.internal') || host.endsWith('.local');
-    if (!privateHost) throw clientError('HERMES_CONFIG_INVALID', 'Hermes URL must target a private service');
+    if (!privateHost) throw clientError('XBOT_CONFIG_INVALID', 'xBot agent URL must target a private service');
     return url.toString().replace(/\/$/, '');
 }
 
-function createHermesClient(options = {}) {
+function createXBotAgentClient(options = {}) {
     const baseUrl = assertInternalUrl(options.baseUrl);
     const serviceToken = options.serviceToken;
     const contextSecret = options.contextSecret;
@@ -34,8 +34,8 @@ function createHermesClient(options = {}) {
     // A production deployment may inject a durable tenant-scoped Map-compatible
     // store. Unknown run IDs are denied rather than claimed by the first caller.
     const runOwners = options.runStore || new Map();
-    if (!serviceToken || !contextSecret) throw clientError('HERMES_CONFIG_INVALID', 'Hermes service credentials are required');
-    if (typeof fetchImpl !== 'function') throw clientError('HERMES_CONFIG_INVALID', 'fetch is unavailable');
+    if (!serviceToken || !contextSecret) throw clientError('XBOT_CONFIG_INVALID', 'xBot agent service credentials are required');
+    if (typeof fetchImpl !== 'function') throw clientError('XBOT_CONFIG_INVALID', 'fetch is unavailable');
 
     function identity(input) {
         if (!input?.tenantId || !input?.userId) throw clientError('IDENTITY_REQUIRED', 'Tenant and user identity are required');
@@ -61,8 +61,8 @@ function createHermesClient(options = {}) {
             Authorization: 'Bearer ' + serviceToken,
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            'X-Hermes-Context': context,
-            'X-Hermes-Signature': signature
+            'X-XBot-Context': context,
+            'X-XBot-Signature': signature
         };
         if (requestId) result['Idempotency-Key'] = requestId;
         return result;
@@ -90,22 +90,22 @@ function createHermesClient(options = {}) {
     }
 
     function normalizeTransportError(error, state, signal, stream = false) {
-        if (state.didTimeOut()) return clientError('HERMES_TIMEOUT', stream ? 'Hermes stream timed out' : 'Hermes request timed out');
+        if (state.didTimeOut()) return clientError('XBOT_TIMEOUT', stream ? 'xBot agent stream timed out' : 'xBot agent request timed out');
         if (signal?.aborted) return clientError('CLIENT_ABORTED', 'Client cancelled the request');
-        if (error?.code && (error.code.startsWith('HERMES_') || error.code === 'CLIENT_ABORTED')) return error;
-        return clientError('HERMES_UPSTREAM_ERROR', 'Hermes request failed');
+        if (error?.code && (error.code.startsWith('XBOT_') || error.code === 'CLIENT_ABORTED')) return error;
+        return clientError('XBOT_UPSTREAM_ERROR', 'xBot agent request failed');
     }
 
     async function request(path, init, signal) {
         const state = linkedController(signal);
         try {
             const response = await fetchImpl(`${baseUrl}${path}`, { ...init, signal: state.controller.signal });
-            if (!response.ok) throw clientError('HERMES_UPSTREAM_ERROR', 'Hermes request failed', response.status);
+            if (!response.ok) throw clientError('XBOT_UPSTREAM_ERROR', 'xBot agent request failed', response.status);
             try {
                 return await response.json();
             } catch (error) {
                 if (state.didTimeOut() || signal?.aborted) throw error;
-                throw clientError('HERMES_RESPONSE_INVALID', 'Hermes returned invalid JSON');
+                throw clientError('XBOT_RESPONSE_INVALID', 'xBot agent returned invalid JSON');
             }
         } catch (error) {
             throw normalizeTransportError(error, state, signal);
@@ -118,13 +118,13 @@ function createHermesClient(options = {}) {
         let runInput = input.input;
         let conversationHistory = input.conversationHistory ?? input.conversation_history;
         if (runInput === undefined && Array.isArray(input.messages) && input.messages.length) {
-            // Hermes accepts a message array as `input` and derives prior turns
+            // xBot agent accepts a message array as `input` and derives prior turns
             // itself, including multi-part content. Do not translate it into a
             // different, xBot-specific request shape.
             runInput = input.messages;
         }
         if (runInput === undefined || runInput === null || runInput === '') {
-            throw clientError('HERMES_INPUT_REQUIRED', 'Hermes run input is required');
+            throw clientError('XBOT_INPUT_REQUIRED', 'xBot agent run input is required');
         }
         const payload = { input: runInput };
         if (conversationHistory !== undefined) payload.conversation_history = conversationHistory;
@@ -142,7 +142,7 @@ function createHermesClient(options = {}) {
             body: JSON.stringify(createPayload(input))
         }, requestOptions.signal);
         if (!data?.run_id || typeof data.run_id !== 'string' || !data.status) {
-            throw clientError('HERMES_RESPONSE_INVALID', 'Hermes response is missing run metadata');
+            throw clientError('XBOT_RESPONSE_INVALID', 'xBot agent response is missing run metadata');
         }
         runOwners.set(data.run_id, owner);
         // Keep the wire-contract field enumerable while supporting the existing
@@ -192,7 +192,7 @@ function createHermesClient(options = {}) {
 
     async function consumeRunEvents(response, runId, onEvent) {
         if (!response?.body || typeof response.body.getReader !== 'function') {
-            throw clientError('HERMES_STREAM_INVALID', 'Hermes did not return a readable SSE stream');
+            throw clientError('XBOT_STREAM_INVALID', 'xBot agent did not return a readable SSE stream');
         }
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -208,7 +208,7 @@ function createHermesClient(options = {}) {
             if (!data) return;
             let upstreamEvent;
             try { upstreamEvent = JSON.parse(data); } catch {
-                throw clientError('HERMES_STREAM_INVALID', 'Hermes returned malformed SSE data');
+                throw clientError('XBOT_STREAM_INVALID', 'xBot agent returned malformed SSE data');
             }
             const event = normalizeEvent(upstreamEvent, runId);
             if (event) await onEvent(event);
@@ -222,7 +222,7 @@ function createHermesClient(options = {}) {
                 const part = await reader.read();
                 if (part.done) break;
                 bytes += part.value.byteLength;
-                if (bytes > maxStreamBytes) throw clientError('HERMES_STREAM_TOO_LARGE', 'Hermes stream exceeded its size limit');
+                if (bytes > maxStreamBytes) throw clientError('XBOT_STREAM_TOO_LARGE', 'xBot agent stream exceeded its size limit');
                 buffer += decoder.decode(part.value, { stream: true });
                 const frames = buffer.split(/\r?\n\r?\n/);
                 buffer = frames.pop() || '';
@@ -238,8 +238,8 @@ function createHermesClient(options = {}) {
             reader.releaseLock();
         }
 
-        if (!terminal) throw clientError('HERMES_STREAM_INCOMPLETE', 'Hermes stream closed before a terminal run event');
-        if (terminal === 'failed') throw clientError('HERMES_RUN_FAILED', 'Hermes run failed');
+        if (!terminal) throw clientError('XBOT_STREAM_INCOMPLETE', 'xBot agent stream closed before a terminal run event');
+        if (terminal === 'failed') throw clientError('XBOT_RUN_FAILED', 'xBot agent run failed');
         if (terminal === 'cancelled') return { completed: false, cancelled: true, runId };
         return { completed: true, runId };
     }
@@ -254,9 +254,9 @@ function createHermesClient(options = {}) {
                 headers: { ...headers(owner, undefined, input.runId), Accept: 'text/event-stream' },
                 signal: state.controller.signal
             });
-            if (!response.ok) throw clientError('HERMES_UPSTREAM_ERROR', 'Hermes request failed', response.status);
+            if (!response.ok) throw clientError('XBOT_UPSTREAM_ERROR', 'xBot agent request failed', response.status);
             if (!(response.headers.get('content-type') || '').toLowerCase().includes('text/event-stream')) {
-                throw clientError('HERMES_STREAM_INVALID', 'Hermes did not return an SSE stream');
+                throw clientError('XBOT_STREAM_INVALID', 'xBot agent did not return an SSE stream');
             }
             return await consumeRunEvents(response, input.runId, input.onEvent || (() => {}));
         } catch (error) {
@@ -280,4 +280,4 @@ function createHermesClient(options = {}) {
     return { createRun, approveRun, streamRun, cancelRun };
 }
 
-module.exports = { createHermesClient };
+module.exports = { createXBotAgentClient };

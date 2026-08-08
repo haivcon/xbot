@@ -14,7 +14,7 @@ const db = require('../../db.js');
 const { dbRun, dbGet, dbAll } = require('../../db/core');
 const { createChatOrchestrator, parseCostOptions } = require('../services/chatOrchestrator');
 const { createToolPolicy } = require('../services/chatOrchestrator/policy');
-const { createHermesClient } = require('../services/hermes/client');
+const { createXBotAgentClient } = require('../services/xbot-agent/client');
 const { createNineRouterConnection } = require('../services/nineRouterConnection');
 const { beginChatRequest, recordChatOutcome } = require('../services/chatOrchestrator/telemetry');
 const { recordChatAudit } = require('../services/chatOrchestrator/audit');
@@ -107,13 +107,13 @@ function getTenantApiRoot() {
 function getChatOrchestratorV2(allowedModels = configuredModels()) {
     const modelKey = [...new Set(allowedModels.map(String).filter(Boolean))].sort().join('\n');
     if (chatOrchestratorsV2.has(modelKey)) return chatOrchestratorsV2.get(modelKey);
-    let hermesClient;
-    if (process.env.HERMES_ENABLED === 'true') {
-        hermesClient = createHermesClient({
-            baseUrl: process.env.HERMES_INTERNAL_URL,
-            serviceToken: process.env.HERMES_SERVICE_TOKEN,
-            contextSecret: process.env.HERMES_CONTEXT_SECRET,
-            timeoutMs: Number(process.env.HERMES_TIMEOUT_MS || 60000)
+    let xbotAgentClient;
+    if (process.env.XBOT_AGENT_ENABLED === 'true') {
+        xbotAgentClient = createXBotAgentClient({
+            baseUrl: process.env.XBOT_AGENT_INTERNAL_URL,
+            serviceToken: process.env.XBOT_AGENT_SERVICE_TOKEN,
+            contextSecret: process.env.XBOT_AGENT_CONTEXT_SECRET,
+            timeoutMs: Number(process.env.XBOT_AGENT_TIMEOUT_MS || 60000)
         });
     }
     const tools = convertToolsToOpenAI(getToolDeclarations());
@@ -157,8 +157,8 @@ function getChatOrchestratorV2(allowedModels = configuredModels()) {
             if (result?.displayMessage) result.displayMessage = htmlToMarkdown(result.displayMessage);
             return result;
         },
-        hermesEnabled: process.env.HERMES_ENABLED === 'true',
-        hermesClient
+        hermesEnabled: process.env.XBOT_AGENT_ENABLED === 'true',
+        hermesClient: xbotAgentClient
     });
     chatOrchestratorsV2.set(modelKey, orchestrator);
     return orchestrator;
@@ -423,17 +423,17 @@ function createChatRoutes() {
         }
     });
 
-    router.post('/chat/hermes/:runId/approval', async (req, res) => {
+    router.post('/chat/agent/:runId/approval', async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Authentication required' });
-        if (process.env.HERMES_ENABLED !== 'true') return res.status(503).json({ error: 'Hermes is not enabled' });
+        if (process.env.XBOT_AGENT_ENABLED !== 'true') return res.status(503).json({ error: 'xBot Agent is not enabled' });
         const runId = String(req.params.runId || '').trim();
         const choice = String(req.body?.choice || '').trim();
         if (!runId || runId.length > 256) return res.status(400).json({ error: 'Invalid run ID' });
         if (!['once', 'deny'].includes(choice)) return res.status(400).json({ error: 'Invalid approval choice' });
         try {
             const tenantId = normalizeTenantId(userId);
-            const result = await getChatOrchestratorV2(configuredModels()).approveHermesRun({
+            const result = await getChatOrchestratorV2(configuredModels()).approveAgentRun({
                 tenantId, userId: tenantId, runId, choice
             });
             recordChatAudit({
@@ -441,7 +441,7 @@ function createChatRoutes() {
                 userId: tenantId,
                 requestId: crypto.createHash('sha256').update(runId).digest('hex'),
                 action: 'approval_submitted',
-                engine: 'hermes',
+                engine: 'xbot-agent',
                 outcome: 'completed',
                 code: `CHOICE_${choice}`
             });
@@ -450,7 +450,7 @@ function createChatRoutes() {
             const status = error?.code === 'RUN_TENANT_MISMATCH' ? 403 :
                 ['APPROVAL_NOT_PENDING', 'APPROVAL_IN_PROGRESS'].includes(error?.code) ? 409 :
                     error?.code === 'APPROVAL_CHOICE_INVALID' ? 400 : 502;
-            return res.status(status).json({ error: status === 502 ? 'Hermes approval failed' : error.message });
+            return res.status(status).json({ error: status === 502 ? 'xBot agent approval failed' : error.message });
         }
     });
 

@@ -144,7 +144,7 @@ export const CLI_TOOLS = {
   },
   hermes: {
     id: "hermes",
-    name: "Hermes Agent",
+    name: "xBot Agent",
     image: "/providers/hermes.png",
     color: "#8B5CF6",
     description: "Nous Research self-improving AI agent",

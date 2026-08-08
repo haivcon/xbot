@@ -513,14 +513,14 @@ async function showOpenCodeMenu(port, breadcrumb = []) {
   });
 }
 
-// ─── Hermes Agent ─────────────────────────────────────────────────────────────
+// ─── xBot Agent ─────────────────────────────────────────────────────────────
 
 async function buildHermesHeader() {
   const result = await api.getCliToolSettings("hermes");
   if (!result.success) return `  ${COLORS.red}Failed to load settings${COLORS.reset}`;
 
   const { installed, has9Router, settings } = result.data;
-  if (!installed) return `Status:   ${COLORS.red}✗ Hermes Agent not installed${COLORS.reset}`;
+  if (!installed) return `Status:   ${COLORS.red}✗ xBot Agent not installed${COLORS.reset}`;
 
   if (!has9Router) {
     return [
@@ -546,23 +546,23 @@ async function hermesQuickSetup(port) {
     return;
   }
 
-  const model = await selectModelFromList("Select Hermes Model", "", { excludeCombos: true });
+  const model = await selectModelFromList("Select xBot Agent Model", "", { excludeCombos: true });
   if (!model) return;
 
   const result = await api.applyCliToolSettings("hermes", { baseUrl: endpoint, apiKey, model });
-  showStatus(result.success ? "Hermes setup completed!" : `Failed: ${result.error}`, result.success ? "success" : "error");
+  showStatus(result.success ? "xBot Agent setup completed!" : `Failed: ${result.error}`, result.success ? "success" : "error");
   await pause();
 }
 
 async function hermesReset() {
   const result = await api.resetCliToolSettings("hermes");
-  showStatus(result.success ? "Hermes settings reset!" : `Failed: ${result.error}`, result.success ? "success" : "error");
+  showStatus(result.success ? "xBot Agent settings reset!" : `Failed: ${result.error}`, result.success ? "success" : "error");
   await pause();
 }
 
 async function showHermesMenu(port, breadcrumb = []) {
   await showMenuWithBack({
-    title: "⚡ Hermes Agent Settings",
+    title: "⚡ xBot Agent Settings",
     breadcrumb,
     headerContent: buildHermesHeader,
     refresh: async () => ({}),
@@ -608,8 +608,8 @@ async function showCliToolsMenu(port, breadcrumb = []) {
         action: async () => { await showOpenCodeMenu(port, [...breadcrumb, "OpenCode"]); return true; }
       },
       {
-        label: "Hermes",
-        action: async () => { await showHermesMenu(port, [...breadcrumb, "Hermes"]); return true; }
+        label: "xBot Agent",
+        action: async () => { await showHermesMenu(port, [...breadcrumb, "xBot Agent"]);
       }
     ]
   });

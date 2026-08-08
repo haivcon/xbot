@@ -6,7 +6,7 @@ const ACTIONS = new Set([
     'request_started', 'routing_decision', 'tool_started', 'tool_completed',
     'approval_submitted', 'request_completed', 'request_cancelled', 'request_failed'
 ]);
-const ENGINES = new Set(['9router', 'hermes', 'unknown']);
+const ENGINES = new Set(['9router', 'xbot-agent', 'unknown']);
 const OUTCOMES = new Set(['started', 'completed', 'cancelled', 'failed', 'fallback', 'unknown']);
 
 function bounded(value, fallback, max = 128) {

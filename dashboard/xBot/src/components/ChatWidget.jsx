@@ -410,7 +410,7 @@ export default function ChatWidget() {
                         return copy;
                     });
                 },
-                onApprovalRequired: data => api.confirmHermesApproval(data),
+                onApprovalRequired: data => api.confirmAgentApproval(data),
                 onDone: (data) => {
                     setConversationId(data.conversationId);
                     setMessages(prev => {

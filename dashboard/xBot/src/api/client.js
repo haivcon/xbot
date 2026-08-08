@@ -340,19 +340,19 @@ class ApiClient {
     }
 
     // SSE streaming chat
-    approveHermesRun(runId, choice) {
-        return this.post(`/ai/chat/hermes/${encodeURIComponent(runId)}/approval`, { choice });
+    approveAgentRun(runId, choice) {
+        return this.post(`/ai/chat/agent/${encodeURIComponent(runId)}/approval`, { choice });
     }
 
-    async confirmHermesApproval(data) {
+    async confirmAgentApproval(data) {
         const runId = typeof data?.runId === 'string' ? data.runId : '';
         const choices = Array.isArray(data?.choices) ? data.choices : [];
-        if (!runId || !choices.includes('deny')) throw new Error('Invalid Hermes approval request');
-        const command = String(data?.command || 'Hermes requested an action').slice(0, 500);
+        if (!runId || !choices.includes('deny')) throw new Error('Invalid xBot agent approval request');
+        const command = String(data?.command || 'xBot requested an action').slice(0, 500);
         const approved = choices.includes('once') && window.confirm(
-            `Hermes requests permission to run:\n\n${command}\n\nOK: approve once. Cancel: deny.`
+            `xBot requests permission to run:\n\n${command}\n\nOK: approve once. Cancel: deny.`
         );
-        return this.approveHermesRun(runId, approved ? 'once' : 'deny');
+        return this.approveAgentRun(runId, approved ? 'once' : 'deny');
     }
 
     async streamChatMessage(message, conversationId, { onTextDelta, onToolStart, onToolResult, onApprovalRequired, onDone, onError, image, model, provider, persona, customPersonaText, signal } = {}) {

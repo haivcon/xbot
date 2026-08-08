@@ -328,9 +328,9 @@ describe('Chat orchestrator', () => {
         await expect(pending).rejects.toMatchObject({ code: 'CLIENT_ABORTED' });
     });
 
-    test('falls back from Hermes only before output starts', async () => {
+    test('falls back from xBot agent only before output starts', async () => {
         const hermesClient = {
-            createRun: jest.fn().mockRejectedValue(Object.assign(new Error('offline'), { code: 'HERMES_UPSTREAM_ERROR' }))
+            createRun: jest.fn().mockRejectedValue(Object.assign(new Error('offline'), { code: 'XBOT_UPSTREAM_ERROR' }))
         };
         const fetchImpl = jest.fn().mockResolvedValue(sseResponse([
             'data: {"choices":[{"delta":{"content":"fallback"}}]}\n\n',
@@ -348,11 +348,11 @@ describe('Chat orchestrator', () => {
         expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
 
-    test('never falls back after Hermes created a run, even when its stream emitted nothing', async () => {
+    test('never falls back after xBot agent created a run, even when its stream emitted nothing', async () => {
         const hermesClient = {
             createRun: jest.fn().mockResolvedValue({ runId: 'run-1' }),
             streamRun: jest.fn().mockRejectedValue(
-                Object.assign(new Error('stream closed'), { code: 'HERMES_STREAM_INCOMPLETE' })
+                Object.assign(new Error('stream closed'), { code: 'XBOT_STREAM_INCOMPLETE' })
             ),
             cancelRun: jest.fn().mockResolvedValue({ status: 'stopping' })
         };
@@ -367,14 +367,14 @@ describe('Chat orchestrator', () => {
         });
 
         await expect(orchestrator.streamChat({ ...baseInput, requestId: 'request-1' }))
-            .rejects.toMatchObject({ code: 'HERMES_STREAM_INCOMPLETE' });
+            .rejects.toMatchObject({ code: 'XBOT_STREAM_INCOMPLETE' });
         expect(hermesClient.cancelRun).toHaveBeenCalledWith(expect.objectContaining({
             tenantId: 'tenant-a', userId: 'user-a', runId: 'run-1', requestId: expect.any(String)
         }));
         expect(fetchImpl).not.toHaveBeenCalled();
     });
 
-    test('resumes only a pending Hermes choice bound to the tenant and run', async () => {
+    test('resumes only a pending xBot agent choice bound to the tenant and run', async () => {
         let releaseStream;
         const streamHeld = new Promise(resolve => { releaseStream = resolve; });
         const hermesClient = {
@@ -401,15 +401,15 @@ describe('Chat orchestrator', () => {
         const running = orchestrator.streamChat({ ...baseInput, requestId: 'request-1' }, { onEvent: jest.fn() });
         await new Promise(resolve => setImmediate(resolve));
 
-        await expect(orchestrator.approveHermesRun({
+        await expect(orchestrator.approveAgentRun({
             tenantId: 'tenant-b', userId: 'user-a', runId: 'run-1',
             choice: 'once', requestId: 'approval-cross-tenant'
         })).rejects.toMatchObject({ code: 'RUN_TENANT_MISMATCH' });
-        await expect(orchestrator.approveHermesRun({
+        await expect(orchestrator.approveAgentRun({
             tenantId: 'tenant-a', userId: 'user-a', runId: 'run-1',
             choice: 'always', requestId: 'approval-unoffered'
         })).rejects.toMatchObject({ code: 'APPROVAL_CHOICE_INVALID' });
-        await expect(orchestrator.approveHermesRun({
+        await expect(orchestrator.approveAgentRun({
             tenantId: 'tenant-a', userId: 'user-a', runId: 'run-1',
             choice: 'once', requestId: 'approval-1'
         })).resolves.toEqual({ status: 'running' });
@@ -417,13 +417,13 @@ describe('Chat orchestrator', () => {
         expect(hermesClient.approveRun).toHaveBeenCalledTimes(1);
     });
 
-    test('does not fallback or report done after Hermes emitted partial output', async () => {
+    test('does not fallback or report done after xBot agent emitted partial output', async () => {
         const events = [];
         const hermesClient = {
             createRun: jest.fn().mockResolvedValue({ runId: 'run-1' }),
             streamRun: jest.fn(async ({ onEvent }) => {
                 await onEvent({ type: 'text-delta', text: 'partial' });
-                throw Object.assign(new Error('stream failed'), { code: 'HERMES_UPSTREAM_ERROR' });
+                throw Object.assign(new Error('stream failed'), { code: 'XBOT_UPSTREAM_ERROR' });
             })
         };
         const fetchImpl = jest.fn();
@@ -435,12 +435,12 @@ describe('Chat orchestrator', () => {
             hermesEnabled: true,
             hermesClient
         });
-        await expect(orchestrator.streamChat({ ...baseInput, requestId: 'request-1' }, { onEvent: e => events.push(e) })).rejects.toMatchObject({ code: 'HERMES_UPSTREAM_ERROR' });
+        await expect(orchestrator.streamChat({ ...baseInput, requestId: 'request-1' }, { onEvent: e => events.push(e) })).rejects.toMatchObject({ code: 'XBOT_UPSTREAM_ERROR' });
         expect(fetchImpl).not.toHaveBeenCalled();
         expect(events.some(e => e.type === 'done')).toBe(false);
     });
 
-    test('does not report a cancelled Hermes run as completed', async () => {
+    test('does not report a cancelled xBot agent run as completed', async () => {
         const events = [];
         const hermesClient = {
             createRun: jest.fn().mockResolvedValue({ runId: 'run-1' }),
@@ -459,7 +459,7 @@ describe('Chat orchestrator', () => {
         });
 
         await expect(orchestrator.streamChat({ ...baseInput, requestId: 'request-1' }, { onEvent: event => events.push(event) }))
-            .resolves.toEqual({ completed: false, cancelled: true, text: '', engine: 'hermes', runId: 'run-1' });
+            .resolves.toEqual({ completed: false, cancelled: true, text: '', engine: 'xbot-agent', runId: 'run-1' });
         expect(events.some(event => event.type === 'done')).toBe(false);
     });
 
