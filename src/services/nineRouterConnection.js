@@ -77,14 +77,18 @@ function normalizeModel(raw, allowedModels) {
         label: String(raw.name || raw.label || raw.id),
         provider: '9router',
         upstream: { id: upstreamId, label: upstreamId },
-        capabilities: raw.capabilities && typeof raw.capabilities === 'object' ? raw.capabilities : {}
+        capabilities: raw.capabilities && typeof raw.capabilities === 'object' ? raw.capabilities : {},
+        contextLength: Number(raw.contextLength || raw.context_window || raw.contextWindow || 0) || null,
+        maxOutputTokens: Number(raw.maxOutputTokens || raw.max_output_tokens || 0) || null,
+        pricing: raw.pricing && typeof raw.pricing === 'object' ? raw.pricing : null,
+        category: String(raw.category || raw.kind || raw.type || 'llm')
     };
 }
 
 function checkNineRouterReadiness(options = {}) {
     try {
-        normalizeBaseUrl(options.baseUrl || process.env.NINEROUTER_BASE_URL || '');
-        const serviceCredential = String(options.serviceCredential || process.env.NINEROUTER_API_KEY || '').trim();
+        normalizeBaseUrl(options.baseUrl || process.env.ROUTER_URL || '');
+        const serviceCredential = String(options.serviceCredential || '').trim();
         if (!serviceCredential && typeof options.buildHeaders !== 'function') {
             throw new NineRouterConnectionError('SERVICE_CREDENTIAL_REQUIRED', '9Router service credential is required');
         }
@@ -103,8 +107,8 @@ function createNineRouterConnection(options = {}) {
     if (typeof fetchImpl !== 'function') {
         throw new NineRouterConnectionError('FETCH_REQUIRED', 'A fetch implementation is required');
     }
-    const baseUrl = normalizeBaseUrl(options.baseUrl || process.env.NINEROUTER_BASE_URL || '');
-    const serviceCredential = String(options.serviceCredential || process.env.NINEROUTER_API_KEY || '').trim();
+    const baseUrl = normalizeBaseUrl(options.baseUrl || process.env.ROUTER_URL || '');
+    const serviceCredential = String(options.serviceCredential || '').trim();
     const buildHeaders = options.buildHeaders;
     if (!serviceCredential && typeof buildHeaders !== 'function') {
         throw new NineRouterConnectionError('SERVICE_CREDENTIAL_REQUIRED', '9Router service credential is required', 503);
@@ -114,7 +118,7 @@ function createNineRouterConnection(options = {}) {
     if (!allowedModels.size && !allowDynamicModels) {
         throw new NineRouterConnectionError('MODEL_ALLOWLIST_REQUIRED', '9Router model allowlist is required', 503);
     }
-    const timeoutMs = Math.max(100, Number(options.timeoutMs || process.env.NINEROUTER_DISCOVERY_TIMEOUT_MS || 5000));
+    const timeoutMs = Math.max(100, Number(options.timeoutMs || 5000));
 
     async function discover(identity, requestOptions = {}) {
         if (!identity?.tenantId || !identity?.userId) {

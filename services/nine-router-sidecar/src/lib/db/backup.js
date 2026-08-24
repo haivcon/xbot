@@ -26,7 +26,7 @@ const KEEP_BACKUPS = 3;
 const BACKUP_EXCLUDE_TABLES = ["requestDetails"];
 
 function getActiveBackupsDir() {
-  if (process.env.XBOT_TENANT_MODE !== "true") {
+  if (process.env.TENANT_MODE !== "true") {
     ensureDirs();
     return BACKUPS_DIR;
   }

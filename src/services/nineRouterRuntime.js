@@ -122,7 +122,7 @@ function createNineRouterRuntime(options = {}) {
 }
 
 const nineRouterRuntime = createNineRouterRuntime({
-    enabled: String(process.env.CHAT_ORCHESTRATOR_V2 || '').toLowerCase() === 'true'
+    enabled: String(process.env.ROUTER_ENABLED || '').toLowerCase() === 'true'
 });
 
 module.exports = { createNineRouterRuntime, nineRouterRuntime, runtimeError };

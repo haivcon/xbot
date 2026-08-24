@@ -552,6 +552,10 @@
   "ai_usage_finish_reason": "Kết thúc: {reason}",
   "ai_usage_output_type": "🖼️ Định dạng: {type}",
   "ai_error": "Xin lỗi, có lỗi khi gọi Xlayer B-Ai. Vui lòng thử lại.",
+  "ai_9router_not_configured": "⚙️ 9Router chưa được cấu hình cho tài khoản của bạn. Hãy mở cài đặt Chat AI và kết nối nhà cung cấp AI.",
+  "ai_9router_quota": "⏳ Hạn mức 9Router của bạn đã hết. Vui lòng thử lại sau hoặc kiểm tra nhà cung cấp trong cài đặt Chat AI.",
+  "ai_9router_timeout": "⏱️ 9Router phản hồi quá lâu. Vui lòng thử lại sau ít phút.",
+  "ai_9router_unavailable": "🔌 9Router đang tạm thời không khả dụng. Vui lòng thử lại sau.",
   "ai_switch_to_user_keys": "Bạn đã dùng hết {limit} lượt /ai miễn phí. Chuyển sang API Google cá nhân.",
   "ai_using_personal_key": "Đang dùng API Google cá nhân của bạn.",
   "ai_image_too_large": "⚠️ Ảnh quá lớn để xử lý (tối đa {limitMb} MB). Vui lòng gửi ảnh nhỏ hơn.",
@@ -2300,9 +2304,9 @@
   "price_alert_url_invalid": "❌ Định dạng URL không hợp lệ. Vui lòng bắt đầu bằng http:// hoặc https://",
   "ai_provider_9router": "9Router",
   "ai_api_menu_hint_9router": "Dùng các model AI được định tuyến qua 9Router, bao gồm combo, fallback và provider OpenAI-compatible.",
-  "ai_api_add_hint_9router": "Thêm API key 9Router nếu instance 9Router của bạn yêu cầu Bearer authentication.",
-  "ai_api_add_prompt_9router": "Gửi API key 9Router của bạn.",
-  "ai_api_add_placeholder_9router": "API key 9Router",
-  "ai_api_get_key_9router": "Mở dashboard 9Router",
-  "ai_api_usecases_9router": "Định tuyến request qua 9Router tại {url}. Model mặc định: {model}."
+  "ai_api_add_hint_9router": "Kết nối nhà cung cấp AI trong phần cài đặt Chat AI. Thông tin đăng nhập được cô lập theo tenant của bạn.",
+  "ai_api_add_prompt_9router": "Cấu hình 9Router trong phần cài đặt Chat AI.",
+  "ai_api_add_placeholder_9router": "",
+  "ai_api_get_key_9router": "Mở cài đặt Chat AI",
+  "ai_api_usecases_9router": "9Router khám phá model và định tuyến yêu cầu bằng cấu hình tenant riêng biệt của bạn."
 }

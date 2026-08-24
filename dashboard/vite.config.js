@@ -28,7 +28,9 @@ function swVersionPlugin() {
 const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'));
 
 export default defineConfig(({ mode }) => ({
-    base: '/',
+    root: path.resolve(__dirname, 'xBot'),
+    base: '/xBot/',
+    publicDir: path.resolve(__dirname, 'public'),
     plugins: [tailwindcss(), react(), swVersionPlugin()],
     define: {
         __APP_VERSION__: JSON.stringify(pkg.version),
@@ -49,7 +51,7 @@ export default defineConfig(({ mode }) => ({
         },
     },
     build: {
-        outDir: 'dist',
+        outDir: path.resolve(__dirname, 'dist/xBot'),
         emptyOutDir: true,
         rollupOptions: {
             input: {

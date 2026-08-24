@@ -40,7 +40,7 @@ function createTenantDiscoveryConnection(options = {}) {
         })),
         allowedModels: options.allowedModels || [],
         allowDynamicModels: true,
-        timeoutMs: options.timeoutMs || Number(process.env.NINEROUTER_DISCOVERY_TIMEOUT_MS || 5000),
+        timeoutMs: options.timeoutMs || 5000,
         fetchImpl: options.fetchImpl
     });
 }
@@ -92,19 +92,13 @@ function getDefaultOrchestrator(allowedModels, options = {}) {
     if (!defaultOrchestrators.has(key)) {
         defaultOrchestrators.set(key, createTenantChatOrchestrator({
             allowedModels: normalizedModels,
-            timeoutMs: options.timeoutMs || Number(process.env.CHAT_ORCHESTRATOR_TIMEOUT_MS || 60_000),
-            maxConcurrentPerTenant: options.maxConcurrentPerTenant
-                || Number(process.env.CHAT_ORCHESTRATOR_TENANT_CONCURRENCY || 2),
-            rateLimitPerMinute: options.rateLimitPerMinute
-                || Number(process.env.CHAT_ORCHESTRATOR_TENANT_RATE_LIMIT || 15),
-            maxInputTokens: options.maxInputTokens
-                || Number(process.env.CHAT_ORCHESTRATOR_MAX_INPUT_TOKENS || 25_000),
-            maxOutputTokens: options.maxOutputTokens
-                || Number(process.env.CHAT_ORCHESTRATOR_MAX_OUTPUT_TOKENS || 8192),
-            circuitFailureThreshold: options.circuitFailureThreshold
-                || Number(process.env.CHAT_ORCHESTRATOR_CIRCUIT_FAILURES || 5),
-            circuitResetMs: options.circuitResetMs
-                || Number(process.env.CHAT_ORCHESTRATOR_CIRCUIT_RESET_MS || 30_000),
+            timeoutMs: options.timeoutMs || 60_000,
+            maxConcurrentPerTenant: options.maxConcurrentPerTenant || 2,
+            rateLimitPerMinute: options.rateLimitPerMinute || 15,
+            maxInputTokens: options.maxInputTokens || 25_000,
+            maxOutputTokens: options.maxOutputTokens || 8192,
+            circuitFailureThreshold: options.circuitFailureThreshold || 5,
+            circuitResetMs: options.circuitResetMs || 30_000,
             fetchImpl: options.fetchImpl
         }));
     }

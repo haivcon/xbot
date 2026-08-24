@@ -34,7 +34,9 @@ const useWsStore = create((set, get) => ({
         if (existing && existing.readyState <= 1) return;
 
         try {
-            const ws = new WebSocket(config.wsUrl);
+            const auth = JSON.parse(localStorage.getItem('xbot_dashboard_auth') || '{}');
+            if (!auth.token) return;
+            const ws = new WebSocket(config.wsUrl, ['xbot-auth', auth.token]);
             let reconnectTimer = null;
 
             ws.onopen = () => {

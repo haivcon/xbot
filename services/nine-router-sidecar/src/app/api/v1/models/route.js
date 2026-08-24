@@ -13,14 +13,20 @@ import { resolveQoderModels } from "open-sse/services/qoderModels.js";
 import { resolveCopilotModels } from "open-sse/services/copilotModels.js";
 import { resolveClinepassModels } from "open-sse/services/clinepassModels.js";
 import { resolveGrokCliModels } from "open-sse/services/grokCliModels.js";
+import { resolveCodexModels } from "open-sse/services/codexModels.js";
 import { updateProviderCredentials } from "@/sse/services/tokenRefresh";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { capabilitiesFromServiceKind, getCapabilitiesForModel } from "open-sse/providers/capabilities.js";
+import { proxyAwareFetch } from "open-sse/utils/proxyFetch.js";
 
 // Per-provider live model resolvers. Each receives a connection record and
 // returns { models: [{ id, name? }, ...] } | null on failure.
 // Adding a provider here makes /v1/models prefer the live catalog for it.
 const LIVE_MODEL_RESOLVERS = {
+  codex: async (conn) => {
+    const result = await resolveCodexModels(conn);
+    return result?.models?.length ? { models: result.models } : null;
+  },
   kiro: async (conn) => {
     const result = await resolveKiroModels({
       accessToken: conn.accessToken,
@@ -168,13 +174,20 @@ async function fetchCompatibleModelIds(connection) {
   }
 
   try {
+    const proxyOptions = await resolveConnectionProxyConfig(connection.providerSpecificData || {});
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
-    const response = await fetch(url, {
+    const response = await proxyAwareFetch(url, {
       method: "GET",
       headers: { ...headers, [INTERNAL_MODELS_FETCH_HEADER]: "1" },
       cache: "no-store",
       signal: controller.signal,
+    }, {
+        connectionProxyEnabled: proxyOptions.connectionProxyEnabled === true,
+        connectionProxyUrl: proxyOptions.connectionProxyUrl || "",
+        connectionNoProxy: proxyOptions.connectionNoProxy || "",
+        vercelRelayUrl: proxyOptions.vercelRelayUrl || "",
+        strictProxy: proxyOptions.strictProxy === true,
     });
     clearTimeout(timeoutId);
 
@@ -199,6 +212,9 @@ async function fetchCompatibleModelIds(connection) {
 // LLM is the default kind for providers missing serviceKinds.
 function providerMatchesKinds(providerId, kindFilter) {
   const provider = AI_PROVIDERS[providerId];
+  if (!provider && (isOpenAICompatibleProvider(providerId) || isAnthropicCompatibleProvider(providerId))) {
+    return kindFilter.includes(LLM_KIND);
+  }
   const kinds = Array.isArray(provider?.serviceKinds) && provider.serviceKinds.length > 0
     ? provider.serviceKinds
     : [LLM_KIND];
@@ -226,7 +242,7 @@ export async function buildModelsList(kindFilter, options = {}) {
     connections = await getProviderConnections();
     connections = connections.filter(c => c.isActive !== false);
   } catch (e) {
-    console.log("Could not fetch providers, returning all models");
+    console.log("Could not fetch providers, returning no models");
   }
 
   let combos = [];
@@ -267,56 +283,7 @@ export async function buildModelsList(kindFilter, options = {}) {
 
   const models = [];
 
-  // Combos first (filtered by kind). Web combos expose `kind` so AI knows search vs fetch.
-  for (const combo of combos) {
-    if (!comboMatchesKinds(combo, kindFilter)) continue;
-    const entry = {
-      id: combo.name,
-      object: "model",
-      owned_by: "combo",
-    };
-    if (combo.kind === "webSearch" || combo.kind === "webFetch") {
-      entry.kind = combo.kind;
-    }
-    models.push(entry);
-  }
-
-  if (connections.length === 0) {
-    // DB unavailable -> return static models, filtered by per-model kind
-    const aliasToProviderId = Object.fromEntries(
-      Object.entries(PROVIDER_ID_TO_ALIAS).map(([id, alias]) => [alias, id])
-    );
-    for (const [alias, providerModels] of Object.entries(PROVIDER_MODELS)) {
-      const providerId = aliasToProviderId[alias] || alias;
-      if (!providerMatchesKinds(providerId, kindFilter)) continue;
-      for (const model of providerModels) {
-        if (!kindFilter.includes(modelKind(model))) continue;
-        if (isDisabled(alias, model.id)) continue;
-        models.push({
-          id: `${alias}/${model.id}`,
-          object: "model",
-          owned_by: alias,
-        });
-      }
-    }
-
-    for (const customModel of customModels) {
-      if (!customModel?.id || (customModel.type && customModel.type !== "llm")) continue;
-      // Custom models without active connection are LLM-only by current schema
-      if (!kindFilter.includes(LLM_KIND)) continue;
-      const providerAlias = customModel.providerAlias;
-      if (!providerAlias) continue;
-
-      const modelId = String(customModel.id).trim();
-      if (!modelId) continue;
-
-      models.push({
-        id: `${providerAlias}/${modelId}`,
-        object: "model",
-        owned_by: providerAlias,
-      });
-    }
-  } else {
+  if (connections.length > 0) {
     for (const [providerId, conn] of activeConnectionByProvider.entries()) {
       if (!providerMatchesKinds(providerId, kindFilter)) continue;
 
@@ -348,8 +315,10 @@ export async function buildModelsList(kindFilter, options = {}) {
               ),
             ),
           )
-        : providerModels.map((model) => model.id);
+        : [];
 
+      // Static PROVIDER_MODELS is connection/setup metadata only. Tenant model
+      // availability must come from an explicit enabled list or live discovery.
       if (isCompatibleProvider && rawModelIds.length === 0 && !skipDynamicFetch) {
         rawModelIds = await fetchCompatibleModelIds(conn);
       }
@@ -482,6 +451,24 @@ export async function buildModelsList(kindFilter, options = {}) {
         });
       }
     }
+  }
+
+  // A combo is available only when every configured member is available through
+  // this tenant's active provider connections. Empty/stale combos are not models.
+  const availableModelIds = new Set(models.map((model) => model.id));
+  for (const combo of combos) {
+    if (!comboMatchesKinds(combo, kindFilter)) continue;
+    const members = Array.isArray(combo.models) ? combo.models : [];
+    if (members.length === 0 || !members.every((modelId) => availableModelIds.has(modelId))) continue;
+    const entry = {
+      id: combo.name,
+      object: "model",
+      owned_by: "combo",
+    };
+    if (combo.kind === "webSearch" || combo.kind === "webFetch") {
+      entry.kind = combo.kind;
+    }
+    models.push(entry);
   }
 
   const dedupedModels = [];

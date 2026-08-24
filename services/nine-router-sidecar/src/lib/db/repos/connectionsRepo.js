@@ -1,6 +1,11 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
-import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { parseJson } from "../helpers/jsonCol.js";
+import { decryptConnectionData, encryptConnectionData, isEncryptedConnectionData } from "../helpers/credentialVault.js";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { getTenantId } = require("../../../../tenant-context.cjs");
 
 const OPTIONAL_FIELDS = [
   "displayName", "email", "globalPriority", "defaultModel",
@@ -12,7 +17,12 @@ const OPTIONAL_FIELDS = [
 
 function rowToConn(row) {
   if (!row) return null;
-  const extra = parseJson(row.data, {});
+  let extra;
+  if (isEncryptedConnectionData(row.data)) {
+    extra = decryptConnectionData(row.data, { tenantId: getTenantId(), connectionId: row.id });
+  } else {
+    extra = parseJson(row.data, {});
+  }
   return {
     ...extra,
     id: row.id,
@@ -37,7 +47,7 @@ function connToRow(c) {
     email: email ?? null,
     priority: priority ?? null,
     isActive: isActive === false ? 0 : 1,
-    data: stringifyJson(rest),
+    data: encryptConnectionData(rest, { tenantId: getTenantId(), connectionId: id }),
     createdAt,
     updatedAt,
   };

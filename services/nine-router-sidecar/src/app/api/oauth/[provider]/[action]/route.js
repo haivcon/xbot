@@ -8,6 +8,26 @@ import {
 } from "@/lib/oauth/providers";
 import { createProviderConnection } from "@/models";
 import {
+  authorizePublicRedirect,
+  exchangePublicRedirect,
+} from "@/lib/oauth/publicRedirect";
+import {
+  beginTenantProviderAction,
+  completeTenantProviderAction,
+  enableFreeProvider,
+  importTenantProviderSecret,
+  probeFreeProvider,
+} from "@/lib/oauth/tenantProviderActions";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { getTenantId } = require("../../../../../../tenant-context.cjs");
+
+function tenantBinding() {
+  const tenantId = String(getTenantId() || "");
+  return { tenantId, userId: tenantId, sessionId: tenantId };
+}
+import {
   startCodexProxy,
   stopCodexProxy,
   registerCodexSession,
@@ -195,7 +215,65 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: "Invalid or empty request body" }, { status: 400 });
     }
 
+    if (action === "redirect-authorize") {
+      const result = await authorizePublicRedirect({
+        provider,
+        callbackUri: body.callbackUri,
+        state: body.state,
+        getProvider,
+      });
+      return NextResponse.json(result);
+    }
+
+    if (action === "redirect-exchange") {
+      const result = await exchangePublicRedirect({
+        provider,
+        callbackUri: body.callbackUri,
+        state: body.state,
+        code: body.code,
+        codeVerifier: body.codeVerifier,
+        getProvider,
+        createConnection: createProviderConnection,
+      });
+      return NextResponse.json(result);
+    }
+
+    if (action === "manual-start") {
+      return NextResponse.json(await beginTenantProviderAction({ provider, binding: tenantBinding() }));
+    }
+
+    if (action === "manual-complete") {
+      return NextResponse.json(await completeTenantProviderAction({
+        provider,
+        binding: tenantBinding(),
+        sessionToken: body.sessionToken,
+        input: body.input,
+      }));
+    }
+
+    if (action === "free-enable") {
+      return NextResponse.json(await enableFreeProvider({ provider }));
+    }
+
+    if (action === "manual-secret") {
+      return NextResponse.json(await importTenantProviderSecret({
+        provider,
+        binding: tenantBinding(),
+        input: body.input,
+      }));
+    }
+
+    if (action === "service-probe") {
+      return NextResponse.json(await probeFreeProvider({ provider }));
+    }
+
     if (action === "exchange") {
+      // The upstream generic exchange accepts raw JWTs and callback-carried
+      // credentials. xBot exposes only reviewed redirect/manual routes.
+      getTenantId();
+      return NextResponse.json({ error: "Use the reviewed tenant-safe provider action" }, { status: 400 });
+
+      /* Retained upstream compatibility code below is unreachable for xBot tenants. */
       const { code, redirectUri, codeVerifier, state, meta } = body;
 
       // Detect if "code" is actually a raw JWT access token (starts with eyJ)
@@ -345,7 +423,9 @@ export async function POST(request, { params }) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
-    console.log("OAuth POST error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const status = Number(error?.statusCode) || 500;
+    const code = String(error?.code || "OAUTH_ACTION_FAILED");
+    console.warn(`OAuth POST failed: ${code}`);
+    return NextResponse.json({ error: "Provider authorization did not complete", code }, { status });
   }
 }

@@ -31,7 +31,7 @@ describe('9Router connection discovery', () => {
         const fetchImpl = jest.fn().mockResolvedValue(jsonResponse({
             object: 'list',
             data: [
-                { id: 'claude/sonnet', object: 'model', owned_by: 'claude', capabilities: { tools: true } },
+                { id: 'claude/sonnet', object: 'model', owned_by: 'claude', capabilities: { tools: true }, context_window: 200000, max_output_tokens: 8192, pricing: { input: 3 }, category: 'llm' },
                 { id: 'codex/gpt-5', object: 'model', owned_by: 'codex' },
                 { id: 'antigravity/gemini', object: 'model', owned_by: 'antigravity' },
                 { id: 'image/flux', object: 'model', owned_by: 'image', kind: 'image' },
@@ -60,6 +60,13 @@ describe('9Router connection discovery', () => {
                 { id: 'antigravity', label: 'antigravity' },
             ]
         });
+        expect(result.models[0]).toEqual(expect.objectContaining({
+            contextLength: 200000,
+            maxOutputTokens: 8192,
+            pricing: { input: 3 },
+            category: 'llm',
+            capabilities: { tools: true }
+        }));
         const [, init] = fetchImpl.mock.calls[0];
         expect(init.headers.Authorization).toBe('Bearer service-secret');
         expect(JSON.stringify(result)).not.toContain('service-secret');

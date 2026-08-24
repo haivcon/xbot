@@ -9,6 +9,7 @@ import { resolveKiroModels } from "open-sse/services/kiroModels.js";
 import { resolveKimchiModels } from "open-sse/services/kimchiModels.js";
 import { resolveQoderModels } from "open-sse/services/qoderModels.js";
 import { resolveGrokCliModels } from "open-sse/services/grokCliModels.js";
+import { resolveCodexModels } from "open-sse/services/codexModels.js";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 
 const GEMINI_CLI_MODELS_URL = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels";
@@ -41,26 +42,6 @@ const parseGeminiCliModels = (data) => {
   return [];
 };
 
-const appendCodexReviewModels = (models) => models.flatMap((model) => {
-  const id = model?.id || model?.slug || model?.model || model?.name;
-  if (!id) return [];
-  const name = model?.display_name || model?.displayName || model?.name || id;
-  const normalized = { ...model, id, name };
-  const isChatModel = (model?.type || "llm") !== "image" && !id.toLowerCase().includes("embed");
-  if (!isChatModel || id.endsWith("-review")) return [normalized];
-  return [
-    normalized,
-    {
-      ...normalized,
-      id: `${id}-review`,
-      name: `${name} Review`,
-      upstreamModelId: id,
-      quotaFamily: "review",
-    },
-  ];
-});
-
-const parseCodexModels = (data) => appendCodexReviewModels(parseOpenAIStyleModels(data));
 
 const createOpenAIModelsConfig = (url) => ({
   url,
@@ -157,12 +138,13 @@ const PROVIDER_MODELS_CONFIG = {
     parseResponse: (data) => data.data || []
   },
   codex: {
-    url: "https://chatgpt.com/backend-api/codex/models?client_version=1.0.0",
+    customResolver: resolveCodexModels
+  },
+  opencode: {
+    url: "https://opencode.ai/zen/v1/models",
     method: "GET",
     headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    authHeader: "Authorization",
-    authPrefix: "Bearer ",
-    parseResponse: parseCodexModels
+    parseResponse: parseOpenAIStyleModels
   },
   antigravity: {
     url: "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:models",
@@ -527,8 +509,9 @@ export async function GET(request, { params }) {
     }
 
     // Get auth token
+    const noAuth = connection.provider === "opencode" && connection.authType === "none";
     const token = connection.providerSpecificData?.copilotToken || connection.accessToken || connection.apiKey;
-    if (!token) {
+    if (!token && !noAuth) {
       return NextResponse.json({ error: "No valid token found" }, { status: 401 });
     }
 
@@ -543,7 +526,7 @@ export async function GET(request, { params }) {
 
     // Build headers
     const headers = { ...config.headers };
-    if (config.authHeader && !config.authQuery) {
+    if (config.authHeader && !config.authQuery && token) {
       headers[config.authHeader] = (config.authPrefix || "") + token;
     }
 

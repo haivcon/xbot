@@ -5,6 +5,7 @@ const dns = require('dns');
 dns.setDefaultResultOrder('ipv4first');
 const logger = require('./src/core/logger');
 const log = logger.child('Bot');
+const { isExecutionDisabled, getRuntimeCapabilities } = require('./src/core/executionPolicy');
 
 // Enable automatic filename/content-type detection to silence upcoming file send deprecations
 process.env.NTBA_FIX_350 = process.env.NTBA_FIX_350 || '1';
@@ -2924,8 +2925,7 @@ function startTelegramBot() {
                 usageDate: session.usageDate,
                 googleUserKeys: session.googleUserKeys,
                 groqUserKeys: session.groqUserKeys,
-                openAiUserKeys: session.openAiUserKeys,
-                nineRouterUserKeys: session.nineRouterUserKeys
+                openAiUserKeys: session.openAiUserKeys
             });
             return;
         }
@@ -3625,22 +3625,28 @@ async function main() {
 
         // Bước 2: Đăng ký toàn bộ handler trước khi nhận Telegram updates.
         startTelegramBot();
-        startWelcomeQueueProcessor();
-        await recoverWelcomeAdmissions();
-        const welcomeSweepTimer = setInterval(() => {
-            sweepWelcomeAdmissions().catch((error) => {
-                log.child('WelcomeVerify').error(`Recovery sweep failed: ${error.message}`);
-            });
-        }, CHECKIN_SCHEDULER_INTERVAL);
-        if (typeof welcomeSweepTimer.unref === 'function') welcomeSweepTimer.unref();
+        if (!isExecutionDisabled()) {
+            startWelcomeQueueProcessor();
+            await recoverWelcomeAdmissions();
+            const welcomeSweepTimer = setInterval(() => {
+                sweepWelcomeAdmissions().catch((error) => {
+                    log.child('WelcomeVerify').error(`Recovery sweep failed: ${error.message}`);
+                });
+            }, CHECKIN_SCHEDULER_INTERVAL);
+            if (typeof welcomeSweepTimer.unref === 'function') welcomeSweepTimer.unref();
+        } else {
+            log.warn('Execution-disabled mode: autonomous welcome/check-in/alert schedulers are suppressed.');
+        }
 
         // Bước 3: Bật transport sau migration, recovery và ingress guard.
         startApiServer();
         await startTelegramTransport();
-        startCheckinScheduler();
-        startPriceAlertScheduler();
+        if (!isExecutionDisabled()) {
+            startCheckinScheduler();
+            startPriceAlertScheduler();
+        }
 
-        log.info('✅ Tất cả dịch vụ đã sẵn sàng!');
+        log.info('✅ Tất cả dịch vụ đã sẵn sàng!', getRuntimeCapabilities());
 
     } catch (error) {
         log.error('Lỗi khởi động nghiêm trọng', error);

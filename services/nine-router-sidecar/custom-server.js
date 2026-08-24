@@ -6,10 +6,7 @@ const {
 } = require("./tenant-context.cjs");
 
 const origCreate = http.createServer.bind(http);
-const MAX_ASSERTED_BODY_BYTES = Math.max(
-  1024,
-  Number(process.env.NINEROUTER_ASSERTED_BODY_LIMIT_BYTES || 1024 * 1024),
-);
+const MAX_ASSERTED_BODY_BYTES = 1024 * 1024;
 
 function isTenantProtectedPath(requestPath) {
   return requestPath.startsWith("/api/")
@@ -94,6 +91,7 @@ http.createServer = (...args) => {
     delete req.headers["x-9r-real-ip"];
     delete req.headers["x-forwarded-for"];
     delete req.headers["x-9r-via-proxy"];
+    delete req.headers["x-9r-tenant-authenticated"];
     req.headers["x-9r-real-ip"] = ip;
     if (viaProxy) req.headers["x-9r-via-proxy"] = "1";
 
@@ -106,6 +104,7 @@ http.createServer = (...args) => {
         const replay = createReplayRequest(req, rawBody);
         delete replay.headers["x-xbot-signature"];
         delete replay.headers["x-xbot-body-sha256"];
+        replay.headers["x-9r-tenant-authenticated"] = "1";
         return runWithTenant(tenantId, () => handler(replay, res));
       })
       .catch((error) => sendTenantError(res, error));

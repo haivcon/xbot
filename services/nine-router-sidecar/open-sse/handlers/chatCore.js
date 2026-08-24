@@ -326,7 +326,9 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // Handle 401/403 - try token refresh (skip for noAuth providers)
   if (!executor.noAuth && (providerResponse.status === HTTP_STATUS.UNAUTHORIZED || providerResponse.status === HTTP_STATUS.FORBIDDEN)) {
     try {
-      const newCredentials = await refreshWithRetry(() => executor.refreshCredentials(credentials, log), 3, log);
+      // A chat request may replay the provider call once, but must never fan out
+      // credential refreshes: revoked/malformed refresh tokens fail closed.
+      const newCredentials = await refreshWithRetry(() => executor.refreshCredentials(credentials, log), 1, log);
       if (newCredentials?.accessToken || newCredentials?.copilotToken) {
         if (log?.line) log.line(reqTag, "🔑", `TOKEN REFRESHED · ${provider}/${model}`);
         Object.assign(credentials, newCredentials);

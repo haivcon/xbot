@@ -6,20 +6,22 @@ const log = logger.child('API');
 const cors = require('cors');
 const compression = require('compression');
 const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto');
 const db = require('../../db.js');
 const { normalizeAddressSafe } = require('../utils/helpers');
 const {
     OKX_BASE_URL,
     API_PORT,
-    NINEROUTER_API_KEY,
-    NINEROUTER_MODEL,
-    NINEROUTER_API_ROOT
+    NINEROUTER_MODEL
 } = require('../config/env');
 const { createDashboardRoutes } = require('./dashboardRoutes');
+const { verifyJWT } = require('./dashboardAuth');
 const { renderChatMetrics } = require('../services/chatOrchestrator/telemetry');
 const { checkNineRouterReadiness } = require('../services/nineRouterConnection');
 const { nineRouterRuntime } = require('../services/nineRouterRuntime');
+const {
+    createTenantHeaders,
+    getConfig: getNineRouterTenantConfig
+} = require('../services/nineRouterTenantClient');
 const {
     enqueueJob,
     registerJobHandler,
@@ -38,6 +40,110 @@ const MAX_PENDING_REQUESTS = Number(process.env.API_MAX_PENDING_REQUESTS || 300)
 const BODY_LIMIT = process.env.API_BODY_LIMIT || '64kb';
 const USE_ASYNC_TOKEN_JOB = String(process.env.API_GENERATE_TOKEN_ASYNC || '').toLowerCase() === 'true';
 const METRICS_ENABLED = String(process.env.API_METRICS_ENABLED || 'true').toLowerCase() !== 'false';
+
+function getApiHost() {
+    const configured = String(process.env.HOST || '').trim();
+    if (configured) return configured;
+    return '127.0.0.1';
+}
+
+function trustLoopbackProxy(ip) {
+    const normalized = String(ip || '').replace(/^::ffff:/, '');
+    return normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function localOnly(req, res, next) {
+    if (!trustLoopbackProxy(req.socket?.remoteAddress)) {
+        return res.status(404).end();
+    }
+    next();
+}
+
+function getTrustedProxySetting() {
+    const setting = String(process.env.TRUST_PROXY || '').trim().toLowerCase();
+    return setting === 'loopback' ? trustLoopbackProxy : false;
+}
+
+function getCorsAllowedOrigins() {
+    const configured = String(process.env.CORS_ALLOWED_ORIGINS || '')
+        .split(',').map(value => value.trim()).filter(Boolean);
+    const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || '').trim();
+    if (publicBaseUrl) {
+        try { configured.push(new URL(publicBaseUrl).origin); } catch { /* invalid URL is not trusted */ }
+    }
+    return new Set(configured);
+}
+
+function createCorsMiddleware() {
+    const allowedOrigins = getCorsAllowedOrigins();
+    const corsMiddleware = cors({
+        origin(origin, callback) {
+            if (!origin || allowedOrigins.has(origin)) return callback(null, origin || false);
+            const error = new Error('Origin not allowed');
+            error.status = 403;
+            return callback(error);
+        },
+        credentials: false,
+        methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Authorization', 'Content-Type', 'X-CSRF-Token', 'X-Request-Id'],
+        maxAge: 600
+    });
+    return (req, res, next) => corsMiddleware(req, res, error => {
+        if (error) return res.status(403).json({ error: 'Origin not allowed' });
+        next();
+    });
+}
+
+function getContentSecurityPolicy() {
+    const websocketOrigins = new Set();
+    for (const origin of getCorsAllowedOrigins()) {
+        try {
+            const url = new URL(origin);
+            websocketOrigins.add(`${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}`);
+        } catch { /* invalid origins are already excluded from CORS trust */ }
+    }
+    return [
+        "default-src 'self'",
+        "base-uri 'self'",
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'self'",
+        "script-src 'self' 'unsafe-inline' https://telegram.org",
+        "frame-src https://oauth.telegram.org https://telegram.org",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com data:",
+        "img-src 'self' data: blob: https:",
+        `connect-src 'self' ${[...websocketOrigins].join(' ')}`.trim(),
+        "worker-src 'self' blob:",
+        "manifest-src 'self'"
+    ].join('; ');
+}
+
+function securityHeaders(req, res, next) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    res.setHeader('Content-Security-Policy', getContentSecurityPolicy());
+    if (req.secure) {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+}
+
+function authenticateWebSocketRequest(request) {
+    try {
+        const origin = request.headers?.origin;
+        if (origin && !getCorsAllowedOrigins().has(origin)) return null;
+        const protocols = String(request.headers?.['sec-websocket-protocol'] || '')
+            .split(',').map(value => value.trim());
+        const authIndex = protocols.indexOf('xbot-auth');
+        const token = authIndex >= 0 ? protocols[authIndex + 1] : null;
+        return token ? verifyJWT(token) : null;
+    } catch {
+        return null;
+    }
+}
 
 // Simple in-memory rate limiter to shed bursts quickly without extra deps
 const requestBuckets = new Map();
@@ -177,11 +283,12 @@ const metricLine = (name, value, labels = null) => {
 };
 
 function startApiServer() {
-    app.set('trust proxy', 1);
+    app.set('trust proxy', getTrustedProxySetting());
     app.disable('x-powered-by');
     app.disable('etag');
 
-    app.use(cors());
+    app.use(securityHeaders);
+    app.use(createCorsMiddleware());
     app.use(compression()); // Gzip/Brotli compression for all responses
     app.use(metricsMiddleware);
     app.use(express.json({ limit: BODY_LIMIT }));
@@ -196,32 +303,7 @@ function startApiServer() {
         next();
     });
 
-    // CSRF protection for mutating requests (skip API token endpoints)
-    const CSRF_SECRET = process.env.CSRF_SECRET || crypto.randomBytes(32).toString('hex');
-    app.use((req, res, next) => {
-        // Generate CSRF token for GET requests (dashboard pages)
-        if (req.method === 'GET' && req.path.startsWith('/api/dashboard')) {
-            const token = crypto.createHmac('sha256', CSRF_SECRET)
-                .update(req.ip + (req.headers['user-agent'] || '')).digest('hex').slice(0, 32);
-            res.setHeader('X-CSRF-Token', token);
-        }
-        // Validate CSRF on mutations (POST/PUT/DELETE) to dashboard API
-        if (['POST', 'PUT', 'DELETE'].includes(req.method) && req.path.startsWith('/api/dashboard')) {
-            const csrfHeader = req.headers['x-csrf-token'];
-            const expected = crypto.createHmac('sha256', CSRF_SECRET)
-                .update(req.ip + (req.headers['user-agent'] || '')).digest('hex').slice(0, 32);
-            if (!csrfHeader || csrfHeader !== expected) {
-                // Log but don't block (soft enforcement for backward compat)
-                log.child('CSRF').warn(`CSRF mismatch from ${req.ip} on ${req.method} ${req.path}`);
-            }
-        }
-        next();
-    });
-
     app.get(['/health', '/healthz'], async (req, res) => {
-        const now = Date.now();
-        const mem = process.memoryUsage();
-
         // DB connectivity check
         let dbStatus = 'unknown';
         try {
@@ -231,49 +313,27 @@ function startApiServer() {
             dbStatus = 'error';
         }
 
-        // Event loop lag estimate
-        const lagStart = process.hrtime.bigint();
-        await new Promise(resolve => setImmediate(resolve));
-        const lagNs = Number(process.hrtime.bigint() - lagStart);
-        const lagMs = Math.round(lagNs / 1e6);
-
-        res.json({
-            status: dbStatus === 'ok' ? 'ok' : 'degraded',
-            uptimeSeconds: Math.round(process.uptime()),
-            startedAt: startedAt.toISOString(),
-            now: new Date(now).toISOString(),
-            version: process.env.npm_package_version || 'unknown',
-            node: process.version,
-            memory: {
-                rss: Math.round(mem.rss / 1024 / 1024) + 'MB',
-                heapUsed: Math.round(mem.heapUsed / 1024 / 1024) + 'MB',
-                heapTotal: Math.round(mem.heapTotal / 1024 / 1024) + 'MB'
-            },
-            eventLoopLagMs: lagMs,
-            db: dbStatus,
-            inFlight,
-            rateLimitMax: RATE_LIMIT_MAX,
-            rateLimitWindowMs: RATE_LIMIT_WINDOW_MS,
-            requestBuckets: requestBuckets.size,
-            queue: queueInfo()
-        });
+        res.json({ status: dbStatus === 'ok' ? 'ok' : 'degraded' });
     });
 
     app.get('/readyz', (_req, res) => {
-        const configReadiness = checkNineRouterReadiness({
-            baseUrl: NINEROUTER_API_ROOT,
-            serviceCredential: process.env.NINEROUTER_SERVICE_TOKEN || NINEROUTER_API_KEY,
-            allowedModels: (process.env.CHAT_ORCHESTRATOR_MODELS || NINEROUTER_MODEL || '')
-                .split(',').map(value => value.trim()).filter(Boolean)
-        });
+        let configReadiness;
+        try {
+            const tenantConfig = getNineRouterTenantConfig();
+            configReadiness = checkNineRouterReadiness({
+                baseUrl: `${tenantConfig.baseUrl}/v1`,
+                buildHeaders: createTenantHeaders,
+                allowedModels: (NINEROUTER_MODEL || '').split(',').map(value => value.trim()).filter(Boolean)
+            });
+        } catch {
+            configReadiness = { ready: false };
+        }
         const connection = nineRouterRuntime.getStatus({ configured: configReadiness.ready });
-        const readiness = connection.connected
-            ? { ready: true, provider: '9router' }
-            : { ready: false, provider: '9router', code: connection.code };
-        return res.status(readiness.ready ? 200 : 503).json(readiness);
+        const readiness = connection.connected ? { status: 'ready' } : { status: 'not_ready' };
+        return res.status(connection.connected ? 200 : 503).json(readiness);
     });
 
-    app.get('/metrics', async (req, res) => {
+    app.get('/metrics', localOnly, async (req, res) => {
         if (!METRICS_ENABLED) {
             res.status(404).end();
             return;
@@ -433,15 +493,17 @@ function startApiServer() {
     log.child('Dashboard').info('Dashboard API routes mounted at /api/dashboard');
 
     // === Serve the XBot dashboard ===
-    const dashboardDist = path.join(__dirname, '../../dashboard/dist');
+    const dashboardDist = path.join(__dirname, '../../dashboard/dist/xBot');
     if (fs.existsSync(dashboardDist)) {
-        app.use(express.static(dashboardDist));
+        app.use('/xBot', express.static(dashboardDist));
         app.get('/', (_req, res) => res.redirect('/xBot/'));
         // SPA fallback: serve the XBot entry for dashboard client-side routes.
         app.get('*', (req, res, next) => {
             if (req.path.startsWith('/api/')) return next();
+            if (req.path === '/providers' || req.path.startsWith('/providers/')) return res.sendStatus(404);
+            if (req.path === '/xBot/providers' || req.path.startsWith('/xBot/providers/')) return res.sendStatus(404);
             if (req.path !== '/xBot' && !req.path.startsWith('/xBot/')) return res.redirect('/xBot/');
-            res.sendFile(path.join(dashboardDist, 'xBot/index.html'));
+            res.sendFile(path.join(dashboardDist, 'index.html'));
         });
         log.child('Dashboard').info(`Serving dashboard from ${dashboardDist}`);
     } else {
@@ -477,16 +539,28 @@ function startApiServer() {
     }
 
     const tryListen = (port, attemptsLeft = 5) => {
-        const server = app.listen(port, '0.0.0.0', async () => {
-            log.child('APIServer').info(`Dang chay tai http://0.0.0.0:${port}`);
+        const host = getApiHost();
+        const server = app.listen(port, host, async () => {
+            log.child('APIServer').info(`Dang chay tai http://${host}:${port}`);
 
             // === WebSocket server for real-time dashboard ===
             try {
                 const { WebSocketServer } = require('ws');
-                const wss = new WebSocketServer({ server, path: '/ws' });
+                const wss = new WebSocketServer({
+                    server,
+                    path: '/ws',
+                    handleProtocols: protocols => protocols.has('xbot-auth') ? 'xbot-auth' : false,
+                    verifyClient: ({ req }, done) => done(Boolean(authenticateWebSocketRequest(req)), 401, 'Authentication required')
+                });
                 app.locals.wss = wss;
 
-                wss.on('connection', (ws) => {
+                wss.on('connection', (ws, request) => {
+                    const dashboardUser = authenticateWebSocketRequest(request);
+                    if (!dashboardUser) {
+                        ws.close(1008, 'Authentication required');
+                        return;
+                    }
+                    ws.dashboardUser = dashboardUser;
                     ws.isAlive = true;
                     ws.on('pong', () => { ws.isAlive = true; });
                     // Send initial status
@@ -572,12 +646,21 @@ function broadcastWsEvent(type, data) {
     if (!wss) return;
     const msg = JSON.stringify({ type, data, ts: Date.now() });
     wss.clients.forEach(ws => {
+        if ((type === 'group_activity' || type === 'live_stats') && ws.dashboardUser?.role !== 'owner') return;
         if (ws.readyState === 1) ws.send(msg);
     });
 }
 
 module.exports = {
     app,
+    authenticateWebSocketRequest,
     startApiServer,
-    broadcastWsEvent
+    broadcastWsEvent,
+    createCorsMiddleware,
+    getCorsAllowedOrigins,
+    getApiHost,
+    getTrustedProxySetting,
+    localOnly,
+    securityHeaders,
+    trustLoopbackProxy
 };

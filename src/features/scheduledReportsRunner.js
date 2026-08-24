@@ -5,11 +5,13 @@
  */
 
 const log = require('../core/logger').child('ReportsRunner');
+const { isExecutionDisabled, assertExecutionEnabled } = require('../core/executionPolicy');
 
 let _started = false;
 let _interval = null;
 
 function startReportsRunner() {
+    if (isExecutionDisabled()) return false;
     if (_started) return;
     _started = true;
     log.info('Starting scheduled reports runner (1h interval)');
@@ -19,6 +21,7 @@ function startReportsRunner() {
 
     // First run after 60s startup delay
     setTimeout(() => runDueReports(), 60_000);
+    return true;
 }
 
 function stopReportsRunner() {
@@ -30,6 +33,7 @@ function stopReportsRunner() {
 }
 
 async function runDueReports() {
+    assertExecutionEnabled();
     try {
         const { getDueReports, markReportRun } = require('../../db/scheduledReports');
         const reports = await getDueReports();

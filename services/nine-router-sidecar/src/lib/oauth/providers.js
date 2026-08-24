@@ -386,7 +386,7 @@ const PROVIDERS = {
   "gemini-cli": {
     config: GEMINI_CONFIG,
     flowType: "authorization_code",
-    buildAuthUrl: (config, redirectUri, state) => {
+    buildAuthUrl: (config, redirectUri, state, codeChallenge) => {
       requireOAuthClient(config, "Gemini CLI", "GEMINI_OAUTH");
       const params = new URLSearchParams({
         client_id: config.clientId,
@@ -394,12 +394,14 @@ const PROVIDERS = {
         redirect_uri: redirectUri,
         scope: config.scopes.join(" "),
         state: state,
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
         access_type: "offline",
         prompt: "consent",
       });
       return `${config.authorizeUrl}?${params.toString()}`;
     },
-    exchangeToken: async (config, code, redirectUri) => {
+    exchangeToken: async (config, code, redirectUri, codeVerifier) => {
       const response = await fetch(config.tokenUrl, {
         method: "POST",
         headers: {
@@ -412,6 +414,7 @@ const PROVIDERS = {
           client_secret: config.clientSecret,
           code: code,
           redirect_uri: redirectUri,
+          code_verifier: codeVerifier,
         }),
       });
 
@@ -469,7 +472,7 @@ const PROVIDERS = {
   antigravity: {
     config: ANTIGRAVITY_CONFIG,
     flowType: "authorization_code",
-    buildAuthUrl: (config, redirectUri, state) => {
+    buildAuthUrl: (config, redirectUri, state, codeChallenge) => {
       requireOAuthClient(config, "Antigravity", "ANTIGRAVITY_OAUTH");
       const params = new URLSearchParams({
         client_id: config.clientId,
@@ -477,12 +480,14 @@ const PROVIDERS = {
         redirect_uri: redirectUri,
         scope: config.scopes.join(" "),
         state: state,
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
         access_type: "offline",
         prompt: "consent",
       });
       return `${config.authorizeUrl}?${params.toString()}`;
     },
-    exchangeToken: async (config, code, redirectUri) => {
+    exchangeToken: async (config, code, redirectUri, codeVerifier) => {
       const response = await fetch(config.tokenUrl, {
         method: "POST",
         headers: {
@@ -495,6 +500,7 @@ const PROVIDERS = {
           client_secret: config.clientSecret,
           code: code,
           redirect_uri: redirectUri,
+          code_verifier: codeVerifier,
         }),
       });
 

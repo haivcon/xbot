@@ -8,9 +8,14 @@ const { Router } = require('express');
 const logger = require('../core/logger');
 const log = logger.child('OKXRoutes');
 const okx = require('../services/okxCex');
+const { isExecutionDisabled, sendExecutionDisabled } = require('../core/executionPolicy');
 
 function createOkxRoutes() {
     const router = Router();
+    const requireExecution = (req, res, next) => {
+        if (isExecutionDisabled()) return sendExecutionDisabled(res);
+        next();
+    };
 
     // ════════════════════════════════════════
     // API Key Management
@@ -228,7 +233,7 @@ function createOkxRoutes() {
      * POST /spot/order
      * Body: { instId, side, ordType, sz, px?, tgtCcy? }
      */
-    router.post('/spot/order', requireOkxKeys, async (req, res) => {
+    router.post('/spot/order', requireExecution, requireOkxKeys, async (req, res) => {
         try {
             const { instId, side, ordType, sz, px, tgtCcy } = req.body;
             if (!instId || !side || !ordType || !sz) {
@@ -245,7 +250,7 @@ function createOkxRoutes() {
      * DELETE /spot/order
      * Body: { instId, ordId }
      */
-    router.delete('/spot/order', requireOkxKeys, async (req, res) => {
+    router.delete('/spot/order', requireExecution, requireOkxKeys, async (req, res) => {
         try {
             const { instId, ordId } = req.body;
             if (!instId || !ordId) return res.status(400).json({ error: 'instId, ordId required' });
@@ -288,7 +293,7 @@ function createOkxRoutes() {
      * POST /bot/grid
      * Body: { instId, maxPx, minPx, gridNum, quoteSz, algoOrdType? }
      */
-    router.post('/bot/grid', requireOkxKeys, async (req, res) => {
+    router.post('/bot/grid', requireExecution, requireOkxKeys, async (req, res) => {
         try {
             const data = await okx.createGridOrder(req.okxCreds, req.body);
             res.json({ data, demo: req.okxCreds.demo });
@@ -301,7 +306,7 @@ function createOkxRoutes() {
      * DELETE /bot/grid
      * Body: { algoId, instId }
      */
-    router.delete('/bot/grid', requireOkxKeys, async (req, res) => {
+    router.delete('/bot/grid', requireExecution, requireOkxKeys, async (req, res) => {
         try {
             const { algoId, instId, algoOrdType } = req.body;
             const data = await okx.stopGridOrder(req.okxCreds, algoId, instId, algoOrdType);

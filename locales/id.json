@@ -513,6 +513,10 @@
   "ai_usage_finish_reason": "Finish: {reason}",
   "ai_usage_output_type": "🖼️ Format: {type}",
   "ai_error": "Maaf, terjadi kesalahan saat menghubungi Xlayer B-Ai. Coba lagi.",
+  "ai_9router_not_configured": "⚙️ 9Router belum dikonfigurasi untuk akun Anda. Buka pengaturan Chat AI dan hubungkan penyedia AI.",
+  "ai_9router_quota": "⏳ Kuota 9Router Anda telah habis. Coba lagi nanti atau periksa penyedia Anda di pengaturan Chat AI.",
+  "ai_9router_timeout": "⏱️ Respons 9Router terlalu lama. Silakan coba lagi sebentar lagi.",
+  "ai_9router_unavailable": "🔌 9Router sementara tidak tersedia. Silakan coba lagi nanti.",
   "ai_switch_to_user_keys": "Kuota gratis /ai {limit} sudah habis. Beralih ke API Google pribadi Anda.",
   "ai_using_personal_key": "Sedang memakai API Google pribadi Anda.",
   "ai_image_too_large": "⚠️ Foto terlalu besar untuk diproses (maks {limitMb} MB). Kirim gambar yang lebih kecil.",
@@ -2165,9 +2169,9 @@
   "price_alert_url_invalid": "❌ Format URL tidak valid. Pastikan dimulai dengan http:// atau https://",
   "ai_provider_9router": "9Router",
   "ai_api_menu_hint_9router": "Use AI models routed by 9Router. This can use 9Router combos, fallbacks and OpenAI-compatible providers.",
-  "ai_api_add_hint_9router": "Add a 9Router API key if your 9Router instance requires Bearer authentication.",
-  "ai_api_add_prompt_9router": "Send your 9Router API key.",
-  "ai_api_add_placeholder_9router": "9Router API key",
-  "ai_api_get_key_9router": "Open 9Router dashboard",
-  "ai_api_usecases_9router": "Routes requests through 9Router at {url}. Default model: {model}."
+  "ai_api_add_hint_9router": "Hubungkan penyedia AI di pengaturan Chat AI. Kredensial tetap terisolasi di tenant Anda.",
+  "ai_api_add_prompt_9router": "Konfigurasikan 9Router di pengaturan Chat AI.",
+  "ai_api_add_placeholder_9router": "",
+  "ai_api_get_key_9router": "Buka pengaturan Chat AI",
+  "ai_api_usecases_9router": "9Router menemukan model dan merutekan permintaan menggunakan konfigurasi tenant Anda yang terisolasi."
 }

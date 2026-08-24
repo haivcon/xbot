@@ -1,5 +1,6 @@
 const logger = require('../../core/logger');
 const log = logger.child('Scheduler');
+const { isExecutionDisabled, assertExecutionEnabled } = require('../../core/executionPolicy');
 
 function createCheckinScheduler({
     db,
@@ -17,6 +18,7 @@ function createCheckinScheduler({
     let isRunning = false;
 
     async function runCheckinSchedulerTick() {
+        assertExecutionEnabled();
         if (isRunning) {
             return;
         }
@@ -102,6 +104,7 @@ function createCheckinScheduler({
     }
 
     function startCheckinScheduler() {
+        if (isExecutionDisabled()) return false;
         if (checkinSchedulerTimer) {
             clearInterval(checkinSchedulerTimer);
             checkinSchedulerTimer = null;
@@ -118,6 +121,7 @@ function createCheckinScheduler({
         if (typeof checkinSchedulerTimer.unref === 'function') {
             checkinSchedulerTimer.unref();
         }
+        return true;
     }
 
     return {

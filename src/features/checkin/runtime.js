@@ -728,6 +728,8 @@ function createCheckinRuntime(deps) {
     }
 
     function startWelcomeQueueProcessor() {
+        const { isExecutionDisabled } = require('../../core/executionPolicy');
+        if (isExecutionDisabled()) return false;
         if (welcomeQueueTimer) {
             return;
         }
@@ -755,6 +757,7 @@ function createCheckinRuntime(deps) {
         if (typeof welcomeQueueTimer.unref === 'function') {
             welcomeQueueTimer.unref();
         }
+        return true;
     }
 
     function enqueueWelcomeVerification(task) {

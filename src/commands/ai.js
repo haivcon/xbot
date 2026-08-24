@@ -4,7 +4,7 @@ const { enforceOwnerCommandLimit } = require('../features/auth/utils');
 const { ensureDeviceInfo, buildDeviceTargetId } = require('../utils/device');
 const db = require('../../db.js');
 const { normalizeAiProvider, buildAiProviderMeta, purgeAiProviderSelections, aiProviderSelectionSessions } = require('../features/ai');
-const { GEMINI_API_KEYS, GROQ_API_KEYS, OPENAI_API_KEYS, NINEROUTER_API_KEY, NINEROUTER_CHAT_COMPLETIONS_URL } = require('../config');
+const { GEMINI_API_KEYS, GROQ_API_KEYS, OPENAI_API_KEYS } = require('../config');
 const { buildAiUsageKeyboard, sendAiIntroMedia } = require('../features/ai');
 const { sendReply } = require('../utils/chat');
 const { handleAiTtsCommand, runAiRequestWithProvider } = require('../features/ai');
@@ -34,10 +34,6 @@ module.exports = {
             .filter((entry) => normalizeAiProvider(entry.provider) === 'openai')
             .map((entry) => entry.apiKey)
             .filter(Boolean);
-        const nineRouterUserKeys = userApiKeys
-            .filter((entry) => normalizeAiProvider(entry.provider) === '9router')
-            .map((entry) => entry.apiKey)
-            .filter(Boolean);
         const availableProviders = [];
         if (GEMINI_API_KEYS.length || googleUserKeys.length) {
             availableProviders.push('google');
@@ -47,9 +43,6 @@ module.exports = {
         }
         if (OPENAI_API_KEYS.length || openAiUserKeys.length) {
             availableProviders.push('openai');
-        }
-        if (NINEROUTER_CHAT_COMPLETIONS_URL && (NINEROUTER_API_KEY || nineRouterUserKeys.length || process.env.NINEROUTER_ALLOW_NO_KEY !== 'false')) {
-            availableProviders.unshift('9router');
         }
 
         if (!userPrompt && !hasPhoto && !hasAudio) {
@@ -124,7 +117,6 @@ module.exports = {
                 googleUserKeys,
                 groqUserKeys,
                 openAiUserKeys,
-                nineRouterUserKeys,
                 createdAt: Date.now()
             });
 
@@ -168,8 +160,7 @@ module.exports = {
             usageDate,
             googleUserKeys,
             groqUserKeys,
-            openAiUserKeys,
-            nineRouterUserKeys
+            openAiUserKeys
         });
     }
-}
+};

@@ -20,6 +20,27 @@ node_modules/
 dashboard/node_modules/
 onchainos-skills-main
 tests
+# Keep only the intended executable sidecar regressions despite the broad rule above.
+!services/nine-router-sidecar/tests/
+services/nine-router-sidecar/tests/*
+!services/nine-router-sidecar/tests/fixtures/
+services/nine-router-sidecar/tests/fixtures/*
+!services/nine-router-sidecar/tests/fixtures/provider-catalog.inventory.json
+!services/nine-router-sidecar/tests/unit/
+services/nine-router-sidecar/tests/unit/*
+!services/nine-router-sidecar/tests/integration/
+services/nine-router-sidecar/tests/integration/*
+!services/nine-router-sidecar/tests/unit/dashboard-guard.test.js
+!services/nine-router-sidecar/tests/unit/force-stream-config.test.js
+!services/nine-router-sidecar/tests/unit/provider-catalog-capabilities.test.js
+!services/nine-router-sidecar/tests/unit/tenant-authoritative-models.test.js
+!services/nine-router-sidecar/tests/unit/antigravity-oauth-client.test.js
+!services/nine-router-sidecar/tests/unit/public-oauth-redirect.test.js
+!services/nine-router-sidecar/tests/unit/oauth-proxy-manager.test.js
+!services/nine-router-sidecar/tests/unit/tenant-safe-provider-actions.test.js
+!services/nine-router-sidecar/tests/unit/credential-vault.test.js
+!services/nine-router-sidecar/tests/unit/connections-repo-vault.test.js
+!services/nine-router-sidecar/tests/integration/tenant-sidecar-http.mjs
 # Keep the in-repo Hermes adapter contract tests despite the legacy broad rule above.
 !services/hermes-api/tests/
 !services/hermes-api/tests/test_contract.py
@@ -38,6 +59,8 @@ data/audit-logs/
 
 # ─── Build Output & Separated Projects ───
 dashboard/dist/
+services/nine-router-sidecar/.next-catalog-parity/
+services/nine-router-sidecar/.next-catalog-repro/
 dashboard/.deploy-dist-*/
 dashboard/.deploy-dist-previous-*/
 dashboard/*.local
@@ -46,6 +69,17 @@ xbot-check/
 1/
 .hermes
 __tests__
+__tests__
+# Keep safe-mode regression tests in deployable source packages.
+!__tests__/
+__tests__/*
+!__tests__/publicDashboardHardening.test.js
+!__tests__/xbotRepositorySurface.test.js
+!__tests__/executionPolicy.test.js
+!__tests__/executionBoundaries.test.js
+!__tests__/executionRoutes.test.js
+!__tests__/nineRouterOAuthRedirect.test.js
+!__tests__/nineRouterOAuthHttpIntegration.test.js
 
 # ─── Logs ───
 *.log
@@ -74,6 +108,7 @@ scripts/backup-sqlite.js
 # ─── Scripts ───
 *.cjs
 !services/nine-router-sidecar/tenant-context.cjs
+!dashboard/scripts/root-server-test-preload.cjs
 
 # Temporary script files
 fix*.js

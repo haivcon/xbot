@@ -4,13 +4,14 @@ const crypto = require('crypto');
 const axios = require('axios');
 
 const ALLOWED_MANAGEMENT_PATHS = [
-    /^\/api\/providers(?:\/[A-Za-z0-9._~-]+(?:\/(?:models|test))?)?$/,
-    /^\/api\/providers\/(?:client|validate|test-batch)$/,
+    /^\/api\/providers(?:\/[A-Za-z0-9._~-]+(?:\/(?:models|test|test-models))?)?$/,
+    /^\/api\/providers\/(?:catalog|client|validate|test-batch)$/,
+    /^\/api\/providers\/oauth\/(?:start-proxy|poll-status|stop-proxy)$/,
     /^\/api\/provider-nodes(?:\/[A-Za-z0-9._~-]+)?$/,
     /^\/api\/provider-nodes\/validate$/,
-    /^\/api\/oauth\/[A-Za-z0-9._~-]+\/(?:authorize|exchange|device-code|poll|manual-code|poll-status|start-proxy|stop-proxy)$/,
+    /^\/api\/oauth\/[A-Za-z0-9._~-]+\/(?:authorize|exchange|redirect-authorize|redirect-exchange|device-code|poll|manual-code|manual-start|manual-complete|manual-secret|free-enable|service-probe|poll-status|start-proxy|stop-proxy)$/,
     /^\/api\/combos(?:\/[A-Za-z0-9._~-]+)?$/,
-    /^\/api\/usage(?:\/(?:chart|providers|request-details|logs))?$/,
+    /^\/api\/usage(?:\/(?:chart|stats|providers|request-details|logs))?$/,
     /^\/api\/usage\/[A-Za-z0-9._~-]+(?:\/codex-reset-credits)?$/,
     /^\/api\/models(?:\/(?:alias|custom|disabled|availability|test))?$/,
     /^\/api\/settings$/
@@ -21,8 +22,8 @@ function normalizeInternalBaseUrl(value) {
     try {
         url = new URL(String(value || ''));
     } catch {
-        const error = new Error('NINEROUTER_INTERNAL_URL must be a valid URL');
-        error.code = 'NINEROUTER_INTERNAL_URL_INVALID';
+        const error = new Error('ROUTER_URL must be a valid URL');
+        error.code = 'ROUTER_URL_INVALID';
         throw error;
     }
     const host = url.hostname.toLowerCase();
@@ -31,8 +32,8 @@ function normalizeInternalBaseUrl(value) {
         || /^172\.(1[6-9]|2\d|3[01])\./.test(host) || !host.includes('.')
         || host.endsWith('.internal') || host.endsWith('.local');
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !privateHost) {
-        const error = new Error('NINEROUTER_INTERNAL_URL must target a private service');
-        error.code = 'NINEROUTER_INTERNAL_URL_INVALID';
+        const error = new Error('ROUTER_URL must target a private service');
+        error.code = 'ROUTER_URL_INVALID';
         throw error;
     }
     url.search = '';
@@ -41,11 +42,11 @@ function normalizeInternalBaseUrl(value) {
 }
 
 function getConfig() {
-    const baseUrl = normalizeInternalBaseUrl(process.env.NINEROUTER_INTERNAL_URL || 'http://nine-router:20127');
-    const secret = String(process.env.NINEROUTER_TENANT_SECRET || '');
+    const baseUrl = normalizeInternalBaseUrl(process.env.ROUTER_URL || 'http://9router:20128');
+    const secret = String(process.env.ROUTER_SECRET || '');
     if (secret.length < 32) {
-        const error = new Error('NINEROUTER_TENANT_SECRET must contain at least 32 characters');
-        error.code = 'NINEROUTER_TENANT_SECRET_INVALID';
+        const error = new Error('ROUTER_SECRET must contain at least 32 characters');
+        error.code = 'ROUTER_SECRET_INVALID';
         throw error;
     }
     return { baseUrl, secret };

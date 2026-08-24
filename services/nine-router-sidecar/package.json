@@ -11,6 +11,9 @@
     "dev:bun": "bun --bun next dev --webpack --port 20127",
     "build:bun": "bun --bun next build --webpack",
     "start:bun": "bun ./.next/standalone/server.js",
+    "test:offline": "node scripts/run-offline-tests.mjs",
+    "test:offline:verify": "node scripts/verify-offline-differential.mjs",
+    "test:catalog-parity": "node scripts/verify-provider-catalog-parity.mjs",
     "cli:pack": "npm --prefix cli run pack:cli",
     "cli:publish": "npm --prefix cli run publish:cli"
   },

@@ -7,6 +7,7 @@
 const logger = require('../core/logger');
 const log = logger.child('x402');
 const axios = require('axios');
+const { assertExecutionEnabled } = require('../core/executionPolicy');
 
 const X402_BASE_URL = process.env.X402_API_URL || 'https://x402-xlayer.okx.com';
 const DEFAULT_CHAIN = '196'; // X Layer
@@ -75,6 +76,7 @@ function _getRecipientAddress(override) {
  * Create a payment requirement for a premium feature
  */
 async function createPaymentRequirement(featureId, amount, options = {}) {
+    assertExecutionEnabled();
     const recipient = _getRecipientAddress(options.recipient);
     if (!recipient) {
         return { error: 'Payment recipient not configured. Contact admin.' };
@@ -94,6 +96,7 @@ async function createPaymentRequirement(featureId, amount, options = {}) {
  * Verify a payment transaction (with retry — W6 fix)
  */
 async function verifyPayment(txHash, paymentReq) {
+    assertExecutionEnabled();
     try {
         const response = await _withRetry(() =>
             axios.post(`${X402_BASE_URL}/verify`, {
@@ -116,6 +119,7 @@ async function verifyPayment(txHash, paymentReq) {
  * Settle a payment (finalize, with retry — W6 fix)
  */
 async function settlePayment(txHash, chainIndex) {
+    assertExecutionEnabled();
     try {
         const response = await _withRetry(() =>
             axios.post(`${X402_BASE_URL}/settle`, {
@@ -194,6 +198,7 @@ async function checkFeatureAccess(userId, featureId) {
  * Record a premium payment
  */
 async function recordPayment(userId, featureId, amount, txHash) {
+    assertExecutionEnabled();
     try {
         await _initDB();
         const { dbRun } = require('../../db/core');

@@ -3,7 +3,10 @@
 const crypto = require("crypto");
 const { AsyncLocalStorage } = require("async_hooks");
 
-const storage = new AsyncLocalStorage();
+// Next bundles this module into route chunks while custom-server loads the
+// packaged CJS file. Share one context across both module instances.
+const storageKey = Symbol.for("xbot.nineRouterTenantStorage");
+const storage = globalThis[storageKey] || (globalThis[storageKey] = new AsyncLocalStorage());
 const usedNonces = new Map();
 const MAX_CLOCK_SKEW_MS = 30_000;
 const NONCE_HEX_LENGTH = 32;
@@ -68,7 +71,7 @@ function pruneUsedNonces(now = Date.now()) {
 }
 
 function verifyTenantAssertion(req, rawBody = Buffer.alloc(0)) {
-  const secret = String(process.env.NINEROUTER_TENANT_SECRET || "");
+  const secret = String(process.env.ROUTER_SECRET || "");
   if (secret.length < 32) {
     throw Object.assign(new Error("Tenant assertion secret is not configured"), { statusCode: 503 });
   }

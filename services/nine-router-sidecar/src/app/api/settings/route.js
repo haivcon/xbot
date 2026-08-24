@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSettings, updateSettings } from "@/lib/localDb";
-import { applyOutboundProxyEnv } from "@/lib/network/outboundProxy";
+import { setOutboundProxyForTenant } from "@/lib/network/initOutboundProxy";
 import { resetComboRotation } from "open-sse/services/combo.js";
 import bcrypt from "bcryptjs";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { getTenantId } = require("../../../../tenant-context.cjs");
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -84,7 +88,7 @@ export async function PATCH(request) {
       Object.prototype.hasOwnProperty.call(body, "outboundProxyUrl") ||
       Object.prototype.hasOwnProperty.call(body, "outboundNoProxy")
     ) {
-      applyOutboundProxyEnv(settings);
+      setOutboundProxyForTenant(getTenantId(), settings);
     }
 
     // Invalidate combo rotation state when strategy settings change

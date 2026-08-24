@@ -99,6 +99,16 @@ import p96 from "./xai.js";
 import p97 from "./xiaomi-mimo.js";
 import p98 from "./xiaomi-tokenplan.js";
 import p99 from "./youcom.js";
+// Reconciled from upstream 9Router's MIT-licensed provider registry.
+// Keep these generic API-key providers synchronized via the provider inventory gate.
+import p100 from "./api-airforce.js";
+import p101 from "./baidu.js";
+import p102 from "./bazaarlink.js";
+import p103 from "./kilo-gateway.js";
+import p104 from "./llm7.js";
+import p105 from "./morph.js";
+import p106 from "./poolside.js";
+import p107 from "./tencent.js";
 
 export default [
   p0,
@@ -200,5 +210,13 @@ export default [
   p96,
   p97,
   p98,
-  p99
+  p99,
+  p100,
+  p101,
+  p102,
+  p103,
+  p104,
+  p105,
+  p106,
+  p107
 ];

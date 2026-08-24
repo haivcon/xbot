@@ -213,6 +213,21 @@ function resolveConnectionProxyUrl(targetUrl, proxyOptions) {
   return normalizeProxyUrl(proxyUrlRaw);
 }
 
+async function resolveTenantProxyOptions(proxyOptions) {
+  if (proxyOptions) return proxyOptions;
+  try {
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    const { getTenantId } = require("../../tenant-context.cjs");
+    const tenantId = getTenantId();
+    const { initializeOutboundProxyForTenant } = await import("../../src/lib/network/initOutboundProxy.js");
+    return await initializeOutboundProxyForTenant(tenantId);
+  } catch (error) {
+    if (error?.message === "Tenant context is required") return null;
+    throw new Error("Outbound proxy initialization failed");
+  }
+}
+
 /**
  * Create proxy dispatcher lazily (undici-compatible)
  */
@@ -292,6 +307,7 @@ async function createBypassRequest(parsedUrl, realIP, options) {
 }
 
 export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
+  proxyOptions = await resolveTenantProxyOptions(proxyOptions);
   const targetUrl = typeof url === "string" ? url : url.toString();
 
   // Vercel relay: forward request via relay headers

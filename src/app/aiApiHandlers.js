@@ -305,6 +305,10 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
             return null;
         }
         const meta = buildAiProviderMeta(lang, provider);
+        if (meta.supportsApiKeys === false) {
+            await bot.sendMessage(userId, meta.addHint, { reply_markup: buildCloseKeyboard(lang) });
+            return null;
+        }
         const promptText = meta.addPrompt;
         const placeholder = meta.addPlaceholder;
         const message = await bot.sendMessage(userId, promptText, {
@@ -323,6 +327,13 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
         const lang = prompt?.lang || await getLang(msg);
         const provider = prompt?.provider || 'google';
         if (!userId) {
+            return;
+        }
+
+        const meta = buildAiProviderMeta(lang, provider);
+        if (meta.supportsApiKeys === false) {
+            aiApiAddPrompts.delete(userId);
+            await bot.sendMessage(userId, meta.addHint, { reply_markup: buildCloseKeyboard(lang) });
             return;
         }
 
@@ -375,7 +386,6 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
             total: parsed.length
         });
 
-        const meta = buildAiProviderMeta(lang, provider);
         const simpleKeyboard = {
             inline_keyboard: [
                 [{ text: `${meta.icon} ${meta.label}`, callback_data: `apihub|ai|${provider}|0` }],

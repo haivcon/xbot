@@ -55,8 +55,13 @@ const CHAT_V2_READ_ONLY_TOOLS = new Set([
 ]);
 
 function configuredModels() {
-    return (process.env.CHAT_ORCHESTRATOR_MODELS || NINEROUTER_MODEL || '')
+    return (NINEROUTER_MODEL || '')
         .split(',').map(value => value.trim()).filter(Boolean);
+}
+
+function preferredDiscoveredModel(models) {
+    const ids = (models || []).map(model => model?.id).filter(Boolean);
+    return ids.includes(NINEROUTER_MODEL) ? NINEROUTER_MODEL : ids[0];
 }
 
 function createChatV2ToolPolicy(toolDeclarations) {
@@ -126,17 +131,14 @@ function getChatOrchestratorV2(allowedModels = configuredModels()) {
             body: request.body
         }),
         allowedModels: [...new Set(allowedModels.map(String).filter(Boolean))],
-        timeoutMs: Number(process.env.CHAT_ORCHESTRATOR_TIMEOUT_MS || 60000),
-        maxConcurrentPerTenant: Number(process.env.CHAT_ORCHESTRATOR_TENANT_CONCURRENCY || 2),
-        rateLimitPerMinute: Number(process.env.CHAT_ORCHESTRATOR_TENANT_RATE_LIMIT || 15),
-        maxInputTokens: Number(process.env.CHAT_ORCHESTRATOR_MAX_INPUT_TOKENS || 25000),
-        maxOutputTokens: Number(process.env.CHAT_ORCHESTRATOR_MAX_OUTPUT_TOKENS || 8192),
-        ...parseCostOptions(
-            process.env.CHAT_ORCHESTRATOR_MAX_COST_USD,
-            process.env.CHAT_ORCHESTRATOR_MODEL_COSTS_JSON
-        ),
-        circuitFailureThreshold: Number(process.env.CHAT_ORCHESTRATOR_CIRCUIT_FAILURES || 5),
-        circuitResetMs: Number(process.env.CHAT_ORCHESTRATOR_CIRCUIT_RESET_MS || 30000),
+        timeoutMs: 60000,
+        maxConcurrentPerTenant: 2,
+        rateLimitPerMinute: 15,
+        maxInputTokens: 25000,
+        maxOutputTokens: 8192,
+        ...parseCostOptions(),
+        circuitFailureThreshold: 5,
+        circuitResetMs: 30000,
         tools,
         toolPolicy: createChatV2ToolPolicy(tools),
         maxToolRounds: MAX_TOOL_ROUNDS,
@@ -175,7 +177,7 @@ function createDiscoveryConnection() {
         }),
         allowedModels: configuredModels(),
         allowDynamicModels: true,
-        timeoutMs: Number(process.env.NINEROUTER_DISCOVERY_TIMEOUT_MS || 5000)
+        timeoutMs: 5000
     });
 }
 
@@ -270,6 +272,7 @@ function createChatRoutes() {
                 tenantId,
                 userId: tenantId
             }, { signal: controller.signal });
+            const defaultModel = preferredDiscoveredModel(discovery.models);
             return res.json({
                 provider: discovery.provider,
                 configured: true,
@@ -278,9 +281,9 @@ function createChatRoutes() {
                     ...model,
                     icon: '🧭',
                     locked: false,
-                    isDefault: model.id === (NINEROUTER_MODEL || discovery.models[0]?.id)
+                    isDefault: model.id === defaultModel
                 })),
-                defaultModel: NINEROUTER_MODEL || discovery.models[0]?.id,
+                defaultModel,
                 defaultProvider: '9router'
             });
         } catch (error) {
@@ -323,7 +326,7 @@ function createChatRoutes() {
                 { signal: abortController.signal }
             );
             const availableModelIds = discovery.models.map(item => item.id);
-            const chosenModel = String(model || NINEROUTER_MODEL || availableModelIds[0] || '').trim();
+            const chosenModel = String(model || preferredDiscoveredModel(discovery.models) || '').trim();
             if (!chosenModel || !availableModelIds.includes(chosenModel)) {
                 throw Object.assign(new Error('Model is not available for this account'), { code: 'MODEL_NOT_ALLOWED' });
             }

@@ -6,6 +6,7 @@ const path = require('path');
 const { formatPriceResult, formatSearchResult, formatWalletResult, formatSwapQuoteResult, formatTopTokensResult, formatRecentTradesResult, formatSignalChainsResult, formatSignalListResult, formatProfitRoiResult, formatHolderResult, formatGasResult, formatTokenInfoResult, formatCandlesResult, formatTokenMarketDetail, formatSwapExecutionResult, formatSimulationResult, formatLargeNumber } = require('./formatters');
 const { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken, rpcRetry, createNonceManager } = require('./helpers');
 const db = require('../../../../db.js');
+const { assertExecutionEnabled } = require('../../../core/executionPolicy');
 
 module.exports = {
     async get_wallet_balance(args, context) {
@@ -485,6 +486,7 @@ module.exports = {
     },
 
     async transfer_tokens(args, context) {
+        assertExecutionEnabled();
         const { dbGet, dbRun } = require('../../../../db/core');
         const ethers = require('ethers');
         const userId = context?.userId;
@@ -580,6 +582,7 @@ module.exports = {
                     txOptions.gasPrice = feeData.gasPrice;
                 }
                 // Enhancement #1: Retry for RPC failures
+                assertExecutionEnabled();
                 const tx = await rpcRetry(() => wallet.sendTransaction(txOptions), 3, 'TRANSFER');
                 // Receipt retry: fallback to provider.waitForTransaction if tx.wait() fails
                 let receipt;
@@ -738,6 +741,7 @@ module.exports = {
     },
 
     async batch_transfer(args, context) {
+        assertExecutionEnabled();
         const { dbGet, dbRun, dbAll } = require('../../../../db/core');
         const ethers = require('ethers');
         const userId = context?.userId;
@@ -1170,6 +1174,7 @@ module.exports = {
                     } else if (feeData.gasPrice) {
                         txOpts.gasPrice = feeData.gasPrice;
                     }
+                    assertExecutionEnabled();
                     const tx = await rpcRetry(() => wallet.sendTransaction(txOpts), 3, 'BATCH-TRANSFER');
                     // #3: Receipt retry — if tx.wait() fails, fallback to provider.waitForTransaction
                     let receipt;

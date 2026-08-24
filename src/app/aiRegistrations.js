@@ -7,6 +7,7 @@
  */
 const logger = require('../core/logger');
 const log = logger.child('AI:Registrations');
+const { assertExecutionEnabled } = require('../core/executionPolicy');
 
 // Token Search imports (shared with aiHandlers.js)
 const {
@@ -559,6 +560,7 @@ function registerSwapConfirmCallback(bot, getLang, t) {
     const userId = String(query.from?.id || msg.chat.id);
 
     try {
+      assertExecutionEnabled();
       await bot.answerCallbackQuery(query.id, { text: t(lang, 'ai_swap_confirming') });
       // Get user trading wallet
       const { dbGet } = require('../../db/core');
@@ -568,6 +570,7 @@ function registerSwapConfirmCallback(bot, getLang, t) {
         return;
       }
       // Decrypt key
+      assertExecutionEnabled();
       const privateKey = global._decryptTradingKey(tw.encryptedKey);
       const onchainos = require('../services/onchainos');
       const ethers = require('ethers');
@@ -587,6 +590,7 @@ function registerSwapConfirmCallback(bot, getLang, t) {
       const provider = new ethers.JsonRpcProvider(rpcUrl);
       const wallet = new ethers.Wallet(privateKey, provider);
       const tx = txRaw.tx;
+      assertExecutionEnabled();
       const signedTx = await wallet.signTransaction({
         to: tx.to, data: tx.data, value: BigInt(tx.value || '0'),
         gasLimit: BigInt(tx.gas || tx.gasLimit || '300000'),

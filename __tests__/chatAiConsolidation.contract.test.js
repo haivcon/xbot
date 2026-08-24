@@ -148,7 +148,11 @@ describe('legacy AI and copy surfaces are retired', () => {
         const apiServer = read('src/server/apiServer.js');
         const envExample = read('.env.example');
 
-        expect(envExample).toContain('CHAT_ORCHESTRATOR_V2=false');
+        expect(envExample).toContain('ROUTER_ENABLED=false');
+        expect(envExample).toContain('ROUTER_URL=http://localhost:20128');
+        expect(envExample).toContain('ROUTER_SECRET=');
+        expect(envExample).toContain('ROUTER_MODEL=plan');
+        expect(envExample).not.toMatch(/NINEROUTER_(?:BASE_URL|INTERNAL_URL|TENANT_SECRET|API_KEY|SERVICE_TOKEN|MODEL)|CHAT_ORCHESTRATOR_/);
         expect(dashboardRoutes).toMatch(/router\.get\('\/owner\/config\/one-connect', ownerGuard/);
         expect(dashboardRoutes).toMatch(/router\.post\('\/owner\/config\/one-connect\/connect', ownerGuard/);
         expect(dashboardRoutes).toMatch(/router\.post\('\/owner\/config\/one-connect\/disconnect', ownerGuard/);
@@ -204,8 +208,62 @@ describe('legacy AI and copy surfaces are retired', () => {
         }
     });
 
+    test('Telegram 9Router chat uses the shared tenant runtime without provider key pools or direct fallback', () => {
+        const aiHandlers = read('src/app/aiHandlers.js');
+        const aiCommand = read('src/commands/ai.js');
+        const callbackWiring = read('index.js');
+        const tenantRuntime = read('src/services/nineRouterTenantChat.js');
+        const aiService = read('src/features/aiService.js');
+        const apiHandlers = read('src/app/aiApiHandlers.js');
+
+        expect(aiHandlers).toContain("require('../services/nineRouterTenantChat')");
+        expect(aiHandlers).toMatch(/completeTenantChat\(\{[\s\S]*?userId,[\s\S]*?messages/);
+        expect(aiHandlers).toMatch(/if \(!hasAudio\) \{[\s\S]*?provider: '9router'/);
+        expect(aiHandlers).toMatch(/classifyTenantChatError\(error\)/);
+        expect(aiHandlers).not.toMatch(/nineRouterUserKeys|9router-local|NINEROUTER_ALLOW_NO_KEY/);
+        expect(aiHandlers).not.toMatch(/NINEROUTER_API_KEY|NINEROUTER_CHAT_COMPLETIONS_URL/);
+        expect(aiHandlers).not.toMatch(/axios\.post\([\s\S]{0,300}9Router/i);
+        expect(aiHandlers).not.toMatch(/availableProviders\.push\('9router'\)/);
+        expect(aiCommand).not.toMatch(/nineRouterUserKeys|NINEROUTER_API_KEY|NINEROUTER_ALLOW_NO_KEY/);
+        expect(callbackWiring).not.toMatch(/nineRouterUserKeys/);
+        expect(tenantRuntime).toMatch(/canonicalTenantIdentity\(userId\)/);
+        expect(tenantRuntime).toMatch(/discoverTenantModels\(\{ userId/);
+        expect(aiService).toMatch(/supportsApiKeys: false/);
+        expect(aiService).not.toMatch(/Send your 9Router API key|9Router API key if/);
+        expect(apiHandlers).toMatch(/meta\.supportsApiKeys === false/);
+    });
+
+    test('dashboard and management gateway never expose raw 9Router errors', () => {
+        const chatPage = read('dashboard/xBot/src/pages/user/ChatPage.jsx');
+        const settings = read('dashboard/xBot/src/components/chat/NineRouterSettings.jsx');
+        const tenantRoutes = read('src/server/nineRouterTenantRoutes.js');
+
+        expect(chatPage).not.toMatch(/sanitized\.substring|Please contact the xBot administrator/);
+        expect(settings).not.toMatch(/setError\(err\.message\)/);
+        expect(tenantRoutes).not.toMatch(/upstream\?\.(?:error|message)/);
+        expect(tenantRoutes).toContain("'NINEROUTER_UNAVAILABLE'");
+    });
+
+    test('tenant sidecar persistence resolves adapters and backups from mandatory tenant context', () => {
+        const driver = read('services/nine-router-sidecar/src/lib/db/driver.js');
+        const backups = read('services/nine-router-sidecar/src/lib/db/backup.js');
+        const migration = read('services/nine-router-sidecar/src/lib/db/migrate.js');
+
+        expect(driver).toMatch(/const tenantId = getTenantId\(\)/);
+        expect(driver).toMatch(/getTenantDataFile\(tenantId\)/);
+        expect(backups).toMatch(/getTenantBackupsDir\(tenantId\)/);
+        expect(migration).toMatch(/const hasLegacy = !tenantMode/);
+
+        const compose = read('services/nine-router-sidecar/docker-compose.yml');
+        const dockerfile = read('services/nine-router-sidecar/Dockerfile');
+        expect(compose).toMatch(/build:\s*\n\s*context: \./);
+        expect(compose).not.toContain('decolua/9router:latest');
+        expect(dockerfile).toContain('CMD ["node", "custom-server.js"]');
+    });
+
     test('model discovery and paid inference are fail-closed through 9Router only', () => {
         const chatRoutes = read('src/server/chatRoutes.js');
+        const env = read('src/config/env.js');
         expect(chatRoutes).toMatch(/router\.get\('\/models'/);
         expect(chatRoutes).not.toMatch(/new GoogleGenAI|new OpenAI/);
         expect(chatRoutes).not.toMatch(/detectProviderFromModel/);
@@ -214,8 +272,114 @@ describe('legacy AI and copy surfaces are retired', () => {
         expect(chatRoutes).toMatch(/buildHeaders:\s*\(identity, request\)\s*=>\s*createTenantHeaders/);
         expect(chatRoutes).toMatch(/availableModelIds\.includes\(chosenModel\)/);
         expect(chatRoutes).toContain('configured: true');
+        expect(env).toMatch(/const NINEROUTER_MODEL = \(process\.env\.ROUTER_MODEL \|\| ''\)\.trim\(\)/);
         const tenantClient = read('src/services/nineRouterTenantClient.js');
         expect(tenantClient).toMatch(/createHmac\('sha256', secret\)/);
         expect(tenantClient).toMatch(/normalizeTenantId\(tenantId\)/);
+    });
+
+    test('combo members are authoritative discovered model IDs, not provider connection IDs', () => {
+        const settings = read('dashboard/xBot/src/components/chat/NineRouterSettings.jsx');
+        expect(settings).toContain("api.request('/ai/models'");
+        expect(settings).toMatch(/models:\s*selected/);
+        expect(settings).toMatch(/modelOptions\.map\(model/);
+        expect(settings).not.toMatch(/selected\.includes\(connection\.id\)/);
+    });
+
+    test('Chat AI can add and test a tenant-scoped OpenAI-compatible endpoint through existing 9Router APIs', () => {
+        const settings = read('dashboard/xBot/src/components/chat/NineRouterSettings.jsx');
+        const tenantClient = read('src/services/nineRouterTenantClient.js');
+
+        expect(settings).toContain("api9r('/provider-nodes/validate'");
+        expect(settings).toContain("api9r('/provider-nodes'");
+        expect(settings).toMatch(/provider\s*=\s*nodeResult\?\.node\?\.id/);
+        expect(settings).toMatch(/baseUrl/);
+        expect(settings).toMatch(/apiType/);
+        expect(settings).toMatch(/type=["']password["']/);
+        expect(settings).not.toMatch(/localStorage[^\n]*(?:apiKey|credential|token)/i);
+        expect(tenantClient).toMatch(/api\\\/provider-nodes/);
+        expect(tenantClient).toMatch(/api\\\/providers/);
+    });
+
+    test('Chat AI exposes authoritative tenant-scoped device login without persisting OAuth credentials in the browser', () => {
+        const settings = read('dashboard/xBot/src/components/chat/NineRouterSettings.jsx');
+        const catalogRoute = read('services/nine-router-sidecar/src/app/api/providers/catalog/route.js');
+        const tenantClient = read('src/services/nineRouterTenantClient.js');
+
+        expect(catalogRoute).toMatch(/buildTenantProviderCatalog/);
+        const providerCatalog = read('services/nine-router-sidecar/src/lib/providerCatalog.js');
+        expect(providerCatalog).toMatch(/import REGISTRY/);
+        expect(providerCatalog).toMatch(/flowType\s*===\s*["']device_code["']/);
+        expect(`${catalogRoute}\n${providerCatalog}`).not.toMatch(/\b(?:accessToken|refreshToken|apiKey)\s*:/);
+        expect(settings).toContain("api9r('/providers/catalog'");
+        expect(settings).toMatch(/api9r\(`\/oauth\/\$\{[^}]+\}\/device-code`/);
+        expect(settings).toMatch(/api9r\(`\/oauth\/\$\{[^}]+\}\/poll`/);
+        expect(settings).toMatch(/verification_uri_complete\s*\|\|\s*[^;]*verification_uri/);
+        expect(settings).toMatch(/\[['"]http:['"],\s*['"]https:['"]\]\.includes\(url\.protocol\)/);
+        expect(settings).not.toMatch(/localStorage[^\n]*(?:deviceCode|codeVerifier|accessToken|refreshToken)/i);
+        expect(tenantClient).toContain('(?:catalog|client|validate|test-batch)');
+    });
+
+    test('Chat AI has no fabricated model fallback and clears availability after discovery failure', () => {
+        const chatPage = read('dashboard/xBot/src/pages/user/ChatPage.jsx');
+        expect(chatPage).not.toMatch(/const FALLBACK_MODELS|MODEL_OPTIONS_BY_PROVIDER/);
+        expect(chatPage).not.toMatch(/useState\(\(\) => \{[\s\S]{0,200}['"]xbot['"]/);
+        expect(chatPage).toMatch(/catch\s*\{[\s\S]{0,250}setModelOptions\(\[\]\)[\s\S]{0,250}configured:\s*false/);
+        expect(chatPage).toMatch(/disabled=\{[^}]*!modelMeta\.configured/);
+    });
+
+    test('Chat AI explains limited models and provides a direct provider connection flow', () => {
+        const chatPage = read('dashboard/xBot/src/pages/user/ChatPage.jsx');
+        const settings = read('dashboard/xBot/src/components/chat/NineRouterSettings.jsx');
+        const providerIcon = read('dashboard/xBot/src/components/chat/providerIcon.js');
+
+        expect(chatPage).toMatch(/modelOptions\.length\s*<\s*5/);
+        expect(chatPage).toMatch(/modelsByUpstream\.map/);
+        expect(chatPage).toMatch(/openProviderSettings/);
+        expect(chatPage).toMatch(/connectedProviderCount/);
+        expect(chatPage).toMatch(/providerHealthById/);
+        expect(chatPage).toContain("gcli: 'grok-cli'");
+        expect(chatPage).toMatch(/NineRouterSettings[^>]*initialSection=["']providers["']/);
+        expect(settings).toMatch(/FEATURED_PROVIDER_IDS/);
+        expect(providerIcon).toContain("gcli: 'grok-cli'");
+        expect(settings).toContain("api9r('/providers/test-batch'");
+        expect(settings).toMatch(/connectionHealth/);
+        expect(settings).toMatch(/showMoreProviders/);
+        expect(settings).toMatch(/One-click login|oneClickLogin/);
+        expect(settings).toMatch(/Secure OAuth|secureOAuth/);
+        expect(settings).toMatch(/Import credentials|importCredentials/);
+        expect(settings).toMatch(/Free services|freeServices/);
+        expect(chatPage).toContain("t('dashboard.chatPage.connected', 'Connected')");
+        expect(chatPage).toContain("t('dashboard.chatPage.unavailable', 'Unavailable')");
+        expect(settings).toContain("t('dashboard.chatPage.modelsAvailableShort', 'models available')");
+    });
+
+    test('dashboard exposes the high-impact upstream 9Router UX affordances', () => {
+        const chatPage = read('dashboard/xBot/src/pages/user/ChatPage.jsx');
+        const settings = read('dashboard/xBot/src/components/chat/NineRouterSettings.jsx');
+        const tenantClient = read('src/services/nineRouterTenantClient.js');
+        const i18n = read('dashboard/xBot/src/i18n/index.js');
+
+        expect(settings).toMatch(/id:\s*'endpoint'/);
+        expect(settings).toMatch(/function EndpointInfo/);
+        expect(settings).toContain("'/api/ai/chat/stream'");
+        expect(settings).toMatch(/navigator\.clipboard\.writeText\(endpointUrl\)/);
+        expect(settings).toContain("/test-models");
+        expect(settings).toMatch(/modelTestResults/);
+        expect(settings).toMatch(/connection\.providerSpecificData\?\.chatgptPlanType/);
+        expect(tenantClient).toMatch(/test-models/);
+
+        expect(chatPage).toMatch(/modelSearch[\s\S]*model\.label[\s\S]*model\.id/);
+        expect(chatPage).toMatch(/modelCapabilityBadges/);
+        expect(chatPage).toContain("'xbot_ai_model'");
+        expect(chatPage).toMatch(/selectedModelInfo/);
+
+        expect(settings).toMatch(/comboCapabilities/);
+        expect(settings).toMatch(/fallbackStrategy/);
+        expect(settings).toMatch(/index \+ 1/);
+        expect(i18n).toContain("nineRouter_endpoint: 'Endpoint'");
+        expect(i18n).toContain("nineRouter_endpoint: 'Điểm cuối'");
+        expect(i18n).toContain("testAllModels: 'Test all models'");
+        expect(i18n).toContain("testAllModels: 'Kiểm tra tất cả model'");
     });
 });

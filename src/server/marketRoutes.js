@@ -8,9 +8,15 @@ const { Router } = require('express');
 const logger = require('../core/logger');
 const log = logger.child('MarketAPI');
 const onchainos = require('../services/onchainos');
+const { isExecutionDisabled, sendExecutionDisabled, assertExecutionEnabled } = require('../core/executionPolicy');
 
 function createMarketRoutes() {
     const router = Router();
+
+    const requireExecution = (req, res, next) => {
+        if (isExecutionDisabled()) return sendExecutionDisabled(res);
+        next();
+    };
 
     async function requirePinIfSet(userId, req) {
         const { dbGet } = require('../../db/core');
@@ -1212,7 +1218,7 @@ function createMarketRoutes() {
      * Body: { walletId, chainIndex, fromTokenAddress, toTokenAddress, amount, slippage }
      * Signs and broadcasts the swap transaction using the user's encrypted wallet key.
      */
-    router.post('/swap/execute', async (req, res) => {
+    router.post('/swap/execute', requireExecution, async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1233,6 +1239,7 @@ function createMarketRoutes() {
             const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
             if (!tw) return res.status(404).json({ error: 'Wallet not found' });
 
+            assertExecutionEnabled();
             const ENCRYPT_KEY = _getEncryptKey();
             const [ivHex, encrypted] = tw.encryptedKey.split(':');
             const decipher = cryptoNode.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPT_KEY), Buffer.from(ivHex, 'hex'));
@@ -1258,6 +1265,7 @@ function createMarketRoutes() {
                         const rpcUrl = _getChainRpc(chainIndex);
                         const provider = new ethers.JsonRpcProvider(rpcUrl);
                         const wallet = new ethers.Wallet(privateKey, provider);
+                        assertExecutionEnabled();
                         const approveTx = await wallet.sendTransaction({
                             to: approveData.data.to || approveData.data[0]?.to,
                             data: approveData.data.data || approveData.data[0]?.data,
@@ -1288,6 +1296,7 @@ function createMarketRoutes() {
             const provider = new ethers.JsonRpcProvider(rpcUrl);
             const wallet = new ethers.Wallet(privateKey, provider);
 
+            assertExecutionEnabled();
             const tx = await wallet.sendTransaction({
                 to: txInfo.tx.to,
                 data: txInfo.tx.data,
@@ -1320,7 +1329,7 @@ function createMarketRoutes() {
      * POST /swap/batch
      * Body: { swaps: [{ walletId, amount }], chainIndex, fromTokenAddress, toTokenAddress, slippage }
      */
-    router.post('/swap/batch', async (req, res) => {
+    router.post('/swap/batch', requireExecution, async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1346,6 +1355,7 @@ function createMarketRoutes() {
                     const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [swap.walletId, userId]);
                     if (!tw) { results.push({ walletId: swap.walletId, error: 'Wallet not found' }); continue; }
 
+                    assertExecutionEnabled();
                     const [ivHex, encrypted] = tw.encryptedKey.split(':');
                     const decipher = cryptoNode.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPT_KEY), Buffer.from(ivHex, 'hex'));
                     let privateKey = decipher.update(encrypted, 'hex', 'utf8') + decipher.final('utf8');
@@ -1366,6 +1376,7 @@ function createMarketRoutes() {
                             const approveData = await onchainos.getApproveTransaction(chainIndex, fromTokenAddress, resolvedAmount);
                             if (approveData?.data) {
                                 const wallet = new ethers.Wallet(privateKey, provider);
+                                assertExecutionEnabled();
                                 const approveTx = await wallet.sendTransaction({
                                     to: approveData.data.to || approveData.data[0]?.to,
                                     data: approveData.data.data || approveData.data[0]?.data, value: '0'
@@ -1384,6 +1395,7 @@ function createMarketRoutes() {
                     if (!txInfo?.tx) { results.push({ walletId: swap.walletId, walletName: tw.name, error: 'No swap data' }); continue; }
 
                     const wallet = new ethers.Wallet(privateKey, provider);
+                    assertExecutionEnabled();
                     const tx = await wallet.sendTransaction({
                         to: txInfo.tx.to, data: txInfo.tx.data, value: txInfo.tx.value || '0',
                         gasLimit: txInfo.tx.gas ? BigInt(txInfo.tx.gas) : undefined,
@@ -1417,7 +1429,7 @@ function createMarketRoutes() {
      * Body: { walletId, chainIndex, toAddress, tokenAddress, amount }
      * tokenAddress = '0xeee...' or omitted for native token
      */
-    router.post('/transfer/execute', async (req, res) => {
+    router.post('/transfer/execute', requireExecution, async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1435,6 +1447,7 @@ function createMarketRoutes() {
             const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [walletId, userId]);
             if (!tw) return res.status(404).json({ error: 'Wallet not found' });
 
+            assertExecutionEnabled();
             const ENCRYPT_KEY = _getEncryptKey();
             const [ivHex, encrypted] = tw.encryptedKey.split(':');
             const decipher = cryptoNode.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPT_KEY), Buffer.from(ivHex, 'hex'));
@@ -1448,6 +1461,7 @@ function createMarketRoutes() {
             let txHash;
 
             if (isNative) {
+                assertExecutionEnabled();
                 const tx = await wallet.sendTransaction({ to: toAddress, value: ethers.parseEther(String(amount)) });
                 txHash = tx.hash;
             } else {
@@ -1458,6 +1472,7 @@ function createMarketRoutes() {
                     if (basicInfo?.length > 0) decimals = Number(basicInfo[0].decimal || 18);
                 } catch { /* use 18 */ }
                 const erc20 = new ethers.Contract(tokenAddress, ['function transfer(address to, uint256 amount) returns (bool)'], wallet);
+                assertExecutionEnabled();
                 const tx = await erc20.transfer(toAddress, ethers.parseUnits(String(amount), decimals));
                 txHash = tx.hash;
             }
@@ -1484,7 +1499,7 @@ function createMarketRoutes() {
      * POST /transfer/batch
      * Body: { transfers: [{ walletId, toAddress, amount }], chainIndex, tokenAddress }
      */
-    router.post('/transfer/batch', async (req, res) => {
+    router.post('/transfer/batch', requireExecution, async (req, res) => {
         const userId = req.dashboardUser?.userId?.toString();
         if (!userId) return res.status(401).json({ error: 'Auth required' });
         try {
@@ -1519,6 +1534,7 @@ function createMarketRoutes() {
                     const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE id = ? AND userId = ?', [tr.walletId, userId]);
                     if (!tw) { results.push({ ...tr, error: 'Wallet not found' }); continue; }
 
+                    assertExecutionEnabled();
                     const [ivHex, encrypted] = tw.encryptedKey.split(':');
                     const decipher = cryptoNode.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPT_KEY), Buffer.from(ivHex, 'hex'));
                     let privateKey = decipher.update(encrypted, 'hex', 'utf8') + decipher.final('utf8');
@@ -1526,10 +1542,12 @@ function createMarketRoutes() {
 
                     let txHash;
                     if (isNative) {
+                        assertExecutionEnabled();
                         const tx = await wallet.sendTransaction({ to: tr.toAddress, value: ethers.parseEther(String(tr.amount)) });
                         txHash = tx.hash;
                     } else {
                         const erc20 = new ethers.Contract(tokenAddress, ['function transfer(address to, uint256 amount) returns (bool)'], wallet);
+                        assertExecutionEnabled();
                         const tx = await erc20.transfer(tr.toAddress, ethers.parseUnits(String(tr.amount), decimals));
                         txHash = tx.hash;
                     }

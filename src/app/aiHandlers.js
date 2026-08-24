@@ -4,6 +4,7 @@ const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../core/logger');
 const log = logger.child('AI');
+const { isExecutionDisabled, assertExecutionEnabled } = require('../core/executionPolicy');
 
 const { sanitizeSecrets } = require('../core/sanitize');
 const { convertMarkdownToTelegram, escapeMarkdownV2 } = require('./utils/markdown');
@@ -96,7 +97,6 @@ const {
 } = require('../features/aiService');
 const {
   completeTenantChat,
-  discoverTenantModels,
   classifyTenantChatError
 } = require('../services/nineRouterTenantChat');
 const {
@@ -185,7 +185,7 @@ function createAiHandlers(deps) {
   try {
     initSkills();
     const schedulerSkill = skillRegistry.skills?.get('scheduler');
-    if (schedulerSkill?.startScheduler) {
+    if (schedulerSkill?.startScheduler && !isExecutionDisabled()) {
       const fmtTime = (ms) => {
         const d = new Date(ms);
         const pad = n => String(n).padStart(2, '0');
@@ -351,6 +351,7 @@ function createAiHandlers(deps) {
 
             // ════ Item #1: DCA SWAP EXECUTOR (CRITICAL) ════
           } else if (task.type === 'dca_swap') {
+            assertExecutionEnabled();
             const dcaLog = log.child('DCA');
             const p = task.params || {};
             try {
@@ -422,6 +423,7 @@ function createAiHandlers(deps) {
               }
 
               // Execute the swap
+              assertExecutionEnabled();
               const privateKey = global._decryptTradingKey(tw.encryptedKey);
               const wallet = new ethers.Wallet(privateKey, provider);
 
@@ -479,6 +481,7 @@ function createAiHandlers(deps) {
                     if (allowance < BigInt(amountWei)) {
                       const iface = new ethers.Interface(["function approve(address spender, uint256 amount) public returns (bool)"]);
                       const approveCalldata = iface.encodeFunctionData("approve", [spender, ethers.MaxUint256]);
+                      assertExecutionEnabled();
                       const approveTx = await wallet.signTransaction({
                         to: p.fromTokenAddress, data: approveCalldata, value: 0n,
                         gasLimit: BigInt(approveData[0].gasLimit || '100000'), gasPrice: BigInt(approveData[0].gasPrice || '1000000000'),
@@ -502,6 +505,7 @@ function createAiHandlers(deps) {
               const txRaw = Array.isArray(txData) ? txData[0] : txData;
               if (!txRaw?.tx) throw new Error('No swap tx data returned');
 
+              assertExecutionEnabled();
               const signedTx = await wallet.signTransaction({
                 to: txRaw.tx.to, data: txRaw.tx.data, value: BigInt(txRaw.tx.value || '0'),
                 gasLimit: BigInt(txRaw.tx.gas || txRaw.tx.gasLimit || '300000'),
@@ -623,7 +627,7 @@ function createAiHandlers(deps) {
   registerWalletHubCallbacks(bot, getLang, t);
   registerBatchTransferCallbacks(bot, getLang);
   // ──── Price Alert Cron Job (every 60s) ────
-  setInterval(async () => {
+  if (!isExecutionDisabled()) setInterval(async () => {
     try {
       const { dbAll, dbRun } = require('../../db/core');
       const onchainos = require('../services/onchainos');
@@ -1221,30 +1225,6 @@ function createAiHandlers(deps) {
       await sendReply(msg, t(lang, 'error_generic') || '❌ An error occurred');
     }
   }
-  const nineRouterHealth = new Map();
-
-  async function isNineRouterAvailable(userId, force = false) {
-    const tenantId = String(userId || '');
-    if (!/^\d{1,24}$/.test(tenantId)) return false;
-
-    const cached = nineRouterHealth.get(tenantId);
-    const ttlMs = 30 * 1000;
-    if (!force && cached && Date.now() - cached.checkedAt < ttlMs) {
-      return cached.ok;
-    }
-
-    try {
-      const discovery = await discoverTenantModels({ userId: tenantId });
-      const ok = Array.isArray(discovery.modelIds) && discovery.modelIds.length > 0;
-      nineRouterHealth.set(tenantId, { ok, checkedAt: Date.now() });
-      return ok;
-    } catch (error) {
-      log.child('9Router').warn(`Tenant discovery failed: ${classifyTenantChatError(error)}`);
-      nineRouterHealth.set(tenantId, { ok: false, checkedAt: Date.now() });
-      return false;
-    }
-  }
-
   function orderProvidersForFallback(primary, availableProviders = []) {
     const ordered = [];
     const add = (id) => {
@@ -1311,9 +1291,6 @@ function createAiHandlers(deps) {
     if (OPENAI_API_KEYS.length || openAiUserKeys.length) {
       availableProviders.push('openai');
     }
-    if (userId && await isNineRouterAvailable(userId)) {
-      availableProviders.push('9router');
-    }
     // Remember last image sent by user
     if (hasPhoto && userId) {
       const largestPhoto = photos[photos.length - 1];
@@ -1375,7 +1352,7 @@ function createAiHandlers(deps) {
       }
       return;
     }
-    if (!availableProviders.length) {
+    if (hasAudio && !availableProviders.length) {
       await sendReply(msg, t(lang, 'ai_missing_api_key'), {
         parse_mode: 'Markdown',
         reply_markup: { inline_keyboard: [[{ text: "✨ " + t(lang, 'ai_api_manage_button'), callback_data: 'apihub|ai|google|0' }], [{ text: t(lang, 'action_close'), callback_data: 'ui_close' }]] }
@@ -1387,14 +1364,8 @@ function createAiHandlers(deps) {
     }
     const promptText = userPrompt || t(lang, 'ai_default_prompt');
     const preferredProvider = userId ? await db.getUserAiProvider(userId) : null;
-    const nineRouterReady = availableProviders.includes('9router') && await isNineRouterAvailable(userId);
     let provider = null;
-    if (nineRouterReady) {
-      provider = '9router';
-      if (userId && preferredProvider !== '9router') {
-        db.setUserAiProvider(userId, '9router').catch((err) => log.child('9Router').warn(`Failed to save default provider: ${err.message}`));
-      }
-    } else if (preferredProvider && availableProviders.includes(preferredProvider)) {
+    if (preferredProvider && availableProviders.includes(preferredProvider)) {
       provider = preferredProvider;
     } else if (availableProviders.length === 1) {
       provider = availableProviders[0];
@@ -1402,6 +1373,42 @@ function createAiHandlers(deps) {
     purgeAiProviderSelections();
     if (isTtsMode) {
       await handleAiTtsCommand({ msg, lang, payload: ttsPayload, audioSource });
+      return;
+    }
+    if (!hasAudio) {
+      try {
+        await runAiRequestWithProvider({
+          msg,
+          lang,
+          provider: '9router',
+          promptText,
+          photos,
+          hasPhoto,
+          userId,
+          deviceTargetId,
+          usageDate,
+          throwOnError: true
+        });
+      } catch (error) {
+        const category = classifyTenantChatError(error);
+        const messageKey = category === 'TENANT_NOT_CONFIGURED' || category === 'NO_ALLOWED_MODELS' || category === 'MODEL_NOT_ALLOWED'
+          ? 'ai_9router_not_configured'
+          : category === 'QUOTA_EXHAUSTED'
+            ? 'ai_9router_quota'
+            : category === 'UPSTREAM_TIMEOUT'
+              ? 'ai_9router_timeout'
+              : 'ai_9router_unavailable';
+        log.child('9Router').warn(`Tenant chat failed: ${category}`);
+        await sendReply(msg, t(lang, messageKey), {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: `🧭 ${t(lang, 'ai_api_get_key_9router')}`, callback_data: 'apihub|ai|9router|0' }],
+              [{ text: t(lang, 'action_close'), callback_data: 'ui_close' }]
+            ]
+          }
+        });
+      }
       return;
     }
     if (!provider) {
@@ -1448,9 +1455,6 @@ function createAiHandlers(deps) {
       : orderProvidersForFallback(provider, availableProviders);
     let lastProviderError = null;
     for (const candidateProvider of providerOrder) {
-      if (candidateProvider === '9router' && !await isNineRouterAvailable(userId, candidateProvider === provider)) {
-        continue;
-      }
       try {
         await runAiRequestWithProvider({
           msg,
@@ -1472,10 +1476,6 @@ function createAiHandlers(deps) {
         return;
       } catch (error) {
         lastProviderError = error;
-        if (candidateProvider === '9router') {
-          nineRouterHealth.ok = false;
-          nineRouterHealth.checkedAt = Date.now();
-        }
         log.child('Request').warn(`Provider ${candidateProvider} failed, trying fallback: ${sanitizeSecrets(error.message)}`);
       }
     }
@@ -1660,27 +1660,27 @@ function createAiHandlers(deps) {
     googleUserKeys = [],
     groqUserKeys = [],
     openAiUserKeys = [],
-    nineRouterUserKeys = [],
     throwOnError = false
   }) {
     log.child('Request').info('Entry:', { provider, hasAudio, hasPhoto, hasAudioSource: !!audioSource });
     const normalizedProvider = normalizeAiProvider(provider);
     const providerMeta = buildAiProviderMeta(lang, normalizedProvider);
+    const isTenantRouter = normalizedProvider === '9router';
     const personalKeys = normalizedProvider === 'google'
       ? googleUserKeys
       : normalizedProvider === 'openai'
         ? openAiUserKeys
-        : normalizedProvider === '9router'
-          ? nineRouterUserKeys
-          : groqUserKeys;
+        : normalizedProvider === 'groq'
+          ? groqUserKeys
+          : [];
     const serverKeys = normalizedProvider === 'google'
       ? GEMINI_API_KEYS
       : normalizedProvider === 'openai'
         ? OPENAI_API_KEYS
-        : normalizedProvider === '9router'
-          ? (NINEROUTER_API_KEY ? [NINEROUTER_API_KEY] : (process.env.NINEROUTER_ALLOW_NO_KEY === 'false' ? [] : ['9router-local']))
-          : GROQ_API_KEYS;
-    if (!serverKeys.length && !personalKeys.length) {
+        : normalizedProvider === 'groq'
+          ? GROQ_API_KEYS
+          : [];
+    if (!isTenantRouter && !serverKeys.length && !personalKeys.length) {
       await sendReply(msg, t(lang, 'ai_missing_api_key'), {
         parse_mode: 'Markdown',
         reply_markup: { inline_keyboard: [[{ text: "✨ " + t(lang, 'ai_api_manage_button'), callback_data: 'apihub|ai|google|0' }], [{ text: t(lang, 'action_close'), callback_data: 'ui_close' }]] }
@@ -1701,7 +1701,7 @@ function createAiHandlers(deps) {
     if (Number.isFinite(globalLimit) && globalLimit > 0) {
       limitEntries.push({ target: 'global_ai', limit: globalLimit });
     }
-    let keySource = personalKeys.length ? 'user' : 'server';
+    let keySource = isTenantRouter ? 'tenant' : personalKeys.length ? 'user' : 'server';
     let limitNotice = null;
     const serverLimitState = {
       blocked: false,
@@ -1717,7 +1717,7 @@ function createAiHandlers(deps) {
       }
     }
     if (serverLimitState.blocked) {
-      if (personalKeys.length) {
+      if (!isTenantRouter && personalKeys.length) {
         keySource = 'user';
         limitNotice = t(lang, 'ai_switch_to_user_keys_provider', {
           limit: serverLimitState.limit,
@@ -1954,12 +1954,7 @@ function createAiHandlers(deps) {
           lang,
           promptText,
           parts,
-          keySource,
-          limitNotice,
-          personalKeys,
-          serverLimitState,
           userId,
-          serverKeys,
           providerMeta
         });
 
@@ -3691,18 +3686,7 @@ function createAiHandlers(deps) {
     }
   }
 
-  async function runNineRouterCompletion({ msg, lang, promptText, parts, keySource, limitNotice, personalKeys, serverLimitState, userId, serverKeys, providerMeta }) {
-    if (!NINEROUTER_CHAT_COMPLETIONS_URL) {
-      throw new Error('NINEROUTER_BASE_URL is not configured');
-    }
-
-    const responsePools = [];
-    if (personalKeys.length) {
-      responsePools.push({ type: 'user', keys: personalKeys });
-    } else if (!serverLimitState.blocked && serverKeys.length) {
-      responsePools.push({ type: 'server', keys: serverKeys });
-    }
-
+  async function runNineRouterCompletion({ msg, lang, promptText, parts, userId, providerMeta }) {
     const content = buildGroqMessageContent(parts, promptText);
     const systemPromptParts = [
       `You are ${providerMeta?.label || '9Router'} inside a Telegram bot. Answer in the user's language (${lang || 'auto'}).`,
@@ -3733,86 +3717,12 @@ function createAiHandlers(deps) {
       { role: 'user', content }
     ];
 
-    const model = NINEROUTER_MODEL;
-    if (!model) {
-      throw new Error('NINEROUTER_MODEL is not configured in .env');
-    }
-    let response = null;
-    let lastError = null;
-    let activeSource = keySource;
-
-    for (const pool of responsePools) {
-      if (!pool.keys.length) continue;
-      for (let keyIndex = 0; keyIndex < pool.keys.length && !response; keyIndex += 1) {
-        const apiKey = pool.keys[keyIndex] || '';
-        try {
-          const headers = { 'Content-Type': 'application/json' };
-          if (apiKey && apiKey !== '9router-local') {
-            headers.Authorization = `Bearer ${apiKey}`;
-          }
-
-          const nineRouterResponse = await axios.post(
-            NINEROUTER_CHAT_COMPLETIONS_URL,
-            {
-              model,
-              messages
-            },
-            {
-              headers,
-              timeout: AI_IMAGE_DOWNLOAD_TIMEOUT_MS
-            }
-          );
-
-          const rawData = nineRouterResponse?.data;
-          if (typeof rawData === 'string' && rawData.includes('data:')) {
-            const text = rawData
-              .split(/\r?\n/)
-              .map((line) => line.trim())
-              .filter((line) => line.startsWith('data:'))
-              .map((line) => line.slice(5).trim())
-              .filter((line) => line && line !== '[DONE]')
-              .map((line) => {
-                try {
-                  const parsed = JSON.parse(line);
-                  return parsed?.choices?.[0]?.delta?.content || parsed?.choices?.[0]?.message?.content || '';
-                } catch (_) {
-                  return '';
-                }
-              })
-              .join('')
-              .trim();
-            response = { choices: [{ message: { content: text } }] };
-          } else {
-            response = rawData;
-          }
-          activeSource = pool.type;
-          break;
-        } catch (error) {
-          lastError = error;
-          if (error?.response?.status === 429) {
-            log.warn('9Router rate limit hit, trying next key if available');
-          }
-          log.error(`Failed to generate 9Router content with ${pool.type} key index ${keyIndex}: ${sanitizeSecrets(error.message)}`);
-        }
-      }
-      if (response) break;
-    }
-
-    if (!response) {
-      throw lastError || new Error('No 9Router response');
-    }
-
-    const message = response?.choices?.[0]?.message || {};
-    const messageContent = message.content;
-    let aiResponse = '';
-    if (typeof messageContent === 'string') {
-      aiResponse = messageContent;
-    } else if (Array.isArray(messageContent)) {
-      aiResponse = messageContent
-        .map((part) => (part?.text ? part.text : typeof part === 'string' ? part : ''))
-        .join('')
-        .trim();
-    }
+    const result = await completeTenantChat({
+      userId,
+      messages
+    });
+    const model = result.model;
+    const aiResponse = String(result.text || '').trim();
 
     if (userId && promptText && aiResponse) {
       await addToSessionHistory(userId, 'user', promptText);
@@ -3823,9 +3733,6 @@ function createAiHandlers(deps) {
     const noticePrefix = [];
     noticePrefix.push(escapeMarkdownV2(t(lang, 'ai_provider_active', { provider: providerMeta.label })));
     noticePrefix.push(escapeMarkdownV2('📌 Model: ' + model));
-    if (limitNotice && activeSource === 'server') {
-      noticePrefix.push(escapeMarkdownV2(limitNotice));
-    }
     const header = `🤖 *${escapeMarkdownV2(t(lang, 'ai_response_title'))}*`;
     const decoratedBody = decorateWithContextualIcons(body);
     const replyText = `${noticePrefix.length ? `${noticePrefix.join('\n')}\n\n` : ''}${header}\n\n${convertMarkdownToTelegram(decoratedBody)}`;
@@ -4797,7 +4704,7 @@ function createAiHandlers(deps) {
 // Initialize swap pollers and onboarding table
 try {
   const { startSwapPollers } = require('../features/ai/onchain/swapPollers');
-  startSwapPollers();
+  if (!isExecutionDisabled()) startSwapPollers();
 } catch(e) { console.warn('SwapPollers init warning:', e.message); }
 try {
   const { dbRun: dbRI } = require('../../db/core');
@@ -4807,7 +4714,7 @@ try {
 // Start scheduled reports runner (#6)
 try {
   const { startReportsRunner } = require('../features/scheduledReportsRunner');
-  startReportsRunner();
+  if (!isExecutionDisabled()) startReportsRunner();
 } catch(e) { console.warn('ReportsRunner init warning:', e.message); }
 
 module.exports = {

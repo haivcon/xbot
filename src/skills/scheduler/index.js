@@ -424,9 +424,12 @@ async function schedulerTick() {
 }
 
 function startScheduler() {
+    const { isExecutionDisabled } = require('../../core/executionPolicy');
+    if (isExecutionDisabled()) return false;
     if (_tickInterval) return;
     _tickInterval = setInterval(schedulerTick, 10000); // Every 10 seconds
     log.info('⏰ Started autonomous scheduler (10s tick)');
+    return true;
 }
 
 function stopScheduler() {

@@ -4,10 +4,12 @@
  */
 const log = require('../../../core/logger');
 const onchainos = require('../../../services/onchainos');
+const { isExecutionDisabled, assertExecutionEnabled } = require('../../../core/executionPolicy');
 
 let _pollerStarted = false;
 
 function startSwapPollers() {
+    if (isExecutionDisabled()) return false;
     if (_pollerStarted) return;
     _pollerStarted = true;
     log.child('SwapPoller').info('Starting swap pollers (5m interval)');
@@ -22,9 +24,11 @@ function startSwapPollers() {
         try { await checkLimitOrders(); } catch(_) {}
         try { await checkPriceCompares(); } catch(_) {}
     }, 30000);
+    return true;
 }
 
 async function checkLimitOrders() {
+    assertExecutionEnabled();
     const { dbAll, dbRun } = require('../../../../db/core');
     try {
         await dbRun("CREATE TABLE IF NOT EXISTS swap_limit_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, chatId TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, amount TEXT, targetPrice REAL, chainIndex TEXT DEFAULT '196', status TEXT DEFAULT 'active', createdAt TEXT DEFAULT (datetime('now')))");

@@ -120,7 +120,7 @@ export default function ConfigPage() {
                                     <div><p className="text-surface-200/40 text-xs">Tokens</p><p className="text-surface-100">{oneConnect?.usage?.totalTokens || 0}</p></div>
                                 </div>
                                 {!oneConnect?.featureEnabled && (
-                                    <p className="text-sm text-amber-400">Enable CHAT_ORCHESTRATOR_V2 at startup before connecting.</p>
+                                    <p className="text-sm text-amber-400">Enable ROUTER_ENABLED at startup before connecting.</p>
                                 )}
                                 {oneConnectError && <p className="text-sm text-red-400">{oneConnectError}</p>}
                                 <button

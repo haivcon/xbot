@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { exportDb, getSettings, importDb } from "@/lib/localDb";
-import { applyOutboundProxyEnv } from "@/lib/network/outboundProxy";
+import { setOutboundProxyForTenant } from "@/lib/network/initOutboundProxy";
 import { verifyDashboardPassword } from "@/lib/auth/dashboardSession";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { getTenantId } = require("../../../../../tenant-context.cjs");
 
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
 const PASSWORD_HEADER = "x-9r-password";
@@ -35,9 +39,9 @@ export async function POST(request) {
     // Ensure proxy settings take effect immediately after a DB import.
     try {
       const settings = await getSettings();
-      applyOutboundProxyEnv(settings);
-    } catch (err) {
-      console.warn("[Settings][DatabaseImport] Failed to re-apply outbound proxy env:", err);
+      setOutboundProxyForTenant(getTenantId(), settings);
+    } catch {
+      throw new Error("Failed to initialize outbound proxy after database import");
     }
 
     return NextResponse.json({ success: true });

@@ -591,7 +591,7 @@ export default function ChatWidget() {
                             <h3 className="text-sm font-bold text-surface-100">XBOT</h3>
                             <p className="text-[9px] text-emerald-400/70 flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
-                                {t('dashboard.chatPage.status', 'Online — Powered by Gemini + OnchainOS')}
+                                {t('dashboard.chatPage.status', 'Online — Routed securely by 9Router')}
                             </p>
                         </div>
                         <div className="flex items-center gap-0.5">

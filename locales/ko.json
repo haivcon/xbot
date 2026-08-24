@@ -513,6 +513,10 @@
   "ai_usage_finish_reason": "종료: {reason}",
   "ai_usage_output_type": "🖼️ 형식: {type}",
   "ai_error": "죄송합니다. Xlayer B-Ai 호출 중 오류가 발생했습니다. 다시 시도해 주세요.",
+  "ai_9router_not_configured": "⚙️ 계정에 9Router가 구성되지 않았습니다. Chat AI 설정을 열고 AI 제공자를 연결하세요.",
+  "ai_9router_quota": "⏳ 9Router 할당량이 소진되었습니다. 나중에 다시 시도하거나 Chat AI 설정에서 제공자를 확인하세요.",
+  "ai_9router_timeout": "⏱️ 9Router 응답 시간이 초과되었습니다. 잠시 후 다시 시도하세요.",
+  "ai_9router_unavailable": "🔌 9Router를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하세요.",
   "ai_switch_to_user_keys": "You've reached the free /ai limit of {limit}. Switching to your Google API key.",
   "ai_using_personal_key": "Using your personal Google API key.",
   "ai_image_too_large": "⚠️ 사진 크기가 너무 커서 처리할 수 없습니다(최대 {limitMb}MB). 더 작은 이미지를 보내주세요.",
@@ -2165,9 +2169,9 @@
   "price_alert_url_invalid": "❌ 잘못된 URL 형식입니다. http:// 또는 https://로 시작하는지 확인하세요.",
   "ai_provider_9router": "9Router",
   "ai_api_menu_hint_9router": "Use AI models routed by 9Router. This can use 9Router combos, fallbacks and OpenAI-compatible providers.",
-  "ai_api_add_hint_9router": "Add a 9Router API key if your 9Router instance requires Bearer authentication.",
-  "ai_api_add_prompt_9router": "Send your 9Router API key.",
-  "ai_api_add_placeholder_9router": "9Router API key",
-  "ai_api_get_key_9router": "Open 9Router dashboard",
-  "ai_api_usecases_9router": "Routes requests through 9Router at {url}. Default model: {model}."
+  "ai_api_add_hint_9router": "Chat AI 설정에서 AI 제공자를 연결하세요. 자격 증명은 테넌트별로 격리됩니다.",
+  "ai_api_add_prompt_9router": "Chat AI 설정에서 9Router를 구성하세요.",
+  "ai_api_add_placeholder_9router": "",
+  "ai_api_get_key_9router": "Chat AI 설정 열기",
+  "ai_api_usecases_9router": "9Router는 격리된 테넌트 구성을 사용해 모델을 검색하고 요청을 라우팅합니다."
 }

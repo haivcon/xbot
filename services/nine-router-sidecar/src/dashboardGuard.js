@@ -65,6 +65,23 @@ const PROTECTED_API_PATHS = [
   "/api/tunnel",
 ];
 
+// Tenant-scoped management surface used by xBot. Keep this narrower than the
+// dashboard surface so a valid tenant assertion cannot reach host/global APIs.
+const TENANT_MANAGEMENT_PREFIXES = [
+  "/api/providers",
+  "/api/provider-nodes",
+  "/api/oauth",
+  "/api/combos",
+  "/api/usage",
+  "/api/models",
+  "/api/settings",
+];
+
+function isTenantManagementPath(pathname) {
+  return TENANT_MANAGEMENT_PREFIXES.some((prefix) =>
+    pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 // Routes that spawn child processes or read host secrets — restrict to localhost.
 const LOCAL_ONLY_PATHS = [
   "/api/cli-tools/cowork-settings",
@@ -182,6 +199,16 @@ export const __test__ = {
 
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
+
+  // custom-server.js sets this only after verifying the tenant HMAC and strips
+  // any client-supplied value before verification. Tenant management calls use
+  // that assertion instead of an unrelated dashboard JWT/session.
+  if (
+    request.headers.get("x-9r-tenant-authenticated") === "1"
+    && (isPublicLlmApi(pathname) || isTenantManagementPath(pathname))
+  ) {
+    return NextResponse.next();
+  }
 
   // Local-only gate for spawn-capable / host-secret routes.
   if (LOCAL_ONLY_PATHS.some((p) => pathname.startsWith(p))) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import api from '@/api/client';
@@ -14,6 +14,40 @@ import {
 } from 'lucide-react';
 import { hapticImpact, hapticNotification } from '@/utils/telegram';
 import NineRouterSettings from '@/components/chat/NineRouterSettings';
+import { resolveProviderIcon } from '@/components/chat/providerIcon';
+
+const MODEL_PROVIDER_ALIASES = Object.freeze({ gcli: 'grok-cli', gb: 'grok-cli', 'grok-build': 'grok-cli' });
+const MODEL_PROVIDER_NAMES = Object.freeze({
+    codex: 'OpenAI Codex', claude: 'Claude Code', 'gemini-cli': 'Gemini CLI',
+    'grok-cli': 'Grok CLI', github: 'GitHub', antigravity: 'Antigravity', kiro: 'Kiro',
+});
+
+function canonicalModelProviderId(value) {
+    const id = String(value || '').toLowerCase();
+    return MODEL_PROVIDER_ALIASES[id] || id;
+}
+
+function modelProviderName(value) {
+    const canonical = canonicalModelProviderId(value);
+    return MODEL_PROVIDER_NAMES[canonical] || value;
+}
+
+function ProviderModelIcon({ provider, size = 24 }) {
+    const resolved = resolveProviderIcon({ id: provider, name: provider });
+    const [failed, setFailed] = useState(false);
+    if (resolved.kind !== 'asset' || failed) {
+        return <span aria-hidden="true" className="inline-flex shrink-0 items-center justify-center rounded bg-white/10 font-bold" style={{ width: size, height: size, fontSize: 9 }}>{resolved.text}</span>;
+    }
+    return <img src={resolved.src} alt="" aria-hidden="true" width={size} height={size} onError={() => setFailed(true)} className="shrink-0 rounded bg-white/90 object-contain p-0.5" />;
+}
+
+function modelCapabilityBadges(model) {
+    const names = Object.entries(model?.capabilities || {}).filter(([, enabled]) => enabled === true).map(([name]) => name.toLowerCase());
+    return {
+        vision: names.some(name => /vision|image|multimodal/.test(name)),
+        reasoning: names.some(name => /reason|thinking/.test(name))
+    };
+}
 
 
 /* ─── Markdown renderer (lightweight, XSS-safe) ─── */
@@ -429,6 +463,7 @@ function MessageActionSheet({ visible, onClose, message, onCopy, onFeedback, fee
 
 /* ─── Single message bubble (mobile-friendly: tap to show actions) ─── */
 function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, onEdit, onSave, isMobile }) {
+    const { t } = useTranslation();
     const [copied, setCopied] = useState(false);
     const [showActions, setShowActions] = useState(false);
     const [showSheet, setShowSheet] = useState(false);
@@ -512,17 +547,17 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
                     ${isMobile ? (showActions ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'opacity-0 group-hover:opacity-100'}`}>
                     {!isUser && (
                         <>
-                            <button onClick={(e) => { e.stopPropagation(); copyText(); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-surface-100 transition-colors" title="Copy">
+                            <button onClick={(e) => { e.stopPropagation(); copyText(); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-surface-100 transition-colors" title={t('dashboard.chatPage.copy', 'Copy')} aria-label={t('dashboard.chatPage.copy', 'Copy')}>
                                 {copied ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
                             </button>
                             {onFeedback && (
                                 <>
                                     <button onClick={(e) => { e.stopPropagation(); onFeedback('up'); }}
-                                        className={`p-1.5 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'up' ? 'text-emerald-400' : 'text-surface-200/50 hover:text-emerald-400'}`} title="Good">
+                                        className={`p-1.5 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'up' ? 'text-emerald-400' : 'text-surface-200/50 hover:text-emerald-400'}`} title={t('dashboard.chatPage.good', 'Good')} aria-label={t('dashboard.chatPage.good', 'Good')}>
                                         <ThumbsUp size={10} />
                                     </button>
                                     <button onClick={(e) => { e.stopPropagation(); onFeedback('down'); }}
-                                        className={`p-1.5 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'down' ? 'text-red-400' : 'text-surface-200/50 hover:text-red-400'}`} title="Bad">
+                                        className={`p-1.5 rounded-md bg-surface-800 border border-white/10 transition-colors ${feedback === 'down' ? 'text-red-400' : 'text-surface-200/50 hover:text-red-400'}`} title={t('dashboard.chatPage.bad', 'Bad')} aria-label={t('dashboard.chatPage.bad', 'Bad')}>
                                         <ThumbsDown size={10} />
                                     </button>
                                 </>
@@ -530,22 +565,22 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
                         </>
                     )}
                     {isUser && onEdit && (
-                        <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-brand-400 transition-colors" title="Edit">
+                        <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-brand-400 transition-colors" title={t('dashboard.chatPage.edit', 'Edit')} aria-label={t('dashboard.chatPage.edit', 'Edit')}>
                             <Edit size={10} />
                         </button>
                     )}
                     {isUser && onSave && (
-                        <button onClick={(e) => { e.stopPropagation(); onSave(message.content); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-amber-400 transition-colors" title="Save prompt">
+                        <button onClick={(e) => { e.stopPropagation(); onSave(message.content); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-surface-200/50 hover:text-amber-400 transition-colors" title={t('dashboard.chatPage.savePrompt', 'Save prompt')} aria-label={t('dashboard.chatPage.savePrompt', 'Save prompt')}>
                             <Star size={10} />
                         </button>
                     )}
                     {onPin && (
-                        <button onClick={(e) => { e.stopPropagation(); onPin(); }} className={`p-1.5 rounded-md bg-surface-800 border border-white/10 transition-colors ${isPinned ? 'text-amber-400' : 'text-surface-200/50 hover:text-amber-400'}`} title={isPinned ? 'Unpin' : 'Pin'}>
+                        <button onClick={(e) => { e.stopPropagation(); onPin(); }} className={`p-1.5 rounded-md bg-surface-800 border border-white/10 transition-colors ${isPinned ? 'text-amber-400' : 'text-surface-200/50 hover:text-amber-400'}`} title={isPinned ? t('dashboard.chatPage.unpin', 'Unpin') : t('dashboard.chatPage.pin', 'Pin')} aria-label={isPinned ? t('dashboard.chatPage.unpin', 'Unpin') : t('dashboard.chatPage.pin', 'Pin')}>
                             {isPinned ? <PinOff size={10} /> : <Pin size={10} />}
                         </button>
                     )}
                     {isError && onRetry && (
-                        <button onClick={(e) => { e.stopPropagation(); onRetry(); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-amber-400/60 hover:text-amber-400 transition-colors" title="Retry">
+                        <button onClick={(e) => { e.stopPropagation(); onRetry(); }} className="p-1.5 rounded-md bg-surface-800 border border-white/10 text-amber-400/60 hover:text-amber-400 transition-colors" title={t('dashboard.chatPage.retryAction', 'Retry')} aria-label={t('dashboard.chatPage.retryAction', 'Retry')}>
                             <RefreshCw size={10} />
                         </button>
                     )}
@@ -836,9 +871,6 @@ function TypingIndicator() {
 
 // Token autocomplete data (outside component to avoid re-creation)
 const KNOWN_TOKEN_LIST = ['BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'OKB', 'BANMAO', 'PEPE', 'DOGE', 'SHIB', 'ARB', 'OP', 'AVAX', 'MATIC', 'DOT', 'ADA', 'XRP', 'LINK', 'UNI', 'AAVE'];
-const FALLBACK_MODELS = [
-    { id: 'xbot', label: 'xbot', desc: '9Router default route', icon: '🧭', provider: '9router' },
-];
 
 const PERSONA_OPTIONS = [
     { value: 'default', icon: '🔰', label: 'Default', desc: 'Friendly & helpful AI assistant' },
@@ -916,12 +948,6 @@ const SETTINGS_TABS = [
     { id: '9router', icon: '🧭', labelKey: '9router' },
 ];
 
-// Model options per provider (fallback when backend doesn't return provider-specific models)
-const MODEL_OPTIONS_BY_PROVIDER = {
-    '9router': [
-        { id: 'xbot', label: 'xbot', desc: '9Router default route', icon: '🧭', provider: '9router' },
-    ],
-};
 
 /* ─── Main ChatPage ─── */
 export default function ChatPage() {
@@ -949,15 +975,49 @@ export default function ChatPage() {
     const [imagePreview, setImagePreview] = useState(null);
     const [messageFeedback, setMessageFeedback] = useState({});
     const [selectedModel, setSelectedModel] = useState(() => {
-        try { return localStorage.getItem('xbot_ai_model') || 'xbot'; } catch { return 'xbot'; }
+        try { return localStorage.getItem('xbot_ai_model') || ''; } catch { return ''; }
     });
     const [showModelPicker, setShowModelPicker] = useState(false);
-    const [modelOptions, setModelOptions] = useState(FALLBACK_MODELS);
+    const [modelOptions, setModelOptions] = useState([]);
+    const [modelSearch, setModelSearch] = useState('');
     const [modelMeta, setModelMeta] = useState({ upstreams: [], configured: false });
+    const [providerConnections, setProviderConnections] = useState([]);
+    const selectedModelInfo = useMemo(() => modelOptions.find(model => model.id === selectedModel), [modelOptions, selectedModel]);
+    const modelsByUpstream = useMemo(() => {
+        const query = modelSearch.trim().toLowerCase();
+        const groups = new Map();
+        for (const model of modelOptions) {
+            if (model.provider !== '9router') continue;
+            const upstreamId = model.upstream?.id || model.id.split('/')[0] || '9router';
+            if (query && !`${model.label || ''} ${model.id} ${upstreamId}`.toLowerCase().includes(query)) continue;
+            if (!groups.has(upstreamId)) groups.set(upstreamId, []);
+            groups.get(upstreamId).push(model);
+        }
+        return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
+    }, [modelOptions, modelSearch]);
+    const providerHealthById = useMemo(() => providerConnections.reduce((health, connection) => {
+        const providerId = canonicalModelProviderId(connection.provider);
+        const status = String(connection.testStatus || '').toLowerCase();
+        const expiresAt = new Date(connection.expiresAt || 0).getTime();
+        const expired = expiresAt > 0 && expiresAt <= Date.now();
+        const expiring = expiresAt > Date.now() && expiresAt - Date.now() <= 7 * 24 * 60 * 60 * 1000;
+        const next = connection.isActive === false || expired || ['error', 'expired', 'failed', 'unavailable'].includes(status)
+            ? 'error'
+            : expiring ? 'expiring' : 'active';
+        if (!health[providerId] || health[providerId] === 'error' || next === 'expiring') health[providerId] = next;
+        if (next === 'active') health[providerId] = 'active';
+        return health;
+    }, {}), [providerConnections]);
+    const connectedProviderCount = Object.values(providerHealthById).filter(status => status === 'active' || status === 'expiring').length;
     // AI Settings panel state
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
 
     const [settingsTab, setSettingsTab] = useState('model');
+    const openProviderSettings = useCallback(() => {
+        setShowModelPicker(false);
+        setShowSettingsPanel(true);
+        setSettingsTab('9router');
+    }, []);
     const [selectedPersona, setSelectedPersona] = useState(() => {
         try { return localStorage.getItem('xbot_ai_persona') || 'default'; } catch { return 'default'; }
     });
@@ -1086,13 +1146,42 @@ export default function ChatPage() {
                 });
                 const savedModel = localStorage.getItem('xbot_ai_model');
                 const currentModel = savedModel || selectedModel;
-                if (data.defaultModel && !data.models.find(m => m.id === currentModel)) {
-                    setSelectedModel(data.defaultModel);
+                if (!data.models.find(m => m.id === currentModel)) {
+                    setSelectedModel(data.defaultModel || data.models[0].id);
                 }
+            } else {
+                setModelOptions([]);
+                setModelMeta({ upstreams: [], configured: false });
+                setSelectedModel('');
             }
-        } catch { /* fallback to FALLBACK_MODELS */ }
+        } catch {
+            setModelOptions([]);
+            setModelMeta({ upstreams: [], configured: false });
+            setSelectedModel('');
+        }
     }, []);
-    useEffect(() => { loadModels(); }, [loadModels]);
+    const loadProviderHealth = useCallback(async () => {
+        try {
+            const data = await api.request('/ai/9router/providers', { cacheTtl: 0 });
+            setProviderConnections(data.connections || data.providers || (Array.isArray(data) ? data : []));
+        } catch {
+            setProviderConnections([]);
+        }
+    }, []);
+    const refreshModelsAndProviders = useCallback(async () => {
+        await Promise.all([loadModels(), loadProviderHealth()]);
+    }, [loadModels, loadProviderHealth]);
+    useEffect(() => { refreshModelsAndProviders(); }, [refreshModelsAndProviders]);
+    useEffect(() => {
+        if (!modelMeta.configured || modelOptions.length === 0) {
+            if (selectedModel) setSelectedModel('');
+            return;
+        }
+        if (!modelOptions.some(model => model.id === selectedModel)) {
+            const defaultModel = modelMeta.defaultModel;
+            setSelectedModel(modelOptions.some(model => model.id === defaultModel) ? defaultModel : modelOptions[0].id);
+        }
+    }, [modelMeta.configured, modelMeta.defaultModel, modelOptions, selectedModel]);
 
     // ── Load user AI preferences ──
     useEffect(() => {
@@ -1262,6 +1351,11 @@ export default function ChatPage() {
     const sendMessage = async (text) => {
         const msg = (text || input).trim();
         if (!msg || loading) return;
+        if (!modelMeta.configured || !selectedModel || !modelOptions.some(model => model.id === selectedModel)) {
+            setShowSettingsPanel(true);
+            setSettingsTab('9router');
+            return;
+        }
 
         hapticImpact('light');
         setInput('');
@@ -1283,9 +1377,7 @@ export default function ChatPage() {
             try {
                 // Add placeholder
                 setMessages(prev => [...prev, { role: 'compare', content: null, ts: Date.now() }]);
-                const models = availableModels?.length >= 2
-                    ? availableModels
-                    : (MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || []).map(m => m.id);
+                const models = availableModels?.length >= 2 ? availableModels : modelOptions.map(m => m.id);
                 const modelA = selectedModel || models[0];
                 const modelB = models.find(m => m !== modelA) || models[1] || models[0];
                 const result = await api.compareChat(msg, modelA, modelB);
@@ -1381,21 +1473,15 @@ export default function ChatPage() {
                     setSessionTokens(prev => ({ ...prev, received: prev.received + Math.ceil(fullText.length / 4) }));
                 },
                 onError: (data) => {
-                    let rawErr = data.error || 'Stream failed';
-                    // Sanitize: strip API keys and detect auth/quota errors
-                    rawErr = rawErr.replace(/sk-[a-zA-Z0-9*_-]{10,}/g, 'sk-***').replace(/https?:\/\/[^\s)]+/g, '').trim();
-                    const errLower = rawErr.toLowerCase();
-                    const isAuth = errLower.includes('401') || errLower.includes('403') || errLower.includes('incorrect api key') || errLower.includes('invalid api key') || errLower.includes('authentication');
-                    const isQuota = errLower.includes('429') || errLower.includes('quota') || errLower.includes('rate limit') || errLower.includes('resource_exhausted');
-                    
-                    let errContent;
-                    if (isAuth || isQuota) {
-                        const reason = isQuota ? '9Router quota or rate limit reached.' : 'The server-side 9Router connection is not authorized.';
-                        errContent = `\u274c **9Router unavailable**\n\n${reason} Please contact the xBot administrator.`;
-                    } else {
-                        errContent = `\u274c ${t('dashboard.chatPage.err_generic', 'Dạ, có chút trục trặc nhỏ:')} ${rawErr.substring(0, 200)}`;
-                    }
-                    
+                    const code = String(data?.code || '').toUpperCase();
+                    const isAuth = code.includes('CONFIG') || code.includes('AUTH') || code.includes('401') || code.includes('403');
+                    const isQuota = code.includes('QUOTA') || code.includes('RATE') || code.includes('429');
+                    const errContent = `\u274c ${isQuota
+                        ? t('dashboard.chatPage.err_quotaSafe', '9Router quota is currently unavailable. Please try again later.')
+                        : isAuth
+                            ? t('dashboard.chatPage.err_configSafe', 'Connect an AI provider in AI Settings before chatting.')
+                            : t('dashboard.chatPage.err_unavailableSafe', 'AI service is temporarily unavailable. Please try again.')}`;
+
                     setMessages(prev => {
                         const copy = [...prev];
                         if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], content: errContent };
@@ -1414,15 +1500,13 @@ export default function ChatPage() {
             const isRateLimit = errMsg.includes('429') || errLower.includes('quota') || errLower.includes('rate limit') || errLower.includes('resource_exhausted') || errLower.includes('tokens per min');
             const isAuthError = errMsg.includes('401') || errMsg.includes('403') || errLower.includes('invalid api key') || errLower.includes('incorrect api key') || errLower.includes('unauthorized') || errLower.includes('api_key_invalid') || errLower.includes('authentication') || errLower.includes('permission denied');
             
-            // Always sanitize raw error — strip API keys and technical URLs
-            const sanitized = errMsg.replace(/sk-[a-zA-Z0-9*_-]{10,}/g, 'sk-***').replace(/https?:\/\/[^\s)]+/g, '').trim();
-
-            if (isRateLimit || isAuthError) {
-                const reason = isRateLimit ? '9Router quota or rate limit reached.' : 'The server-side 9Router connection is not authorized.';
-                errMsg = `\u274c **9Router unavailable**\n\n${reason} Please contact the xBot administrator.`;
+            if (isRateLimit) {
+                errMsg = `\u274c ${t('dashboard.chatPage.err_quotaSafe', '9Router quota is currently unavailable. Please try again later.')}`;
+            } else if (isAuthError) {
+                errMsg = `\u274c ${t('dashboard.chatPage.err_configSafe', 'Connect an AI provider in AI Settings before chatting.')}`;
             } else {
-                // Safely wrap any remaining error without leaking raw technical details
-                errMsg = `\u274c ${t('dashboard.chatPage.err_generic', 'Dạ, có chút trục trặc nhỏ:')} ${sanitized.substring(0, 200)}`;
+                // Never expose model, credential, route, or upstream transport details.
+                errMsg = `\u274c ${t('dashboard.chatPage.err_unavailableSafe', 'AI service is temporarily unavailable. Please try again.')}`;
             }
 
             // Update the existing streaming placeholder instead of adding a duplicate
@@ -2158,7 +2242,7 @@ export default function ChatPage() {
                         </h1>
                         <p className="text-[10px] text-emerald-400/70 flex items-center gap-1 truncate">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-                            <span className="truncate">{t('dashboard.chatPage.status', 'Online — Powered by Gemini + OnchainOS')}</span>
+                            <span className="truncate">{t('dashboard.chatPage.status', 'Online — Routed securely by 9Router')}</span>
                         </p>
                     </div>
                     <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -2173,8 +2257,17 @@ export default function ChatPage() {
                                 }`}
                                 title={t('dashboard.chatPage.aiSettings', 'AI Settings')}>
                                 <Settings size={isMobile ? 16 : 12} />
-                                <span className="hidden sm:inline text-[10px]">{modelOptions.find(m => m.id === selectedModel)?.label || 'Flash'}</span>
+                                <span className="hidden max-w-40 truncate text-[10px] sm:inline">{selectedModelInfo?.label || t('dashboard.chatPage.noModels', 'No models')}</span>
+                                {selectedModelInfo && (() => {
+                                    const badges = modelCapabilityBadges(selectedModelInfo);
+                                    return <span className="hidden items-center gap-0.5 md:flex">{badges.vision && <span title={t('dashboard.chatPage.capabilityVision', 'Vision')}>👁</span>}{badges.reasoning && <span title={t('dashboard.chatPage.capabilityReasoning', 'Reasoning')}>🧠</span>}</span>;
+                                })()}
                             </button>
+                            {connectedProviderCount > 0 && (
+                                <span className="pointer-events-none absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[8px] font-bold text-white">
+                                    {connectedProviderCount}
+                                </span>
+                            )}
                         </div>
                         {/* Context indicator — desktop only */}
                         {messages.length > 0 && (
@@ -2502,6 +2595,18 @@ export default function ChatPage() {
                          paddingLeft: 'calc(0.75rem + env(safe-area-inset-left, 0px))',
                          paddingRight: 'calc(0.75rem + env(safe-area-inset-right, 0px))' 
                      } : {}}>
+                    {modelOptions.length < 5 && (
+                        <button type="button" onClick={openProviderSettings} className="mb-2 flex w-full items-center justify-between gap-3 rounded-xl border border-brand-500/15 bg-brand-500/10 px-3 py-2 text-left text-[10px] text-brand-200/80 transition-colors hover:bg-brand-500/15">
+                            <span>
+                                <strong>{connectedProviderCount}</strong> {t('dashboard.chatPage.providersConnectedShort', 'providers connected')}
+                                {' · '}
+                                <strong>{modelOptions.length}</strong> {t('dashboard.chatPage.modelsAvailableShort', 'models available')}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-1 font-semibold text-brand-300">
+                                {t('dashboard.chatPage.connectMoreProviders', 'Connect more providers')} <ChevronRight size={11} />
+                            </span>
+                        </button>
+                    )}
                     {/* Quick action chips (new/empty chat only) */}
                     {messages.length === 0 && !loading && (
                         <div className={`flex gap-1.5 mb-2 animate-fadeIn ${isMobile ? 'overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide' : 'flex-wrap'}`}>
@@ -2610,6 +2715,7 @@ export default function ChatPage() {
                                 value={input}
                                 onChange={handleInputChange}
                                 onKeyDown={handleKeyDown}
+                                disabled={!modelMeta.configured || !selectedModel}
                                 placeholder={t('dashboard.chatPage.inputPlaceholder', 'Type / for commands or ask anything...')}
                                 rows={1}
                                 className={`w-full rounded-xl bg-surface-800/60 border resize-none
@@ -2658,7 +2764,7 @@ export default function ChatPage() {
                                 ${isMobile ? 'p-3 min-w-[44px] min-h-[44px] flex items-center justify-center' : 'p-2.5'}
                                 ${loading
                                     ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
-                                    : input.trim()
+                                    : input.trim() && modelMeta.configured && selectedModel
                                     ? 'bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/25'
                                     : 'bg-surface-800/40 text-surface-200/20 cursor-not-allowed'
                                 }`}>
@@ -2730,7 +2836,11 @@ export default function ChatPage() {
                                             </div>
                                             <div className="flex items-center gap-1.5">
                                                 <div className={`w-1.5 h-1.5 rounded-full ${modelMeta.configured ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                                                <span className="text-[8px] text-surface-200/40">{modelMeta.configured ? 'Connected' : 'Unavailable'}</span>
+                                                <span className="text-[8px] text-surface-200/40">
+                                                    {modelMeta.configured
+                                                        ? t('dashboard.chatPage.connected', 'Connected')
+                                                        : t('dashboard.chatPage.unavailable', 'Unavailable')}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
@@ -2752,39 +2862,83 @@ export default function ChatPage() {
                                         );
                                     })()}
                                     <div>
-                                        <p className="text-[10px] text-surface-200/40 uppercase tracking-widest font-semibold mb-2">{t('dashboard.chatPage.modelLabel', 'Model')}</p>
-                                        <div className="space-y-1">
-                                            {(modelOptions.filter(m => m.provider === selectedProvider).length > 0 ? modelOptions.filter(m => m.provider === selectedProvider) : (MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || modelOptions)).map(m => {
-                                                const canChange = canChangeForProvider(selectedProvider);
-                                                // Default model for each provider (first in list)
-                                                const providerModels = MODEL_OPTIONS_BY_PROVIDER[selectedProvider] || modelOptions;
-                                                const defaultProviderModel = modelMeta.defaultModel || providerModels[0]?.id;
-                                                const isDefault = m.id === defaultProviderModel;
-                                                const isLocked = !canChange && !isDefault;
-                                                return (
-                                                    <button key={m.id}
-                                                        onClick={() => { if (!isLocked) { setSelectedModel(m.id); saveAiPrefs({ model: m.id }); } }}
-                                                        disabled={isLocked}
-                                                        className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
-                                                            isLocked ? 'opacity-40 cursor-not-allowed border border-transparent' :
-                                                            selectedModel === m.id
-                                                                ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
-                                                                : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
-                                                        }`}>
-                                                        <div>
-                                                            <span className="font-medium">{m.icon} {m.label}</span>
-                                                            <span className="block text-[10px] text-surface-200/40">{t(`dashboard.chatPage.modelDesc.${m.id}`, m.desc)}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5">
-                                                            {modelUsageStats[m.id] > 0 && <span className="text-[8px] text-surface-200/25 tabular-nums">{modelUsageStats[m.id]}</span>}
-                                                            {isLocked && <Lock size={10} className="text-surface-200/30" />}
-                                                            {isDefault && !isLocked && <span className="text-[8px] bg-brand-500/10 text-brand-400/70 px-1.5 py-0.5 rounded-full font-medium">{t('dashboard.chatPage.defaultBadge', 'DEFAULT')}</span>}
-                                                            {selectedModel === m.id && !isLocked && <Check size={12} className="text-brand-400" />}
-                                                        </div>
-                                                    </button>
-                                                );
-                                            })}
+                                        <div className="mb-2 flex items-center justify-between gap-2">
+                                            <p className="text-[10px] font-semibold uppercase tracking-widest text-surface-200/40">{t('dashboard.chatPage.modelLabel', 'Model')}</p>
+                                            <span className="text-[9px] text-surface-200/40">
+                                                {connectedProviderCount} {t('dashboard.chatPage.providersConnectedShort', 'providers')}
+                                                {' · '}
+                                                {modelOptions.length} {t('dashboard.chatPage.modelsAvailableShort', 'models')}
+                                            </span>
                                         </div>
+                                        <input
+                                            type="search"
+                                            value={modelSearch}
+                                            onChange={event => setModelSearch(event.target.value)}
+                                            placeholder={t('dashboard.chatPage.modelSearch', 'Search models')}
+                                            className="input-field mb-2 w-full text-xs"
+                                        />
+                                        <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                                            {modelsByUpstream.map(([upstreamId, models]) => (
+                                                <div key={upstreamId} className="space-y-1">
+                                                    <p className="sticky top-0 flex items-center gap-2 bg-surface-900/95 px-1 py-1 text-[9px] font-semibold uppercase tracking-wide text-surface-200/40">
+                                                        <ProviderModelIcon provider={canonicalModelProviderId(upstreamId)} />
+                                                        <span>{modelProviderName(upstreamId)}</span>
+                                                        <span className="badge text-[8px]">{models.length}</span>
+                                                        <span className={providerHealthById[canonicalModelProviderId(upstreamId)] === 'error'
+                                                            ? 'badge badge-danger ml-auto text-[8px]'
+                                                            : providerHealthById[canonicalModelProviderId(upstreamId)] === 'expiring'
+                                                                ? 'badge ml-auto bg-amber-500/15 text-[8px] text-amber-300'
+                                                                : 'badge badge-success ml-auto text-[8px]'}>
+                                                            {t(`dashboard.chatPage.connectionHealth_${providerHealthById[canonicalModelProviderId(upstreamId)] || 'active'}`, providerHealthById[canonicalModelProviderId(upstreamId)] || 'active')}
+                                                        </span>
+                                                    </p>
+                                                    {models.map(m => {
+                                                        const canChange = canChangeForProvider(selectedProvider);
+                                                        const capabilityBadges = modelCapabilityBadges(m);
+                                                        const defaultProviderModel = modelMeta.defaultModel || modelOptions[0]?.id;
+                                                        const isDefault = m.id === defaultProviderModel;
+                                                        const isLocked = !canChange && !isDefault;
+                                                        return (
+                                                            <button key={m.id}
+                                                                onClick={() => { if (!isLocked) { setSelectedModel(m.id); saveAiPrefs({ model: m.id }); } }}
+                                                                disabled={isLocked}
+                                                                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
+                                                                    isLocked ? 'opacity-40 cursor-not-allowed border border-transparent' :
+                                                                    selectedModel === m.id
+                                                                        ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                                                                        : 'text-surface-200/70 hover:bg-white/5 border border-transparent'
+                                                                }`}>
+                                                                <div className="min-w-0">
+                                                                    <span className="block truncate font-medium">{m.icon} {m.label}</span>
+                                                                    <span className="block truncate font-mono text-[9px] text-surface-200/35">{m.id}</span>
+                                                                    <span className="mt-1 flex flex-wrap gap-1">
+                                                                        {capabilityBadges.vision && <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[8px] text-emerald-300/70">👁 {t('dashboard.chatPage.capabilityVision', 'Vision')}</span>}
+                                                                        {capabilityBadges.reasoning && <span className="rounded bg-purple-500/10 px-1 py-0.5 text-[8px] text-purple-300/70">🧠 {t('dashboard.chatPage.capabilityReasoning', 'Reasoning')}</span>}
+                                                                        {Number(m.contextLength || 0) > 0 && <span className="rounded bg-white/5 px-1 py-0.5 text-[8px] text-surface-200/40">{Number(m.contextLength).toLocaleString()} ctx</span>}
+                                                                        {m.category && <span className="rounded bg-white/5 px-1 py-0.5 text-[8px] text-surface-200/40">{m.category}</span>}
+                                                                        {Object.entries(m.capabilities || {}).filter(([, enabled]) => enabled === true).slice(0, 3).map(([capability]) => <span key={capability} className="rounded bg-emerald-500/10 px-1 py-0.5 text-[8px] text-emerald-300/60">{capability}</span>)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex shrink-0 items-center gap-1.5">
+                                                                    {modelUsageStats[m.id] > 0 && <span className="text-[8px] text-surface-200/25 tabular-nums">{modelUsageStats[m.id]}</span>}
+                                                                    {isLocked && <Lock size={10} className="text-surface-200/30" />}
+                                                                    {isDefault && !isLocked && <span className="text-[8px] bg-brand-500/10 text-brand-400/70 px-1.5 py-0.5 rounded-full font-medium">{t('dashboard.chatPage.defaultBadge', 'DEFAULT')}</span>}
+                                                                    {selectedModel === m.id && !isLocked && <Check size={12} className="text-brand-400" />}
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ))}
+                                            {modelsByUpstream.length === 0 && (
+                                                <p className="py-4 text-center text-[10px] text-surface-200/40">{t('dashboard.chatPage.noMatchingModels', 'No matching models.')}</p>
+                                            )}
+                                        </div>
+                                        {modelOptions.length < 5 && (
+                                            <button type="button" onClick={openProviderSettings} className="btn-primary mt-3 w-full text-xs">
+                                                <Plus size={14} /> {t('dashboard.chatPage.connectMoreAiProviders', 'Connect more AI providers')}
+                                            </button>
+                                        )}
                                     </div>
 
                                     {/* Thinking Level — filtered by provider & model */}
@@ -2839,7 +2993,7 @@ export default function ChatPage() {
 
                             {/* ── Tenant-isolated 9Router settings ── */}
                             {settingsTab === '9router' && (
-                                <NineRouterSettings onModelsChanged={loadModels} />
+                                <NineRouterSettings initialSection="providers" onModelsChanged={refreshModelsAndProviders} />
                             )}
 
                             {/* ── Persona Tab ── */}

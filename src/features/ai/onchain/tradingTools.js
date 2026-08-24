@@ -6,6 +6,7 @@ const path = require('path');
 const { formatPriceResult, formatSearchResult, formatWalletResult, formatSwapQuoteResult, formatTopTokensResult, formatRecentTradesResult, formatSignalChainsResult, formatSignalListResult, formatProfitRoiResult, formatHolderResult, formatGasResult, formatTokenInfoResult, formatCandlesResult, formatTokenMarketDetail, formatSwapExecutionResult, formatSimulationResult, formatLargeNumber } = require('./formatters');
 const { CHAIN_RPC_MAP, CHAIN_EXPLORER_MAP, _getChainRpc, _getExplorerUrl, _getEncryptKey, _hashPin, _verifyPin, autoResolveToken, rpcRetry, createNonceManager, checkTokenBalance } = require('./helpers');
 const db = require('../../../../db.js');
+const { assertExecutionEnabled } = require('../../../core/executionPolicy');
 
 module.exports = {
     async get_swap_quote(args, context) {
@@ -324,6 +325,7 @@ module.exports = {
     },
 
     async execute_swap(args, context) {
+        assertExecutionEnabled();
         const { dbGet } = require('../../../../db/core');
         const userId = context?.userId;
         if (!userId) return '❌ Không xác định được người dùng.';
@@ -395,6 +397,7 @@ module.exports = {
                                 const infiniteApproveData = erc20Interface.encodeFunctionData("approve", [approval.dexContractAddress, ethers.MaxUint256]);
 
                                 // Sign and broadcast approval tx
+                                assertExecutionEnabled();
                                 const approveTx = await wallet.signTransaction({
                                     to: fromTokenAddress.toLowerCase(), // send to TOKEN contract
                                     data: infiniteApproveData,
@@ -614,6 +617,7 @@ module.exports = {
             // 5. Sign the swap transaction
             const tx = txRaw.tx;
             log.child('AUTOSWAP').info(`Signing swap tx...`);
+            assertExecutionEnabled();
             const signedTx = await wallet.signTransaction({
                 to: tx.to,
                 data: tx.data,
@@ -998,6 +1002,7 @@ module.exports = {
     },
 
     async batch_swap(args, context) {
+        assertExecutionEnabled();
         const { dbGet } = require('../../../../db/core');
         const userId = context?.userId;
         if (!userId) return '❌ Không xác định được người dùng.';
@@ -1137,6 +1142,7 @@ module.exports = {
                                     if (currentAllowance < BigInt(s.amount)) {
                                         const erc20Interface = new ethers.Interface(["function approve(address spender, uint256 amount) public returns (bool)"]);
                                         const infiniteApproveData = erc20Interface.encodeFunctionData("approve", [spender, ethers.MaxUint256]);
+                                        assertExecutionEnabled();
                                         const approveTx = await wallet.signTransaction({
                                             to: fromTokenAddress.toLowerCase(), data: infiniteApproveData, value: 0n,
                                             gasLimit: BigInt(approveData[0].gasLimit || '100000'), gasPrice: BigInt(approveData[0].gasPrice || '1000000000'),
@@ -1247,6 +1253,7 @@ module.exports = {
                     if (!txRaw?.tx) { results.push({ id: swap.walletId, address: tw.address, status: '❌', reason: 'No tx data' }); continue; }
 
                     // Sign + broadcast (using shared nonce manager)
+                    assertExecutionEnabled();
                     const signedTx = await wallet.signTransaction({
                         to: txRaw.tx.to, data: txRaw.tx.data, value: BigInt(txRaw.tx.value || '0'),
                         gasLimit: BigInt(txRaw.tx.gas || txRaw.tx.gasLimit || '300000'), gasPrice: BigInt(txRaw.tx.gasPrice || '1000000000'),
@@ -1651,6 +1658,7 @@ module.exports = {
 
 
     async broadcast_transaction(args) {
+        assertExecutionEnabled();
         try {
             const data = await onchainos.broadcastTransaction(
                 args.signedTx,
@@ -1693,6 +1701,7 @@ module.exports = {
     },
 
     async schedule_dca(args, context) {
+        assertExecutionEnabled();
         const { dbGet, dbRun, dbAll } = require('../../../../db/core');
         const userId = context?.userId;
         const chatId = context?.chatId || userId;

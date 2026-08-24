@@ -231,7 +231,7 @@ export function createSSEStream(options = {}) {
             sseEmittedCount++;
           }
 
-          if (keepsOpenAIResponsesFormat && !streamDoneSent) {
+          if ((keepsOpenAIResponsesFormat || sourceFormat === FORMATS.OPENAI) && !streamDoneSent) {
             const doneOutput = "data: [DONE]\n\n";
             reqLogger?.appendConvertedChunk?.(doneOutput);
             controller.enqueue(sharedEncoder.encode(doneOutput));
@@ -438,6 +438,15 @@ export function createSSEStream(options = {}) {
           reqLogger?.appendConvertedChunk?.(doneOutput);
           controller.enqueue(sharedEncoder.encode(doneOutput));
           openAIResponsesDoneSent = true;
+          streamDoneSent = true;
+        }
+
+        // OpenAI Chat Completions clients require the terminal sentinel even
+        // when the provider spoke Responses API (for example Grok CLI).
+        if (sourceFormat === FORMATS.OPENAI && !streamDoneSent) {
+          const doneOutput = "data: [DONE]\n\n";
+          reqLogger?.appendConvertedChunk?.(doneOutput);
+          controller.enqueue(sharedEncoder.encode(doneOutput));
           streamDoneSent = true;
         }
 

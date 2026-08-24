@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "repository": "https://github.com/decolua/9router.git",
+    "tag": "v0.5.55",
+    "license": "MIT",
+    "licensePath": "LICENSE"
+  },
+  "providers": {
+    "antigravity": {
+      "publicPath": "providers/antigravity.png",
+      "sourcePath": "public/providers/antigravity.png",
+      "sha256": "19b32e19801a5f87e2035439e859ea9f71e8d86505e7ba3a3eca402d84516620"
+    },
+    "claude": {
+      "publicPath": "providers/claude.png",
+      "sourcePath": "public/providers/claude.png",
+      "sha256": "2baa37a28830a5340bd4a6e0ae5b738f1de6b2e3fbabf6f9f66887c7417c4d2c"
+    },
+    "cline": {
+      "publicPath": "providers/cline.png",
+      "sourcePath": "public/providers/cline.png",
+      "sha256": "27a632eaff94f2b01d44b69bde220b234d27e2c37d3fed11c955008099ef0d3d"
+    },
+    "cursor": {
+      "publicPath": "providers/cursor.png",
+      "sourcePath": "public/providers/cursor.png",
+      "sha256": "5790638efc8c75aa0829a982c359d3ee3719f925a8dd8db44af6133976b9960f"
+    },
+    "gemini-cli": {
+      "publicPath": "providers/gemini-cli.png",
+      "sourcePath": "public/providers/gemini-cli.png",
+      "sha256": "b31d356fe908503411606f836a2658631a6c000624f49d003cacd29ef42b7d57"
+    },
+    "grok-web": {
+      "publicPath": "providers/grok-web.png",
+      "sourcePath": "public/providers/grok-web.png",
+      "sha256": "15ee9b1512bc00ef9781f574e697c32d74dfbe4617eb18f56ea9e31d93b0eb7e"
+    },
+    "kimchi": {
+      "publicPath": "providers/kimchi.svg",
+      "sourcePath": "public/providers/kimchi.svg",
+      "sha256": "9c2c2b8b0a39cf801fd8a9142b35ca1b5da5a754fed55a2b3e6a40ad78240da0"
+    },
+    "mimo-free": {
+      "publicPath": "providers/mimo-free.png",
+      "sourcePath": "public/providers/mimo-free.png",
+      "sha256": "ad7cac0f840b085ab1a08e90998fb04364e122ad84ea670bd99e3d71bd2088dc"
+    },
+    "codex": {
+      "publicPath": "providers/codex.png",
+      "sourcePath": "public/providers/codex.png",
+      "sha256": "5479a98be0f2ae7a759672e4e400f66287e94b2d5768190558f98981a3b49f84"
+    },
+    "opencode": {
+      "publicPath": "providers/opencode.png",
+      "sourcePath": "public/providers/opencode.png",
+      "sha256": "963adc60ad7991666d1708bfdadd3989ba0ee919991d50061e1ccbaa5cd08d32"
+    },
+    "perplexity-web": {
+      "publicPath": "providers/perplexity-web.png",
+      "sourcePath": "public/providers/perplexity-web.png",
+      "sha256": "4914dfb43c5ffaea43d2872ccf5657abeb77cde271ea6d530564a771cd1544e5"
+    }
+  }
+}

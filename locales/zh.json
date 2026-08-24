@@ -513,6 +513,10 @@
   "ai_usage_finish_reason": "Finish: {reason}",
   "ai_usage_output_type": "🖼️ Format: {type}",
   "ai_error": "抱歉，联系 Xlayer B-Ai 时出错。请重试。",
+  "ai_9router_not_configured": "⚙️ 您的账户尚未配置 9Router。请打开 Chat AI 设置并连接 AI 提供商。",
+  "ai_9router_quota": "⏳ 您的 9Router 配额已用尽。请稍后重试，或在 Chat AI 设置中检查提供商。",
+  "ai_9router_timeout": "⏱️ 9Router 响应超时。请稍后重试。",
+  "ai_9router_unavailable": "🔌 9Router 暂时不可用。请稍后重试。",
   "ai_switch_to_user_keys": "你已达到免费 /ai 次数 {limit}。正在切换至你的 Google API Key。",
   "ai_using_personal_key": "正在使用你的私人 Google API Key。",
   "ai_image_too_large": "⚠️ 图片太大（最大 {limitMb} MB）。请发送较小的图片。",
@@ -2253,9 +2257,9 @@
   "price_alert_url_invalid": "❌ 链接格式无效，请确保以 http:// 或 https:// 开头",
   "ai_provider_9router": "9Router",
   "ai_api_menu_hint_9router": "Use AI models routed by 9Router. This can use 9Router combos, fallbacks and OpenAI-compatible providers.",
-  "ai_api_add_hint_9router": "Add a 9Router API key if your 9Router instance requires Bearer authentication.",
-  "ai_api_add_prompt_9router": "Send your 9Router API key.",
-  "ai_api_add_placeholder_9router": "9Router API key",
-  "ai_api_get_key_9router": "Open 9Router dashboard",
-  "ai_api_usecases_9router": "Routes requests through 9Router at {url}. Default model: {model}."
+  "ai_api_add_hint_9router": "请在 Chat AI 设置中连接 AI 提供商。凭据将按租户隔离保存。",
+  "ai_api_add_prompt_9router": "请在 Chat AI 设置中配置 9Router。",
+  "ai_api_add_placeholder_9router": "",
+  "ai_api_get_key_9router": "打开 Chat AI 设置",
+  "ai_api_usecases_9router": "9Router 使用您隔离的租户配置发现模型并路由请求。"
 }

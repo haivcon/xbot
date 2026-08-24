@@ -7,6 +7,7 @@
  */
 const logger = require('../../core/logger');
 const log = logger.child('AI:FnTools');
+const { assertExecutionEnabled } = require('../../core/executionPolicy');
 
 /**
  * Create function tools system.
@@ -1960,6 +1961,7 @@ function createFunctionTools(toolDeps) {
       } catch (error) { return { success: false, error: error.message }; }
     },
     redeem_rewards: async ({ points }, context) => {
+      assertExecutionEnabled();
       try {
         const { dbGet, dbRun } = require('../../../db/core');
         const onchainos = require('../../services/onchainos');
@@ -1977,6 +1979,7 @@ function createFunctionTools(toolDeps) {
         if (!wallets.length) return { success: false, error: t(lang, 'ai_swap_need_wallet') };
         const userWallet = wallets[0].startsWith('XKO') ? '0x' + wallets[0].slice(3) : wallets[0];
         // Check bot wallet
+        assertExecutionEnabled();
         const botKey = process.env.BOT_REWARD_PRIVATE_KEY;
         if (!botKey || botKey === '123') return { success: false, error: t(lang, 'ai_swap_no_wallet_key') + '. Set BOT_REWARD_PRIVATE_KEY in .env' };
         const banmaoAmount = points / 100;
@@ -1990,6 +1993,7 @@ function createFunctionTools(toolDeps) {
           const banmaoContract = process.env.CONTRACT_ADDRESS || '0x9bA84834c10d07372e33D4C105F08C984b03a5e0';
           const erc20Abi = ['function transfer(address to, uint256 amount) returns (bool)'];
           const contract = new ethers.Contract(banmaoContract, erc20Abi, botWallet);
+          assertExecutionEnabled();
           const tx = await contract.transfer(userWallet, ethers.parseEther(String(banmaoAmount)));
           const receipt = await tx.wait();
           const explorerLink = `https://www.okx.com/web3/explorer/xlayer/tx/${receipt.hash}`;

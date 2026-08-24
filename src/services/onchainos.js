@@ -19,6 +19,7 @@ const {
     OKX_DEX_DEFAULT_RETRY_DELAY_MS
 } = require('../config');
 const okxKeyManager = require('../utils/okxKeyManager');
+const { assertExecutionEnabled } = require('../core/executionPolicy');
 
 function getCredentials() {
     if (!hasOkxCredentials) {
@@ -439,6 +440,7 @@ async function getSwapQuote(params) {
  * @param {string} [params.slippagePercent] - Default '1'
  */
 async function getSwapTransaction(params) {
+    assertExecutionEnabled();
     const path = buildGetPath('/api/v6/dex/aggregator/swap', {
         chainIndex: params.chainIndex,
         fromTokenAddress: params.fromTokenAddress.toLowerCase(),
@@ -455,6 +457,7 @@ async function getSwapTransaction(params) {
  * Get ERC-20 token approval transaction data
  */
 async function getApproveTransaction(chainIndex, tokenContractAddress, approveAmount) {
+    assertExecutionEnabled();
     const path = buildGetPath('/api/v6/dex/aggregator/approve-transaction', {
         chainIndex,
         tokenContractAddress: tokenContractAddress.toLowerCase(),
@@ -513,6 +516,7 @@ async function simulateTransaction(params) {
  * Broadcast a signed transaction
  */
 async function broadcastTransaction(signedTx, chainIndex, address) {
+    assertExecutionEnabled();
     return okxFetch('POST', '/api/v6/dex/pre-transaction/broadcast-transaction', {
         signedTx,
         chainIndex,

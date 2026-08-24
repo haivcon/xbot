@@ -8,6 +8,7 @@
 const crypto = require('crypto');
 const logger = require('../core/logger');
 const log = logger.child('OKXCex');
+const { assertExecutionEnabled } = require('../core/executionPolicy');
 
 // ─── OKX CEX base URLs by site ───
 const OKX_SITES = {
@@ -268,6 +269,7 @@ async function getPositions(creds, instType) {
 // ═══════════════════════════════════
 
 async function placeOrder(creds, params) {
+    assertExecutionEnabled();
     return okxCexFetch(creds, 'POST', '/api/v5/trade/order', {
         instId: params.instId,
         tdMode: params.tdMode || 'cash',
@@ -280,6 +282,7 @@ async function placeOrder(creds, params) {
 }
 
 async function cancelOrder(creds, instId, ordId) {
+    assertExecutionEnabled();
     return okxCexFetch(creds, 'POST', '/api/v5/trade/cancel-order', { instId, ordId });
 }
 
@@ -300,6 +303,7 @@ async function getOrder(creds, instId, ordId) {
 // ═══════════════════════════════════
 
 async function createGridOrder(creds, params) {
+    assertExecutionEnabled();
     return okxCexFetch(creds, 'POST', '/api/v5/tradingBot/grid/order-algo', {
         instId: params.instId,
         algoOrdType: params.algoOrdType || 'grid', // grid, contract_grid, moon_grid
@@ -313,6 +317,7 @@ async function createGridOrder(creds, params) {
 }
 
 async function stopGridOrder(creds, algoId, instId, algoOrdType) {
+    assertExecutionEnabled();
     return okxCexFetch(creds, 'POST', '/api/v5/tradingBot/grid/stop-order-algo', [{
         algoId,
         instId,

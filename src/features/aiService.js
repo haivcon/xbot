@@ -82,10 +82,6 @@ const {
 
     OPENAI_AUDIO_MODEL,
 
-    NINEROUTER_BASE_URL,
-
-    NINEROUTER_MODEL,
-
     AI_IMAGE_MAX_BYTES,
 
     AI_IMAGE_DOWNLOAD_TIMEOUT_MS,
@@ -258,7 +254,8 @@ function buildAiProviderMeta(lang, provider) {
 
     if (normalized === '9router') {
 
-        const baseUrl = NINEROUTER_BASE_URL || 'http://localhost:20128';
+        const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+        const dashboardChatUrl = publicBaseUrl.startsWith('https://') ? `${publicBaseUrl}/chat` : null;
 
         return {
 
@@ -272,19 +269,21 @@ function buildAiProviderMeta(lang, provider) {
 
             menuHint: t(lang, 'ai_api_menu_hint_9router') || 'Use models routed by 9Router.',
 
-            addHint: t(lang, 'ai_api_add_hint_9router') || 'Add a 9Router API key if your 9Router instance requires one.',
+            supportsApiKeys: false,
 
-            addPrompt: t(lang, 'ai_api_add_prompt_9router') || 'Send your 9Router API key.',
+            addHint: t(lang, 'ai_api_add_hint_9router') || 'Connect an AI provider in Chat AI settings. Credentials remain isolated in your tenant.',
 
-            addPlaceholder: t(lang, 'ai_api_add_placeholder_9router') || '9Router API key',
+            addPrompt: t(lang, 'ai_api_add_prompt_9router') || 'Configure 9Router in Chat AI settings.',
 
-            getKeyLabel: t(lang, 'ai_api_get_key_9router') || 'Open 9Router dashboard',
+            addPlaceholder: '',
 
-            getKeyUrl: baseUrl,
+            getKeyLabel: t(lang, 'ai_api_get_key_9router') || 'Open Chat AI settings',
+
+            getKeyUrl: dashboardChatUrl,
 
             infoTitle: t(lang, 'ai_api_info_title'),
 
-            infoText: t(lang, 'ai_api_usecases_9router', { url: baseUrl, model: NINEROUTER_MODEL || 'not configured' }) || `Routes AI requests through 9Router at ${baseUrl}. Model: ${NINEROUTER_MODEL || 'not configured'}`
+            infoText: t(lang, 'ai_api_usecases_9router') || '9Router discovers models and routes requests using your isolated tenant configuration.'
 
         };
 
@@ -542,8 +541,9 @@ function getAiApiMenuState(message) {
 function buildAiApiMenu(keys, lang, provider = 'google', page = 0, options = {}) {
 
     const meta = buildAiProviderMeta(lang, provider);
+    const supportsApiKeys = meta.supportsApiKeys !== false;
 
-    const entries = Array.isArray(keys)
+    const entries = supportsApiKeys && Array.isArray(keys)
 
         ? keys.filter((entry) => normalizeAiProvider(entry.provider) === meta.id)
 
@@ -615,7 +615,7 @@ function buildAiApiMenu(keys, lang, provider = 'google', page = 0, options = {})
     const lines = [
         `${meta.icon} <b>${meta.menuTitle}</b>`,
         '',
-        `<pre>${table}</pre>`
+        supportsApiKeys ? `<pre>${table}</pre>` : meta.menuHint
     ];
 
     // Add total keys count
@@ -700,7 +700,9 @@ function buildAiApiMenu(keys, lang, provider = 'google', page = 0, options = {})
     lines.push('');
     lines.push(`<b>📖 ${t(lang, 'ai_api_info_title') || 'Quick Guide'}:</b>`);
     lines.push(`${meta.addHint}`);
-    lines.push(`🔗 <a href="${meta.getKeyUrl}">${meta.getKeyLabel}</a>`);
+    if (meta.getKeyUrl) {
+        lines.push(`🔗 <a href="${meta.getKeyUrl}">${meta.getKeyLabel}</a>`);
+    }
 
     const inline_keyboard = [];
     if (meta.id === 'google') {
@@ -713,9 +715,11 @@ function buildAiApiMenu(keys, lang, provider = 'google', page = 0, options = {})
         inline_keyboard.push([{ text: `🙋 ${t(lang, 'ai_profile_settings_button') || 'Personal info'}`, callback_data: 'profile_prompt' }]);
     }
 
-    inline_keyboard.push([{ text: `➕ ${t(lang, 'ai_api_add_button')}`, callback_data: `aiapi|add|${meta.id}` }]);
+    if (supportsApiKeys) {
+        inline_keyboard.push([{ text: `➕ ${t(lang, 'ai_api_add_button')}`, callback_data: `aiapi|add|${meta.id}` }]);
+    }
 
-    if (slice.length) {
+    if (supportsApiKeys && slice.length) {
         slice.forEach((entry) => {
             const label = entry.name && entry.name.trim() ? entry.name.trim() : t(lang, 'ai_api_default_name');
             inline_keyboard.push([
@@ -727,7 +731,7 @@ function buildAiApiMenu(keys, lang, provider = 'google', page = 0, options = {})
 
     inline_keyboard.push([{ text: `⭐ ${t(lang, 'ai_provider_set_default', { provider: meta.label })}`, callback_data: `aiapi|default|${meta.id}` }]);
 
-    if (totalPages > 1) {
+    if (supportsApiKeys && totalPages > 1) {
         const prevPage = Math.max(0, currentPage - 1);
         const nextPage = Math.min(totalPages - 1, currentPage + 1);
         inline_keyboard.push([
@@ -737,7 +741,9 @@ function buildAiApiMenu(keys, lang, provider = 'google', page = 0, options = {})
         ]);
     }
 
-    inline_keyboard.push([{ text: `${meta.icon} ${meta.getKeyLabel}`, url: meta.getKeyUrl }]);
+    if (meta.getKeyUrl) {
+        inline_keyboard.push([{ text: `${meta.icon} ${meta.getKeyLabel}`, url: meta.getKeyUrl }]);
+    }
 
 
 

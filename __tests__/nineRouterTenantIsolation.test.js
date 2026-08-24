@@ -28,14 +28,14 @@ function requestFromHeaders(headers, { method = 'GET', path = '/v1/models' } = {
 describe('9Router tenant assertion isolation', () => {
     beforeEach(() => {
         process.env.NODE_ENV = 'test';
-        process.env.NINEROUTER_TENANT_SECRET = TENANT_SECRET;
-        process.env.NINEROUTER_INTERNAL_URL = 'http://nine-router:20127';
+        process.env.ROUTER_SECRET = TENANT_SECRET;
+        process.env.ROUTER_URL = 'http://9router:20128';
         clearUsedNoncesForTests();
     });
 
     afterAll(() => {
-        delete process.env.NINEROUTER_TENANT_SECRET;
-        delete process.env.NINEROUTER_INTERNAL_URL;
+        delete process.env.ROUTER_SECRET;
+        delete process.env.ROUTER_URL;
     });
 
     test('accepts only canonical Telegram tenant IDs and private sidecar URLs', () => {
@@ -44,7 +44,7 @@ describe('9Router tenant assertion isolation', () => {
         expect(() => normalizeTenantId('tenant-a')).toThrow(expect.objectContaining({ code: 'TENANT_INVALID' }));
         expect(normalizeInternalBaseUrl('http://nine-router:20127/')).toBe('http://nine-router:20127');
         expect(() => normalizeInternalBaseUrl('https://public.example/v1')).toThrow(
-            expect.objectContaining({ code: 'NINEROUTER_INTERNAL_URL_INVALID' })
+            expect.objectContaining({ code: 'ROUTER_URL_INVALID' })
         );
     });
 
@@ -56,6 +56,14 @@ describe('9Router tenant assertion isolation', () => {
         '/v1/%E0%A4%A'
     ])('rejects traversal or ambiguous path %s', path => {
         expect(() => normalizePath(path)).toThrow(expect.objectContaining({ code: 'PATH_INVALID' }));
+    });
+
+    test('allows the read-only provider catalog and rejects unrelated sidecar APIs', () => {
+        const { isAllowedManagementPath } = require('../src/services/nineRouterTenantClient');
+        expect(isAllowedManagementPath('/api/providers/catalog')).toBe(true);
+        expect(isAllowedManagementPath('/api/usage/stats')).toBe(true);
+        expect(isAllowedManagementPath('/api/auth/status')).toBe(false);
+        expect(isAllowedManagementPath('/api/settings/database')).toBe(false);
     });
 
     test('binds tenant, method, path and exact serialized body', () => {

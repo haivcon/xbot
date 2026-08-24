@@ -12,12 +12,32 @@ const { createJWT, decodeAndVerifyJWT, verifyJWT } = require('./dashboardAuth');
 const log = logger.child('Dashboard');
 const {
     BOT_ID,
-    NINEROUTER_API_KEY,
-    NINEROUTER_MODEL,
-    NINEROUTER_API_ROOT
+    NINEROUTER_MODEL
 } = require('../config/env');
 const { createNineRouterConnection } = require('../services/nineRouterConnection');
 const { nineRouterRuntime } = require('../services/nineRouterRuntime');
+const {
+    createTenantHeaders,
+    getConfig: getNineRouterTenantConfig,
+    normalizeTenantId,
+    requestForTenant
+} = require('../services/nineRouterTenantClient');
+const {
+    createOAuthRedirectCoordinator,
+    normalizePublicOrigin
+} = require('../services/nineRouterOAuthRedirect');
+
+let oauthRedirectCoordinator;
+function getOAuthRedirectCoordinator() {
+    if (!oauthRedirectCoordinator) {
+        oauthRedirectCoordinator = createOAuthRedirectCoordinator({
+            publicOrigin: process.env.PUBLIC_BASE_URL,
+            requestForTenant,
+            supportedProviders: ['antigravity', 'gemini-cli']
+        });
+    }
+    return oauthRedirectCoordinator;
+}
 
 function hasWelcomeBotPermissions(member) {
     return member?.status === 'creator'
@@ -131,109 +151,16 @@ async function getUserRole(userId, username) {
 function createDashboardRoutes() {
     const router = Router();
 
-    let _cachedCommunities = null;
-    let _communitiesLastFetched = 0;
-    let _cachedTokens = null;
-    let _tokensLastFetched = 0;
+    // Dashboard responses may contain auth or user data and must never be cached.
+    router.use((_req, res, next) => {
+        res.setHeader('Cache-Control', 'no-store');
+        next();
+    });
 
     // --- Public Info (no auth required) ---
     router.get('/bot-info', async (req, res) => {
         let botUsername = (process.env.BOT_USERNAME || global._botUsername || '').replace(/^@+/, '');
-        // Dynamically fetch from Telegram API if not cached
-        if (!botUsername) {
-            try {
-                const { bot } = require('../core/bot');
-                const me = await bot.getMe();
-                if (me?.username) {
-                    botUsername = me.username;
-                    global._botUsername = me.username;
-                }
-            } catch (e) {
-                log.warn('bot-info: Failed to fetch bot username via getMe:', e.message);
-            }
-        }
-
-        // Fetch Rich Communities (Cache 1 hour)
-        if (!_cachedCommunities || Date.now() - _communitiesLastFetched > 3600000) {
-            try {
-                const { bot } = require('../core/bot');
-                const groups = await db.listGroupProfiles?.() || [];
-                let rich = [];
-                for(const g of groups) {
-                    if(!g.title || g.title.toLowerCase() === 'test') continue;
-                    try {
-                        const count = await bot.getChatMemberCount(g.chatId).catch(() => 0);
-                        let chatUsername = null;
-                        let chatInviteLink = null;
-                        try {
-                            const chat = await bot.getChat(g.chatId);
-                            chatUsername = chat.username || null;
-                            chatInviteLink = chat.invite_link || null;
-                        } catch(e) {}
-                        
-                        let link = chatInviteLink;
-                        if (!link && chatUsername) link = `https://t.me/${chatUsername}`;
-
-                        const finalCount = count > 0 ? count : (g.memberCount || 0);
-
-                        rich.push({
-                            chatId: g.chatId,
-                            title: g.title,
-                            memberCount: finalCount,
-                            type: g.type,
-                            link
-                        });
-                        
-                        if (count > 0 && typeof db.upsertGroupProfile === 'function') {
-                            db.upsertGroupProfile({ ...g, memberCount: count }).catch(() => {});
-                        }
-                    } catch (e) {}
-                }
-                _cachedCommunities = rich.sort((a, b) => b.memberCount - a.memberCount);
-                _communitiesLastFetched = Date.now();
-            } catch (e) {
-                log.warn('bot-info: Failed to fetch rich communities:', e.message);
-                if (!_cachedCommunities) _cachedCommunities = [];
-            }
-        }
-
-        // Fetch Tokens (Cache 1 minute)
-        if (!_cachedTokens || Date.now() - _tokensLastFetched > 60000) {
-            try {
-                const onchainos = require('../services/onchainos');
-                const watchTokens = [
-                    { chainIndex: '196', tokenContractAddress: '0x16d91d1615fc55b76d5f92365bd60c069b46ef78', symbol: 'BANMAO' },
-                    { chainIndex: '196', tokenContractAddress: '0x87669801a1fad6dad9db70d27ac752f452989667', symbol: 'NIUMA' },
-                    { chainIndex: '196', tokenContractAddress: '0xdcc83b32b6b4e95a61951bfcc9d71967515c0fca', symbol: 'XWIZARD' }
-                ];
-                const [prices, basics] = await Promise.all([
-                    onchainos.getTokenPriceInfo(watchTokens).catch(() => []),
-                    onchainos.getTokenBasicInfo(watchTokens).catch(() => [])
-                ]);
-                _cachedTokens = watchTokens.map(t => {
-                    const priceData = (prices || []).find(p => p.tokenContractAddress?.toLowerCase() === t.tokenContractAddress?.toLowerCase());
-                    const basicData = (basics || []).find(p => p.tokenContractAddress?.toLowerCase() === t.tokenContractAddress?.toLowerCase());
-                    return {
-                        symbol: t.symbol,
-                        address: t.tokenContractAddress,
-                        price: priceData?.price || '0',
-                        priceChange24h: priceData?.priceChange24h || '0',
-                        logoUrl: basicData?.tokenLogoUrl || basicData?.logoUrl || null
-                    };
-                });
-                _tokensLastFetched = Date.now();
-            } catch (e) {
-                log.warn('bot-info: Failed to fetch cached tokens:', e.message);
-                if (!_cachedTokens) _cachedTokens = [];
-            }
-        }
-
-        res.json({
-            botUsername: botUsername || null,
-            dashboardUrl: `${req.protocol}://${req.get('host')}/xBot/`,
-            communities: _cachedCommunities,
-            tokens: _cachedTokens,
-        });
+        res.json({ botUsername: botUsername || null });
     });
 
     router.get('/community-logo/:chatId', async (req, res) => {
@@ -253,6 +180,7 @@ function createDashboardRoutes() {
 
     // --- Auth: One-time token auto-login (from /dashboard bot command) ---
     router.get('/auth/auto-login', loginRateLimit, async (req, res) => {
+        res.setHeader('Referrer-Policy', 'no-referrer');
         try {
             const { token } = req.query;
             if (!token) {
@@ -299,6 +227,7 @@ function createDashboardRoutes() {
                 <body style="background:#0f172a;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:Inter,sans-serif">
                 <div style="text-align:center"><h2>✅ Logged in!</h2><p>Redirecting to dashboard...</p></div>
                 <script>
+                    history.replaceState(null, '', '/api/dashboard/auth/auto-login');
                     var authData = ${JSON.stringify({
                 token: jwt,
                 role,
@@ -309,7 +238,7 @@ function createDashboardRoutes() {
                 }
             })};
                     localStorage.setItem('xbot_dashboard_auth', JSON.stringify(authData));
-                    window.location.href = '/xBot/';
+                    window.location.replace('/xBot/');
                 </script>
                 </body></html>
             `);
@@ -488,37 +417,13 @@ function createDashboardRoutes() {
     // --- Health (shared, but reachable from dashboard) ---
     router.get('/health', async (req, res) => {
         try {
-            const mem = process.memoryUsage();
             let dbStatus = 'unknown';
             try {
                 await db.getUserLanguage?.('__health_check__');
                 dbStatus = 'ok';
             } catch { dbStatus = 'error'; }
 
-            const lagStart = process.hrtime.bigint();
-            await new Promise(resolve => setImmediate(resolve));
-            const lagMs = Math.round(Number(process.hrtime.bigint() - lagStart) / 1e6);
-
-            res.json({
-                status: dbStatus === 'ok' ? 'ok' : 'degraded',
-                uptimeSeconds: Math.round(process.uptime()),
-                startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
-                now: new Date().toISOString(),
-                version: process.env.npm_package_version || require('../../package.json').version || '1.0.0',
-                node: process.version,
-                memory: {
-                    rss: Math.round(mem.rss / 1024 / 1024) + 'MB',
-                    heapUsed: Math.round(mem.heapUsed / 1024 / 1024) + 'MB',
-                    heapTotal: Math.round(mem.heapTotal / 1024 / 1024) + 'MB',
-                },
-                eventLoopLagMs: lagMs,
-                db: dbStatus,
-                inFlight: 0,
-                rateLimitMax: Number(process.env.API_RATE_LIMIT_MAX || 120),
-                rateLimitWindowMs: Number(process.env.API_RATE_LIMIT_WINDOW_MS || 60000),
-                requestBuckets: 0,
-                queue: { mode: 'memory', handlers: [] },
-            });
+            res.json({ status: dbStatus === 'ok' ? 'ok' : 'degraded' });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }
@@ -541,10 +446,70 @@ function createDashboardRoutes() {
         }
     });
 
+    // Public provider entry point. Tenant identity is recovered exclusively
+    // from one-time server state; callback headers/cookies are never trusted.
+    router.get('/ai/9router/oauth/callback/:provider', async (req, res) => {
+        let resultCode = 'invalid_state';
+        let returnTarget = '/xBot/?section=providers';
+        let publicOrigin;
+        try {
+            publicOrigin = normalizePublicOrigin(process.env.PUBLIC_BASE_URL);
+            const result = await getOAuthRedirectCoordinator().callback({
+                provider: req.params.provider,
+                state: req.query.state,
+                code: req.query.code,
+                error: req.query.error,
+                observedOrigin: publicOrigin
+            });
+            resultCode = result.resultCode;
+            returnTarget = result.returnTarget;
+        } catch (error) {
+            resultCode = error?.code === 'OAUTH_STATE_EXPIRED' ? 'state_expired' : 'invalid_state';
+            try { publicOrigin ||= normalizePublicOrigin(process.env.PUBLIC_BASE_URL); } catch {
+                return res.status(503).send('OAuth callback is not configured');
+            }
+        }
+        const destination = new URL(returnTarget, publicOrigin);
+        destination.searchParams.set('oauth_result', resultCode);
+        res.setHeader('Cache-Control', 'no-store');
+        return res.redirect(303, destination.toString());
+    });
+
     // ==================
     // PROTECTED ROUTES
     // ==================
     router.use(authMiddleware);
+
+    router.post('/ai/9router/oauth/:provider/start', async (req, res) => {
+        try {
+            const authHeader = String(req.headers.authorization || '');
+            const result = await getOAuthRedirectCoordinator().start({
+                userId: req.dashboardUser.userId,
+                sessionToken: authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '',
+                provider: req.params.provider,
+                returnTarget: req.body?.returnTarget
+            });
+            res.setHeader('Cache-Control', 'no-store');
+            return res.json(result);
+        } catch (error) {
+            return res.status(error?.statusCode || 502).json({ error: error?.code || 'OAUTH_START_FAILED' });
+        }
+    });
+
+    router.get('/ai/9router/oauth/status/:statusToken', (req, res) => {
+        try {
+            const authHeader = String(req.headers.authorization || '');
+            const result = getOAuthRedirectCoordinator().status({
+                userId: req.dashboardUser.userId,
+                sessionToken: authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '',
+                statusToken: req.params.statusToken
+            });
+            res.setHeader('Cache-Control', 'no-store');
+            return res.json(result);
+        } catch (error) {
+            return res.status(error?.statusCode || 404).json({ error: error?.code || 'OAUTH_STATUS_NOT_FOUND' });
+        }
+    });
 
     // --- Tenant-isolated 9Router management + AI Chat ---
     const { createNineRouterTenantRoutes } = require('./nineRouterTenantRoutes');
@@ -1204,10 +1169,16 @@ function createDashboardRoutes() {
         }
     });
 
-    const nineRouterConfiguredModels = () => (process.env.CHAT_ORCHESTRATOR_MODELS || NINEROUTER_MODEL || '')
+    const nineRouterConfiguredModels = () => (NINEROUTER_MODEL || '')
         .split(',').map(value => value.trim()).filter(Boolean);
-    const nineRouterCredential = () => String(process.env.NINEROUTER_SERVICE_TOKEN || NINEROUTER_API_KEY || '').trim();
-    const nineRouterConfigured = () => Boolean(NINEROUTER_API_ROOT && nineRouterCredential() && nineRouterConfiguredModels().length);
+    const nineRouterConfigured = () => {
+        try {
+            getNineRouterTenantConfig();
+            return nineRouterConfiguredModels().length > 0;
+        } catch {
+            return false;
+        }
+    };
 
     // ONE Connect is owner-only and never receives credentials from a dashboard payload.
     router.get('/owner/config/one-connect', ownerGuard, (_req, res) => {
@@ -1218,12 +1189,17 @@ function createDashboardRoutes() {
         try {
             const status = await nineRouterRuntime.connect({
                 probe: ({ signal }) => createNineRouterConnection({
-                    baseUrl: NINEROUTER_API_ROOT,
-                    serviceCredential: nineRouterCredential(),
+                    baseUrl: `${getNineRouterTenantConfig().baseUrl}/v1`,
+                    buildHeaders: (identity, request) => createTenantHeaders({
+                        tenantId: normalizeTenantId(identity.userId),
+                        method: request.method,
+                        path: `/v1${request.path}`,
+                        body: request.body
+                    }),
                     allowedModels: nineRouterConfiguredModels(),
-                    timeoutMs: Number(process.env.NINEROUTER_DISCOVERY_TIMEOUT_MS || 5000)
+                    timeoutMs: 5000
                 }).discover(
-                    { tenantId: 'owner-control', userId: String(req.dashboardUser.userId) },
+                    { tenantId: String(req.dashboardUser.userId), userId: String(req.dashboardUser.userId) },
                     { signal }
                 )
             });
@@ -1559,7 +1535,7 @@ function createDashboardRoutes() {
     // ==================
     // ADMIN ANALYTICS (#15)
     // ==================
-    router.get('/owner/analytics/stats', async (req, res) => {
+    router.get('/owner/analytics/stats', ownerGuard, async (req, res) => {
         try {
             const sessions = await db.dbAll?.('SELECT * FROM web_chat_sessions ORDER BY updatedAt DESC LIMIT 500') || [];
             const totalSessions = sessions.length;

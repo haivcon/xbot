@@ -261,7 +261,7 @@ export async function runMigrationOnce(adapter) {
   // XBot tenant databases must always start empty. Importing the original
   // single-tenant JSON files here could expose one account's credentials to
   // the first Telegram tenant that initializes a database.
-  const tenantMode = process.env.XBOT_TENANT_MODE === "true";
+  const tenantMode = process.env.TENANT_MODE === "true";
   const hasLegacy = !tenantMode && !!(legacyMain || legacyUsage || legacyDisabled || legacyDetails);
 
   if (tenantMode && fresh) {

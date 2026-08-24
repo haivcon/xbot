@@ -2212,7 +2212,9 @@ function createPriceAlerts(deps) {
             log.error(`Scheduler tick failed: ${error.message}`);
         }
     };
-    const startPriceAlertScheduler = () => {
+    function startPriceAlertScheduler() {
+        const { isExecutionDisabled } = require('../core/executionPolicy');
+        if (isExecutionDisabled()) return false;
         if (priceSchedulerTimer) {
             clearInterval(priceSchedulerTimer);
             priceSchedulerTimer = null;
@@ -2227,6 +2229,7 @@ function createPriceAlerts(deps) {
         if (typeof priceSchedulerTimer.unref === 'function') {
             priceSchedulerTimer.unref();
         }
+        return true;
     };
     return {
         handlePriceCommand,

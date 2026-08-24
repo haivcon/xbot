@@ -17,6 +17,19 @@ function validateProxyUrl(url) {
   }
 }
 
+export function buildOutboundProxyOptions(
+  { outboundProxyEnabled, outboundProxyUrl, outboundNoProxy } = {}
+) {
+  const enabled = Boolean(outboundProxyEnabled);
+  const url = enabled ? validateProxyUrl(normalizeString(outboundProxyUrl)) : null;
+  return {
+    enabled: Boolean(enabled && url),
+    url: url || "",
+    noProxy: normalizeString(outboundNoProxy),
+    strictProxy: false,
+  };
+}
+
 export function applyOutboundProxyEnv(
   { outboundProxyEnabled, outboundProxyUrl, outboundNoProxy } = {}
 ) {
