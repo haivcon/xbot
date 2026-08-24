@@ -2039,9 +2039,15 @@ function startTelegramBot() {
             if (routeRef) telegramAiMenus.state.currentRoute.set(String(msg.from?.id || ''), routeRef);
             return handleAiCommand({ ...msg, text: `/ai ${prompt}` });
         },
-        dashboardLink: async ({ userId }) => {
+        dashboardLink: async ({ userId, section }) => {
             const token = crypto.randomBytes(32).toString('hex');
-            dashboardLoginTokens.set(token, { userId, firstName: '', username: '', createdAt: Date.now() });
+            dashboardLoginTokens.set(token, {
+                userId,
+                firstName: '',
+                username: '',
+                createdAt: Date.now(),
+                target: section === 'providers' ? 'providers' : undefined
+            });
             setTimeout(() => dashboardLoginTokens.delete(token), 5 * 60 * 1000).unref?.();
             const baseUrl = (PUBLIC_BASE_URL || `http://localhost:${API_PORT || 3000}`).replace(/\/+$/, '');
             return `${baseUrl}/api/dashboard/auth/auto-login?token=${token}`;

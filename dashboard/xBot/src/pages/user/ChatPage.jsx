@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import api from '@/api/client';
 import useAuthStore from '@/stores/authStore';
 import {
@@ -953,6 +953,8 @@ const SETTINGS_TABS = [
 export default function ChatPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const providerDeepLink = searchParams.get('section') === 'providers';
     const outletContext = useOutletContext();
     const setGlobalSidebarOpen = outletContext?.setGlobalSidebarOpen;
     const [messages, setMessages] = useState([]);
@@ -1010,9 +1012,9 @@ export default function ChatPage() {
     }, {}), [providerConnections]);
     const connectedProviderCount = Object.values(providerHealthById).filter(status => status === 'active' || status === 'expiring').length;
     // AI Settings panel state
-    const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+    const [showSettingsPanel, setShowSettingsPanel] = useState(providerDeepLink);
 
-    const [settingsTab, setSettingsTab] = useState('model');
+    const [settingsTab, setSettingsTab] = useState(providerDeepLink ? '9router' : 'model');
     const openProviderSettings = useCallback(() => {
         setShowModelPicker(false);
         setShowSettingsPanel(true);

@@ -170,22 +170,37 @@ describe('dashboard public metadata, auth hygiene, and owner boundary', () => {
         }
     });
 
-    test('auto-login consumes a short-lived token and removes it from URL/history', async () => {
+    test('auto-login consumes a short-lived token and uses only allowlisted dashboard destinations', async () => {
         const { dashboardLoginTokens } = require('../src/core/state');
+        const login = async (token, target) => {
+            dashboardLoginTokens.set(token, {
+                userId: '123', firstName: 'Test', username: 'test', createdAt: Date.now(), target
+            });
+            return request(server, { path: `/api/dashboard/auth/auto-login?token=${token}` });
+        };
+
         const token = 'test-one-time-login-token';
-        dashboardLoginTokens.set(token, { userId: '123', firstName: 'Test', username: 'test', createdAt: Date.now() });
-        const first = await request(server, { path: `/api/dashboard/auth/auto-login?token=${token}` });
+        const first = await login(token);
         expect(first.status).toBe(200);
         expect(first.headers['cache-control']).toBe('no-store');
         expect(first.headers['referrer-policy']).toBe('no-referrer');
         expect(first.raw).toContain("history.replaceState(null, '', '/api/dashboard/auth/auto-login')");
-        expect(first.raw).toContain("window.location.replace('/xBot/')");
+        expect(first.raw).toContain('window.location.replace("/xBot/")');
         expect(first.raw).not.toContain('window.location.href');
         expect(dashboardLoginTokens.has(token)).toBe(false);
 
         const second = await request(server, { path: `/api/dashboard/auth/auto-login?token=${token}` });
         expect(second.status).toBe(401);
         expect(second.headers['cache-control']).toBe('no-store');
+
+        const providers = await login('test-provider-login-token', 'providers');
+        expect(providers.raw).toContain('window.location.replace("/xBot/chat?section=providers")');
+
+        for (const [index, target] of ['https://evil.example', 'unknown'].entries()) {
+            const response = await login(`test-malicious-login-token-${index}`, target);
+            expect(response.raw).toContain('window.location.replace("/xBot/")');
+            expect(response.raw).not.toContain('evil.example');
+        }
     });
 
     test('safe mode remains fail-closed', () => {

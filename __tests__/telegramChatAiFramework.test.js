@@ -184,4 +184,19 @@ describe('runtime characterization', () => {
     expect(source.indexOf('enforceBanForCallback(query, callbackLang)')).toBeLessThan(source.indexOf('handleTelegramAiCallback(query)'));
     expect(source).not.toContain("model.id.split('/')[0]");
   });
+
+  test('providers login carries only a semantic target and Chat AI consumes the provider deep link', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const root = path.join(__dirname, '..');
+    const indexSource = fs.readFileSync(path.join(root, 'index.js'), 'utf8');
+    const chatSource = fs.readFileSync(path.join(root, 'dashboard/xBot/src/pages/user/ChatPage.jsx'), 'utf8');
+
+    expect(indexSource).toMatch(/dashboardLink:\s*async\s*\(\{\s*userId,\s*section\s*\}\)/);
+    expect(indexSource).toMatch(/target:\s*section\s*===\s*['"]providers['"]\s*\?\s*['"]providers['"]\s*:\s*undefined/);
+    expect(chatSource).toMatch(/useSearchParams/);
+    expect(chatSource).toMatch(/searchParams\.get\(['"]section['"]\)\s*===\s*['"]providers['"]/);
+    expect(chatSource).toMatch(/useState\(providerDeepLink\)/);
+    expect(chatSource).toMatch(/useState\(providerDeepLink\s*\?\s*['"]9router['"]\s*:\s*['"]model['"]\)/);
+  });
 });

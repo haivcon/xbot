@@ -220,6 +220,10 @@ function createDashboardRoutes() {
 
             log.info(`Dashboard auto-login: ${tokenData.firstName} (${tokenData.userId}) as ${role}`);
 
+            const dashboardDestination = tokenData.target === 'providers'
+                ? '/xBot/chat?section=providers'
+                : '/xBot/';
+
             // Redirect to dashboard with JWT in URL — the frontend will grab it and store it
             res.send(`
                 <!DOCTYPE html>
@@ -238,7 +242,7 @@ function createDashboardRoutes() {
                 }
             })};
                     localStorage.setItem('xbot_dashboard_auth', JSON.stringify(authData));
-                    window.location.replace('/xBot/');
+                    window.location.replace(${JSON.stringify(dashboardDestination)});
                 </script>
                 </body></html>
             `);
