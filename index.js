@@ -330,7 +330,7 @@ const { handleOkxChainsCommand } = require('./src/handlers/commands/okxChains');
 const { handleOkx402StatusCommand } = require('./src/handlers/commands/okx402');
 const { handleTxhashCommand } = require('./src/handlers/commands/txhash');
 const { getPersonaStrings } = require('./src/app/personaI18n');
-const { pendingVoiceCommands } = require('./src/core/state');
+const { pendingVoiceCommands, dashboardLoginTokens } = require('./src/core/state');
 const { executeFunctionCall: executeVoiceFunctionCall, buildLiveTools } = require('./src/features/liveAudioTools');
 const { processAudioWithLiveAPI } = require('./src/features/geminiLiveAudio');
 const {
@@ -371,6 +371,9 @@ const createOwnerListFeature = require('./src/features/ownerList');
 const { createTelegramDebugHelpers } = require('./src/app/telegramDebug');
 const { createAiApiHandlers } = require('./src/app/aiApiHandlers');
 const { createAiHandlers } = require('./src/app/aiHandlers');
+const { createTelegramAiMenuHandlers } = require('./src/app/telegramAiMenuHandlers');
+const { TELEGRAM_AI_COMMANDS, buildAuthoritativeCatalog } = require('./src/services/aiChatContracts');
+const { discoverTenantModels } = require('./src/services/nineRouterTenantChat');
 const { registerAutoDetection } = require('./src/bot/handlers/autoDetection');
 const { getPendingConfirmation, clearPendingConfirmation } = require('./src/bot/handlers/confirmationHandler');
 const { createStartHandlers } = require('./src/app/startHandlers');
@@ -1776,7 +1779,12 @@ function startTelegramBot() {
                 const maxRetries = 3;
                 for (let attempt = 0; attempt < maxRetries; attempt++) {
                     try {
-                        await bot.setMyCommands(commands, { scope, language_code: langCode });
+                        const scopedCommands = scope.type === 'all_private_chats'
+                            ? commands.concat(TELEGRAM_AI_COMMANDS
+                                .filter(item => !commands.some(existing => existing.command === item.name))
+                                .map(item => ({ command: item.name, description: sanitizeDescription(item.description[langCode] || item.description.en, item.name) })))
+                            : commands;
+                        await bot.setMyCommands(scopedCommands, { scope, language_code: langCode });
                         break; // success
                     } catch (error) {
                         const isTransient = error.message?.includes('AggregateError') || error.message?.includes('EFATAL') || error.message?.includes('ECONNRESET') || error.message?.includes('ETIMEDOUT');
@@ -1973,6 +1981,8 @@ function startTelegramBot() {
         return false;
     }
 
+    let telegramAiMenus = null;
+    const telegramConversationService = new (require('./src/services/aiConversationService').AiConversationService)({ adapter: db.aiConversationAdapter });
     const {
         handleAiCommand,
         handleAiTtsCommand,
@@ -2002,8 +2012,43 @@ function startTelegramBot() {
         enforceOwnerCommandLimit,
         synthesizeGeminiSpeech,
         downloadTelegramFile,
-        resolveAudioMimeType
+        resolveAudioMimeType,
+        telegramConversationService,
+        getTelegramAiContext: ({ userId }) => telegramAiMenus?.getChatContext(userId) || null
     });
+
+    telegramAiMenus = createTelegramAiMenuHandlers({
+        bot,
+        getLang,
+        discoverCatalog: async (userId) => {
+            const discovery = await discoverTenantModels({ userId });
+            const providers = discovery.upstreams.map(upstream => ({
+                id: upstream.id,
+                name: upstream.label || upstream.id,
+                connected: true,
+                status: 'active'
+            }));
+            const models = discovery.models.map(model => ({
+                ...model,
+                providerId: model.upstream?.id
+            })).filter(model => model.providerId);
+            return buildAuthoritativeCatalog({ providers, models, combos: [] });
+        },
+        conversationService: telegramConversationService,
+        retryMessage: async (msg, prompt, routeRef) => {
+            if (routeRef) telegramAiMenus.state.currentRoute.set(String(msg.from?.id || ''), routeRef);
+            return handleAiCommand({ ...msg, text: `/ai ${prompt}` });
+        },
+        dashboardLink: async ({ userId }) => {
+            const token = crypto.randomBytes(32).toString('hex');
+            dashboardLoginTokens.set(token, { userId, firstName: '', username: '', createdAt: Date.now() });
+            setTimeout(() => dashboardLoginTokens.delete(token), 5 * 60 * 1000).unref?.();
+            const baseUrl = (PUBLIC_BASE_URL || `http://localhost:${API_PORT || 3000}`).replace(/\/+$/, '');
+            return `${baseUrl}/api/dashboard/auth/auto-login?token=${token}`;
+        }
+    });
+    const handleTelegramAiCommand = telegramAiMenus.handleCommand;
+    const handleTelegramAiCallback = telegramAiMenus.handleCallback;
 
     // Register auto-detection for /aib (Option 4 - Smart Hybrid + Confirmation)
     registerAutoDetection({
@@ -2349,6 +2394,10 @@ function startTelegramBot() {
         await ensureDeviceInfo(query);
 
         if (await enforceBanForCallback(query, callbackLang)) {
+            return;
+        }
+
+        if (await handleTelegramAiCallback(query)) {
             return;
         }
 
@@ -3467,7 +3516,15 @@ function startTelegramBot() {
         }
 
         if (/^\/api(?:@[\w_]+)?(?:\s|$)/i.test(textOrCaption)) {
+            if (process.env.XBOT_AI_LEGACY_MENU !== 'true') {
+                await handleTelegramAiCommand({ ...msg, text: '/providers' });
+                return;
+            }
             await handleApiCommand(msg);
+            return;
+        }
+
+        if (await handleTelegramAiCommand(msg)) {
             return;
         }
 

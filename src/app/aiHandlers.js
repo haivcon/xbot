@@ -1977,6 +1977,9 @@ function createAiHandlers(deps) {
       if (throwOnError) {
         throw error;
       }
+      if (classifyTenantChatError(error) === 'CLIENT_ABORTED') {
+        return;
+      }
 
       log.error(`Failed to generate content: ${error.message}`);
       const isQuotaError = isQuotaOrRateLimitError(error);
@@ -3717,10 +3720,47 @@ function createAiHandlers(deps) {
       { role: 'user', content }
     ];
 
-    const result = await completeTenantChat({
-      userId,
-      messages
-    });
+    const chatContext = await deps.getTelegramAiContext?.({ userId, msg });
+    const generation = chatContext && deps.telegramConversationService
+      ? await deps.telegramConversationService.beginGeneration({
+          tenantId: chatContext.tenantId,
+          conversationId: chatContext.conversationId,
+          prompt: promptText,
+          routeRef: chatContext.routeRef,
+          idempotencyKey: `telegram:${msg.message_id || uuidv4()}`
+        })
+      : null;
+    let result;
+    try {
+      result = await completeTenantChat({
+        userId,
+        messages,
+        model: chatContext?.routeRef || undefined,
+        requestId: generation?.id,
+        signal: generation?.abortController?.signal,
+        onEvent: generation ? event => {
+          const delta = event?.delta || event?.text || '';
+          if (delta) deps.telegramConversationService.appendDelta({ tenantId: chatContext.tenantId, generationId: generation.id, text: delta }).catch(() => {});
+        } : undefined
+      });
+      if (generation) await deps.telegramConversationService.completeGeneration({ tenantId: chatContext.tenantId, generationId: generation.id, text: result.text });
+    } catch (error) {
+      if (generation) {
+        const code = classifyTenantChatError(error);
+        if (code === 'CLIENT_ABORTED') {
+          const active = deps.telegramConversationService.getActiveGeneration({
+            tenantId: chatContext.tenantId,
+            conversationId: chatContext.conversationId
+          });
+          if (active?.id === generation.id) {
+            await deps.telegramConversationService.stopGeneration({ tenantId: chatContext.tenantId, generationId: generation.id });
+          }
+        } else {
+          await deps.telegramConversationService.interruptGeneration({ tenantId: chatContext.tenantId, generationId: generation.id, code });
+        }
+      }
+      throw error;
+    }
     const model = result.model;
     const aiResponse = String(result.text || '').trim();
 

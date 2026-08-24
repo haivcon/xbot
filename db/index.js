@@ -26,6 +26,7 @@ const tradeHistory = require('./tradeHistory');
 const scheduledReports = require('./scheduledReports');
 const welcomeAdmissions = require('./welcomeAdmissions');
 const schema = require('./schema');
+const aiConversations = require('./aiConversations');
 
 module.exports = {
     // Core - Database connection and helpers
@@ -75,6 +76,9 @@ module.exports = {
 
     // Durable Reactive welcome verification
     ...welcomeAdmissions,
+
+    // Tenant-scoped Telegram Chat AI history
+    ...aiConversations,
 
     // Schema - init function
     ...schema,

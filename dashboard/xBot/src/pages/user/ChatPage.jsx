@@ -1303,6 +1303,14 @@ export default function ChatPage() {
     const stopGenerating = () => {
         abortRef.current?.abort();
         abortRef.current = null;
+        setMessages(prev => {
+            const copy = [...prev];
+            const lastIdx = copy.length - 1;
+            if (lastIdx >= 0 && copy[lastIdx]?.role === 'assistant' && copy[lastIdx]?.status === 'streaming') {
+                copy[lastIdx] = { ...copy[lastIdx], status: 'interrupted' };
+            }
+            return copy;
+        });
         setLoading(false);
         inputRef.current?.focus();
     };
@@ -1414,7 +1422,7 @@ export default function ChatPage() {
             const assistantIdx = { current: -1 };
             setMessages(prev => {
                 assistantIdx.current = prev.length;
-                return [...prev, { role: 'assistant', content: '', toolCalls: [], ts: Date.now() }];
+                return [...prev, { role: 'assistant', content: '', toolCalls: [], status: 'streaming', ts: Date.now() }];
             });
 
             await api.streamChatMessage(msg, conversationId, {
@@ -1427,6 +1435,7 @@ export default function ChatPage() {
                 customPersonaText: selectedPersona === 'custom' ? customPersonaInput : undefined,
 
                 onTextDelta: (text) => {
+                    if (controller.signal.aborted) return;
                     fullText += text;
                     setMessages(prev => {
                         const copy = [...prev];
@@ -1453,6 +1462,7 @@ export default function ChatPage() {
                 },
                 onApprovalRequired: data => api.confirmAgentApproval(data),
                 onDone: (data) => {
+                    if (controller.signal.aborted) return;
                     setConversationId(data.conversationId);
                     setMessages(prev => {
                         const copy = [...prev];
@@ -1461,6 +1471,7 @@ export default function ChatPage() {
                                 ...copy[assistantIdx.current],
                                 toolCalls: data.toolCalls || streamToolCalls,
                                 engine: data.engine,
+                                status: 'completed',
                             };
                         }
                         return copy;
@@ -1473,6 +1484,7 @@ export default function ChatPage() {
                     setSessionTokens(prev => ({ ...prev, received: prev.received + Math.ceil(fullText.length / 4) }));
                 },
                 onError: (data) => {
+                    if (controller.signal.aborted) return;
                     const code = String(data?.code || '').toUpperCase();
                     const isAuth = code.includes('CONFIG') || code.includes('AUTH') || code.includes('401') || code.includes('403');
                     const isQuota = code.includes('QUOTA') || code.includes('RATE') || code.includes('429');
@@ -1484,7 +1496,7 @@ export default function ChatPage() {
 
                     setMessages(prev => {
                         const copy = [...prev];
-                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], content: errContent };
+                        if (copy[assistantIdx.current]) copy[assistantIdx.current] = { ...copy[assistantIdx.current], content: errContent, status: 'failed' };
                         return copy;
                     });
                 },
@@ -2536,6 +2548,14 @@ export default function ChatPage() {
                                         onSave={msg.role === 'user' ? savePrompt : undefined}
                                         isMobile={isMobile}
                                     />
+                                    {msg.role === 'assistant' && msg.status === 'interrupted' && (
+                                        <div className="ml-11 mt-1.5 flex items-center gap-2 text-[10px] text-amber-300" role="status">
+                                            <span>{t('dashboard.chatPage.responseInterrupted', 'Response interrupted. Partial output was preserved.')}</span>
+                                            <button type="button" onClick={retryLastMessage} className="rounded-md border border-amber-500/20 px-2 py-1 hover:bg-amber-500/10">
+                                                {t('dashboard.chatPage.retryBtn', 'Retry')}
+                                            </button>
+                                        </div>
+                                    )}
                                     {/* Always-visible retry button on error messages */}
                                     {msg.role === 'assistant' && msg.content?.startsWith('\u274c') && (
                                         <div className="ml-11 mt-1.5 animate-fadeIn flex items-center gap-2 flex-wrap">

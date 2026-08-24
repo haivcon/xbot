@@ -80,6 +80,7 @@ __tests__/*
 !__tests__/executionRoutes.test.js
 !__tests__/nineRouterOAuthRedirect.test.js
 !__tests__/nineRouterOAuthHttpIntegration.test.js
+!__tests__/telegramChatAiFramework.test.js
 
 # ─── Logs ───
 *.log

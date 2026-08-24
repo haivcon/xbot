@@ -709,6 +709,18 @@ async function init() {
     )`);
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_web_chat_user ON web_chat_sessions(userId, updatedAt DESC)`);
 
+    // Tenant-scoped Telegram Chat AI conversations (additive; legacy rows untouched)
+    await dbRun(`CREATE TABLE IF NOT EXISTS ai_chat_conversations (
+        id TEXT PRIMARY KEY,
+        tenantId TEXT NOT NULL,
+        routeRef TEXT DEFAULT '',
+        status TEXT DEFAULT 'ready',
+        turns TEXT DEFAULT '[]',
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+    )`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_ai_chat_tenant ON ai_chat_conversations(tenantId, updatedAt DESC)`);
+
     // Migration: add isPinned to web_chat_sessions
     try {
         await dbRun(`ALTER TABLE web_chat_sessions ADD COLUMN isPinned INTEGER DEFAULT 0`);

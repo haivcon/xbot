@@ -150,6 +150,7 @@ function Providers({ onChanged }) {
     const [error, setError] = useState('');
     const [catalog, setCatalog] = useState({ providers: [] });
     const [providerSearch, setProviderSearch] = useState('');
+    const [providerStatusFilter, setProviderStatusFilter] = useState('needs-action');
     const [deviceLogin, setDeviceLogin] = useState(null);
     const [redirectLogin, setRedirectLogin] = useState(null);
     const [manualLogin, setManualLogin] = useState(null);
@@ -327,9 +328,16 @@ function Providers({ onChanged }) {
 
     const filterProviders = useCallback(providers => {
         const query = providerSearch.trim().toLowerCase();
-        if (!query) return providers;
-        return providers.filter(provider => `${provider.name || ''} ${provider.id || ''} ${(provider.aliases || []).join(' ')}`.toLowerCase().includes(query));
-    }, [providerSearch]);
+        const connectedIds = new Set(connections.filter(connection => connectionHealth(connection) !== 'error').map(connection => canonicalProviderId(connection.provider)));
+        return providers.filter(provider => {
+            const connected = connectedIds.has(canonicalProviderId(provider.id));
+            const unavailable = provider.connection?.action === 'unavailable';
+            if (providerStatusFilter === 'connected' && !connected) return false;
+            if (providerStatusFilter === 'needs-action' && (connected || unavailable)) return false;
+            if (providerStatusFilter === 'unavailable' && !unavailable) return false;
+            return !query || `${provider.name || ''} ${provider.id || ''} ${(provider.aliases || []).join(' ')}`.toLowerCase().includes(query);
+        });
+    }, [connections, providerSearch, providerStatusFilter]);
     const providersByCapability = useMemo(() => ({
         apiKey: catalog.providers.filter(provider => provider.connection?.action === 'api_key'),
         deviceCode: catalog.providers.filter(provider => provider.connection?.action === 'device_code'),
@@ -730,6 +738,17 @@ function Providers({ onChanged }) {
                         placeholder={t('dashboard.chatPage.providerSearch', 'Search providers')}
                         className="input-field w-full text-xs"
                     />
+                    <div className="grid grid-cols-3 gap-1" role="group" aria-label={t('dashboard.chatPage.providerStatusFilter', 'Provider status filter')}>
+                        {[
+                            ['connected', t('dashboard.chatPage.connectedProviders', 'Connected')],
+                            ['needs-action', t('dashboard.chatPage.connectionsNeedAttention', 'Needs action')],
+                            ['unavailable', t('dashboard.chatPage.unavailable', 'Unavailable')]
+                        ].map(([value, label]) => (
+                            <button key={value} type="button" onClick={() => setProviderStatusFilter(value)} aria-pressed={providerStatusFilter === value} className={`rounded-lg px-2 py-2 text-[9px] ${providerStatusFilter === value ? 'bg-brand-500/20 text-brand-200' : 'bg-surface-900/30 text-surface-200/45 hover:bg-white/5'}`}>
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                     {!providerSearch && featuredProviders.length > 0 && (
                         <div className="space-y-2">
                             <div>
