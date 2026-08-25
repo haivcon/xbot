@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { assetUrl } from '@/utils/assetUrl';
 
 /**
  * useNotifications — Browser push notification wrapper
@@ -18,8 +19,8 @@ export default function useNotifications() {
         if (!('Notification' in window) || permission.current !== 'granted') return null;
         try {
             return new Notification(title, {
-                icon: '/logos/banmao.png',
-                badge: '/logos/banmao.png',
+                icon: assetUrl('logos/banmao.png'),
+                badge: assetUrl('logos/banmao.png'),
                 tag: options.tag || 'xbot',
                 ...options,
             });

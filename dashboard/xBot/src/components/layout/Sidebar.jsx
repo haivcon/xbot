@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
 import config from '@/config';
+import { assetUrl } from '@/utils/assetUrl';
 import {
     LayoutDashboard,
     Users,
@@ -277,7 +278,7 @@ export default function Sidebar({ open, onClose }) {
             {/* Logo area */}
             <div className="flex items-center justify-between h-16 px-5 border-b border-white/5">
                 <div className="flex items-center gap-3">
-                    <img src="/xbot-logo.png" alt="XBot" className="w-9 h-9 rounded-xl shadow-lg shadow-brand-500/25 object-cover" />
+                    <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-9 h-9 rounded-xl shadow-lg shadow-brand-500/25 object-cover" />
                     <div>
                         <h1 className="text-sm font-bold text-surface-100">{config.appName}</h1>
                         <span className="text-[10px] font-medium text-surface-200/50 uppercase tracking-wider">{config.appTagline}</span>

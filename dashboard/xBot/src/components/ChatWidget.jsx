@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
+import { assetUrl } from '@/utils/assetUrl';
 import {
     Bot, Send, Loader2, Sparkles, X, Minus, Maximize2, Minimize2,
     Wallet, BarChart3, Fuel, TrendingUp, ArrowRightLeft, AlertTriangle,
@@ -146,7 +147,7 @@ function MsgBubble({ msg }) {
                 isUser ? 'bg-brand-500/20' : 'bg-surface-800 ring-1 ring-emerald-500/30'}`}>
                 {isUser
                     ? <span className="text-[10px] text-brand-400 font-bold">U</span>
-                    : <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover rounded-full" />}
+                    : <img src={assetUrl('xbot-logo.png')} alt="XBOT" className="w-full h-full object-cover rounded-full" />}
             </div>
             <div className={`max-w-[85%] rounded-xl px-3 py-2 ${isUser
                     ? 'bg-brand-500/15 border border-brand-500/15'
@@ -175,7 +176,7 @@ function TypingDots() {
     return (
         <div className="flex gap-2 animate-fadeIn">
             <div className="w-6 h-6 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover rounded-full" />
+                <img src={assetUrl('xbot-logo.png')} alt="XBOT" className="w-full h-full object-cover rounded-full" />
             </div>
             <div className="bg-surface-800/60 border border-white/5 rounded-xl px-3 py-2">
                 <div className="flex gap-1">
@@ -558,7 +559,7 @@ export default function ChatWidget() {
                         group bg-surface-900 ring-2 ring-brand-500/50"
                     aria-label="Open AI Chat"
                 >
-                    <img src="/xbot-logo.png" alt="XBOT" className="w-[42px] h-[42px] rounded-full object-cover group-hover:scale-110 transition-transform" />
+                    <img src={assetUrl('xbot-logo.png')} alt="XBOT" className="w-[42px] h-[42px] rounded-full object-cover group-hover:scale-110 transition-transform" />
 
                     {/* Unread badge */}
                     {unread > 0 && (
@@ -585,7 +586,7 @@ export default function ChatWidget() {
                     <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5
                         bg-gradient-to-r from-brand-500/5 to-emerald-500/5 transition-colors">
                         <div className="w-8 h-8 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 flex items-center justify-center overflow-hidden">
-                            <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover rounded-full" />
+                            <img src={assetUrl('xbot-logo.png')} alt="XBOT" className="w-full h-full object-cover rounded-full" />
                         </div>
                         <div className="flex-1 min-w-0">
                             <h3 className="text-sm font-bold text-surface-100">XBOT</h3>
@@ -640,7 +641,7 @@ export default function ChatWidget() {
                             <div className="flex flex-col items-center justify-center h-full gap-4 animate-fadeIn">
                                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500/15 to-emerald-500/15
                                     border border-white/5 flex items-center justify-center overflow-hidden ring-1 ring-emerald-500/30">
-                                    <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover rounded-full" />
+                                    <img src={assetUrl('xbot-logo.png')} alt="XBOT" className="w-full h-full object-cover rounded-full" />
                                 </div>
                                 <div className="text-center">
                                     <p className="text-sm font-semibold text-surface-100 mb-0.5">{t('widget.title', 'XBOT Trading Assistant')}</p>

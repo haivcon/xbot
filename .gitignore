@@ -75,6 +75,7 @@ __tests__
 __tests__/*
 !__tests__/publicDashboardHardening.test.js
 !__tests__/xbotRepositorySurface.test.js
+!__tests__/dashboardAssetPaths.test.js
 !__tests__/executionPolicy.test.js
 !__tests__/executionBoundaries.test.js
 !__tests__/executionRoutes.test.js

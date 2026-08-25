@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
 import { X, Send, Loader2, Shield, Sparkles, ArrowRight } from 'lucide-react';
+import { assetUrl } from '@/utils/assetUrl';
 
 export default function LoginModal({ open, onClose }) {
     const { t } = useTranslation();
@@ -102,7 +103,7 @@ export default function LoginModal({ open, onClose }) {
                         {/* Header */}
                         <div className="flex items-center gap-4 mb-7">
                             <div className="relative">
-                                <img src="/xbot-logo.png" alt="XBot" className="w-14 h-14 rounded-2xl shadow-xl shadow-brand-500/20 object-cover ring-1 ring-white/10" />
+                                <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-14 h-14 rounded-2xl shadow-xl shadow-brand-500/20 object-cover ring-1 ring-white/10" />
                                 <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-[3px] border-surface-900 flex items-center justify-center">
                                     <Sparkles size={8} className="text-white" />
                                 </div>

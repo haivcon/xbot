@@ -7,6 +7,7 @@ import useThemeStore from '@/stores/themeStore';
 import useAuthStore from '@/stores/authStore';
 import { SkeletonStatCards, SkeletonCard } from '@/components/Skeleton';
 import DashboardOpsPanels from './components/DashboardOpsPanels';
+import { assetUrl } from '@/utils/assetUrl';
 
 const AnalyticsSection = lazy(() => import('./AnalyticsPage'));
 import {
@@ -125,9 +126,9 @@ function formatUptime(seconds) {
 
 /* ── #14 Default Watchlist tokens ── */
 const DEFAULT_WATCHLIST = [
-    { name: 'Banmao', symbol: 'BANMAO', addr: '0x16d91d1615fc55b76d5f92365bd60c069b46ef78', logo: '/logos/banmao.png', color: 'text-amber-400' },
-    { name: 'Niuma', symbol: 'NIUMA', addr: '0x87669801a1fad6dad9db70d27ac752f452989667', logo: '/logos/niuma.png', color: 'text-red-400' },
-    { name: 'Xwizard', symbol: 'XWIZARD', addr: '0xdcc83b32b6b4e95a61951bfcc9d71967515c0fca', logo: '/logos/xwizard.png', color: 'text-purple-400' },
+    { name: 'Banmao', symbol: 'BANMAO', addr: '0x16d91d1615fc55b76d5f92365bd60c069b46ef78', logo: assetUrl('logos/banmao.png'), color: 'text-amber-400' },
+    { name: 'Niuma', symbol: 'NIUMA', addr: '0x87669801a1fad6dad9db70d27ac752f452989667', logo: assetUrl('logos/niuma.png'), color: 'text-red-400' },
+    { name: 'Xwizard', symbol: 'XWIZARD', addr: '0xdcc83b32b6b4e95a61951bfcc9d71967515c0fca', logo: assetUrl('logos/xwizard.png'), color: 'text-purple-400' },
 ];
 
 const WATCHLIST_STORAGE_KEY = 'dashboard_watchlist';

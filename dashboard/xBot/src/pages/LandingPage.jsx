@@ -4,6 +4,7 @@ import { Bot, Globe, Shield, Sparkles, BarChart3, Wallet, LogIn, ChevronRight, Z
 import config from '@/config';
 import LanguageSelector from '@/components/LanguageSelector';
 import useThemeStore from '@/stores/themeStore';
+import { assetUrl } from '@/utils/assetUrl';
 
 const INSTALL_TABS = {
     en: [
@@ -566,7 +567,7 @@ export default function LandingPage({ onLogin }) {
                 <div className="max-w-7xl mx-auto flex items-center justify-between px-6 md:px-10 py-4">
                     <div className="flex items-center gap-3">
                         <div className="relative">
-                            <img src="/xbot-logo.png" alt="XBot" className="w-10 h-10 rounded-xl shadow-lg shadow-brand-500/30 object-cover ring-1 ring-white/10" />
+                            <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-10 h-10 rounded-xl shadow-lg shadow-brand-500/30 object-cover ring-1 ring-white/10" />
                             {liveStats?.status === 'ok' && (
                                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-surface-900 animate-pulse" />
                             )}
@@ -859,7 +860,7 @@ export default function LandingPage({ onLogin }) {
                                                                 <img src={`/api/dashboard/community-logo/${c.chatId}`} 
                                                                      alt={c.title} 
                                                                      className={`w-10 h-10 rounded-full object-cover border flex-shrink-0 ${isDark ? 'border-white/5 bg-surface-800' : 'border-black/5 bg-surface-200'}`}
-                                                                     onError={(e) => { e.target.src = '/xbot-logo.png'; }}
+                                                                     onError={(e) => { e.target.src = assetUrl('xbot-logo.png'); }}
                                                                 />
                                                                 <div className="flex-1 min-w-0">
                                                                     <div className="flex items-center gap-2">
@@ -923,7 +924,7 @@ export default function LandingPage({ onLogin }) {
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
                         {/* Brand */}
                         <div className="flex items-center gap-3">
-                            <img src="/xbot-logo.png" alt="XBot" className="w-9 h-9 rounded-xl object-cover shadow-lg shadow-brand-500/10 ring-1 ring-white/5" />
+                            <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-9 h-9 rounded-xl object-cover shadow-lg shadow-brand-500/10 ring-1 ring-white/5" />
                             <div>
                                 <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-surface-900'}`}>{config.appName}</p>
                                 <p className={`text-[11px] ${isDark ? 'text-surface-200/30' : 'text-surface-700/30'}`}>{config.appTagline}</p>

@@ -12,6 +12,7 @@ import {
 import api from '@/api/client';
 import CustomSelect from '@/components/ui/CustomSelect';
 import useAuthStore from '@/stores/authStore';
+import { assetUrl } from '@/utils/assetUrl';
 
 /* ═══════════════════════════════════════════════════
    X Layer Community Ecosystem — Premium Design v2
@@ -25,7 +26,7 @@ const COMMUNITIES = [
         name: 'banmao 🐱🍌',
         symbol: 'BANMAO',
         token: '0x16d91d1615fc55b76d5f92365bd60c069b46ef78',
-        logo: '/logos/banmao.png',
+        logo: assetUrl('logos/banmao.png'),
         color: '#f59e0b',
         gradient: 'from-amber-500 via-orange-500 to-yellow-400',
         bgGradient: 'from-amber-500/10 via-orange-500/5 to-transparent',
@@ -48,7 +49,7 @@ const COMMUNITIES = [
         name: 'NIUMA 🐂🐴',
         symbol: 'NIUMA',
         token: '0x87669801a1fad6dad9db70d27ac752f452989667',
-        logo: '/logos/niuma.png',
+        logo: assetUrl('logos/niuma.png'),
         color: '#ef4444',
         gradient: 'from-red-500 via-rose-500 to-pink-400',
         bgGradient: 'from-red-500/10 via-rose-500/5 to-transparent',
@@ -69,7 +70,7 @@ const COMMUNITIES = [
         name: 'Xwizard 🧙',
         symbol: 'XWIZARD',
         token: '0xdcc83b32b6b4e95a61951bfcc9d71967515c0fca',
-        logo: '/logos/xwizard.png',
+        logo: assetUrl('logos/xwizard.png'),
         color: '#8b5cf6',
         gradient: 'from-purple-500 via-violet-500 to-indigo-400',
         bgGradient: 'from-purple-500/10 via-violet-500/5 to-transparent',

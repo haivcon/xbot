@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/client';
+import { assetUrl } from '@/utils/assetUrl';
 import {
     Bot, Loader2, MessageSquare, ExternalLink, Copy, Check,
     Sparkles, ArrowLeft, Share2
@@ -56,7 +57,7 @@ function SharedBubble({ msg }) {
             }`}>
                 {isUser
                     ? <span className="text-xs text-brand-400 font-bold">U</span>
-                    : <img src="/xbot-logo.png" alt="XBOT" className="w-full h-full object-cover rounded-full" />}
+                    : <img src={assetUrl('xbot-logo.png')} alt="XBOT" className="w-full h-full object-cover rounded-full" />}
             </div>
             <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${isUser
                     ? 'bg-brand-500/15 border border-brand-500/15'
@@ -138,7 +139,7 @@ export default function SharedChatPage() {
                         <ArrowLeft size={18} />
                     </Link>
                     <div className="w-8 h-8 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 flex items-center justify-center overflow-hidden flex-shrink-0">
-                        <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                        <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                         <h1 className="text-sm font-bold text-surface-100 truncate">{data.title || 'Shared Chat'}</h1>
@@ -175,7 +176,7 @@ export default function SharedChatPage() {
                 <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-surface-800 ring-1 ring-emerald-500/30 overflow-hidden flex-shrink-0">
-                            <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                            <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-full h-full object-cover" />
                         </div>
                         <span className="text-[11px] text-surface-200/30">
                             {t('shared.poweredBy', 'Powered by')} <strong className="text-surface-200/50">XBot AI</strong> — Gemini + OnchainOS

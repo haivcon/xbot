@@ -15,6 +15,7 @@ import {
 import { hapticImpact, hapticNotification } from '@/utils/telegram';
 import NineRouterSettings from '@/components/chat/NineRouterSettings';
 import { resolveProviderIcon } from '@/components/chat/providerIcon';
+import { assetUrl } from '@/utils/assetUrl';
 
 const MODEL_PROVIDER_ALIASES = Object.freeze({ gcli: 'grok-cli', gb: 'grok-cli', 'grok-build': 'grok-cli' });
 const MODEL_PROVIDER_NAMES = Object.freeze({
@@ -506,7 +507,7 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
                 )
             ) : (
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ring-1 ring-emerald-500/30 overflow-hidden bg-surface-800`}>
-                    <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                    <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-full h-full object-cover" />
                 </div>
             )}
             <div
@@ -853,7 +854,7 @@ function TypingIndicator() {
     return (
         <div className="flex gap-3 animate-fadeIn">
             <div className="w-8 h-8 rounded-full ring-1 ring-emerald-500/30 flex items-center justify-center flex-shrink-0 overflow-hidden bg-surface-800">
-                <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-full h-full object-cover" />
             </div>
             <div className="bg-surface-800/60 border border-white/5 rounded-2xl px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -2248,7 +2249,7 @@ export default function ChatPage() {
                     </button>
                     <div className={`rounded-full flex items-center justify-center flex-shrink-0 ring-1 ring-emerald-500/30 overflow-hidden bg-surface-800
                         ${isMobile ? 'w-7 h-7' : 'w-8 h-8'}`}>
-                        <img src="/xbot-logo.png" alt="XBot" className="w-full h-full object-cover" />
+                        <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                         <h1 className={`font-semibold text-surface-100 truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>
