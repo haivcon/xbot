@@ -5,7 +5,7 @@ const CHECKIN_EMOTIONS = ['😀', '😃', '😄', '😁', '😊', '😍'];
 const HELP_COMMAND_DETAILS = {
     start: { command: '/start', icon: '🚀', descKey: 'help_command_start' },
     datatelegram: { command: '/dataTelegram', icon: '🗂️', descKey: 'help_command_idtelegram' },
-    ai: { command: '/ai', icon: '🤖', descKey: 'help_command_ai' },
+    ai: { command: '/chat', icon: '🤖', descKey: 'help_command_ai' },
     api: { command: '/api', icon: '🔑', descKey: 'help_command_api' },
     register: { command: '/register', icon: '📝', descKey: 'help_command_register' },
     mywallet: { command: '/mywallet', icon: '👛', descKey: 'help_command_mywallet' },

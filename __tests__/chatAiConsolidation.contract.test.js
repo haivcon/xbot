@@ -52,7 +52,11 @@ describe('legacy AI and copy surfaces are retired', () => {
     test('AI & Chat navigation contains Chat AI only', () => {
         const sidebar = read('dashboard/xBot/src/components/layout/Sidebar.jsx');
         const aiGroup = sidebar.match(/key: 'ai',[\s\S]*?\n\s*},\n\s*{\n\s*key: 'finance'/)?.[0] || '';
+        const helpConstants = read('src/config/constants.js');
+        const commandRegistry = read('src/services/aiChatContracts.js');
         expect(aiGroup).toContain("to: '/chat'");
+        expect(helpConstants).toContain("ai: { command: '/chat'");
+        expect(commandRegistry).toContain("{ name: 'chat', aliases: ['ai']");
         expect(aiGroup).not.toMatch(/ai-trader|smart-copy|okx-ai|AI Trader|Smart Copy|OKX\.AI/);
     });
 
