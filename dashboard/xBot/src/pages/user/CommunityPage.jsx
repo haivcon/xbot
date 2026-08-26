@@ -13,6 +13,7 @@ import api from '@/api/client';
 import CustomSelect from '@/components/ui/CustomSelect';
 import useAuthStore from '@/stores/authStore';
 import { assetUrl } from '@/utils/assetUrl';
+import UserAvatar from '@/components/UserAvatar';
 
 /* ═══════════════════════════════════════════════════
    X Layer Community Ecosystem — Premium Design v2
@@ -1416,13 +1417,7 @@ function MyProfileView() {
                         <div className="flex flex-col sm:flex-row items-start gap-5">
                             {/* Avatar */}
                             <div className="relative flex-shrink-0">
-                                {user?.photo_url ? (
-                                    <img src={user.photo_url} alt="" className="w-20 h-20 rounded-2xl object-cover ring-2 ring-brand-500/30" />
-                                ) : (
-                                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-600 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
-                                        {(user?.first_name || '?')[0]}
-                                    </div>
-                                )}
+                                <UserAvatar user={user} className="w-20 h-20 rounded-2xl ring-2 ring-brand-500/30 text-2xl flex-shrink-0" />
                                 {/* #4 Level Badge */}
                                 <div className={`absolute -bottom-2 -right-2 px-2 py-0.5 rounded-full bg-gradient-to-r ${level.gradient} text-[9px] font-bold text-white shadow-lg`}>
                                     {level.emoji} {t(`dashboard.mySpace.${level.name}`)}

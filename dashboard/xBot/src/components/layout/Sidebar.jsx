@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
 import config from '@/config';
 import { assetUrl } from '@/utils/assetUrl';
+import UserAvatar from '@/components/UserAvatar';
 import {
     LayoutDashboard,
     Users,
@@ -292,13 +293,7 @@ export default function Sidebar({ open, onClose }) {
             {/* User info */}
             <div className="px-4 py-4 border-b border-white/5">
                 <div className="flex items-center gap-3">
-                    {user?.photo_url ? (
-                        <img src={user.photo_url} alt="" className="w-9 h-9 rounded-full object-cover ring-2 ring-brand-500/30" />
-                    ) : (
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
-                            {(user?.first_name || '?')[0]}
-                        </div>
-                    )}
+                    <UserAvatar user={user} className="w-9 h-9 rounded-full ring-2 ring-brand-500/30 text-sm flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-surface-100 truncate">{user?.first_name || 'User'}</p>
                     {isOwner() && (

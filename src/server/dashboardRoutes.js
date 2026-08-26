@@ -26,6 +26,7 @@ const {
     createOAuthRedirectCoordinator,
     normalizePublicOrigin
 } = require('../services/nineRouterOAuthRedirect');
+const { createTelegramAvatarService } = require('../services/telegramAvatar');
 
 let oauthRedirectCoordinator;
 function getOAuthRedirectCoordinator() {
@@ -148,7 +149,7 @@ async function getUserRole(userId, username) {
 // ============================
 // Create Router
 // ============================
-function createDashboardRoutes() {
+function createDashboardRoutes({ avatarService = createTelegramAvatarService() } = {}) {
     const router = Router();
 
     // Dashboard responses may contain auth or user data and must never be cached.
@@ -483,6 +484,29 @@ function createDashboardRoutes() {
     // PROTECTED ROUTES
     // ==================
     router.use(authMiddleware);
+
+    router.get('/user/avatar', async (req, res) => {
+        try {
+            const avatar = await avatarService.getAvatar(req.dashboardUser.userId);
+            res.setHeader('Content-Type', avatar.mime);
+            res.setHeader('Content-Length', avatar.bytes.length);
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('Cache-Control', 'no-store');
+            return res.send(avatar.bytes);
+        } catch (error) {
+            const responses = {
+                AVATAR_NOT_AVAILABLE: 404,
+                AVATAR_SERVICE_UNAVAILABLE: 503,
+                AVATAR_UPSTREAM_TIMEOUT: 504,
+                AVATAR_UPSTREAM_FAILED: 502,
+                AVATAR_UPSTREAM_MALFORMED: 502,
+                AVATAR_UNSUPPORTED_MEDIA: 502,
+                AVATAR_TOO_LARGE: 502,
+            };
+            const code = Object.hasOwn(responses, error?.code) ? error.code : 'AVATAR_UPSTREAM_FAILED';
+            return res.status(responses[code]).json({ code });
+        }
+    });
 
     router.post('/ai/9router/oauth/:provider/start', async (req, res) => {
         try {

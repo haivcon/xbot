@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '@/stores/authStore';
 import api from '@/api/client';
-import { User, Trophy, MessageCircle, Gamepad2, CalendarCheck, ImageIcon, Sparkles, TrendingUp } from 'lucide-react';
+import { Trophy, MessageCircle, Gamepad2, CalendarCheck, ImageIcon, Sparkles, TrendingUp } from 'lucide-react';
+import UserAvatar from '@/components/UserAvatar';
 
 export default function ProfilePage() {
     const { t } = useTranslation();
@@ -33,13 +34,7 @@ export default function ProfilePage() {
             {/* Profile card */}
             <div className="glass-card p-6">
                 <div className="flex items-center gap-5">
-                    {user?.photo_url ? (
-                        <img src={user.photo_url} alt="" className="w-20 h-20 rounded-2xl object-cover ring-2 ring-brand-500/30" />
-                    ) : (
-                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-600 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
-                            {(user?.first_name || '?')[0]}
-                        </div>
-                    )}
+                    <UserAvatar user={user} className="w-20 h-20 rounded-2xl ring-2 ring-brand-500/30 text-2xl flex-shrink-0" />
                     <div>
                         <h2 className="text-xl font-bold text-surface-100">{user?.first_name} {user?.last_name || ''}</h2>
                         {user?.username && <p className="text-sm text-surface-200/50">@{user.username}</p>}

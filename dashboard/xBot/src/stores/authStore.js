@@ -187,4 +187,10 @@ const useAuthStore = create((set, get) => ({
     },
 }));
 
+useAuthStore.subscribe((state, previous) => {
+    if (state.token !== previous.token || state.user?.id !== previous.user?.id) {
+        window.dispatchEvent(new Event('xbot:auth-changed'));
+    }
+});
+
 export default useAuthStore;

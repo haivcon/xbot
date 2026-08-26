@@ -5,6 +5,7 @@ import useAuthStore from '@/stores/authStore';
 import useThemeStore from '@/stores/themeStore';
 import useWsStore from '@/stores/wsStore';
 import api from '@/api/client';
+import UserAvatar from '@/components/UserAvatar';
 import { Menu, LogOut, Bell, Sun, Moon, Wifi, WifiOff, X, Volume2, VolumeX, Search, Fuel, Gauge } from 'lucide-react';
 
 const ACTION_LABELS = {
@@ -274,13 +275,7 @@ export default function Header({ onMenuClick }) {
 
                 {/* User avatar + logout */}
                 <div className="flex items-center gap-2 ml-2">
-                    {user?.photo_url ? (
-                        <img src={user.photo_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-                    ) : (
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-600 to-purple-600 flex items-center justify-center text-white font-bold text-xs">
-                            {(user?.first_name || '?')[0]}
-                        </div>
-                    )}
+                    <UserAvatar user={user} className="w-8 h-8 rounded-full text-xs flex-shrink-0" />
                     <button
                         onClick={logout}
                         className="p-2 rounded-xl hover:bg-red-500/10 text-surface-200/50 hover:text-red-400 transition-colors"

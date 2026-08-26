@@ -16,6 +16,7 @@ import { hapticImpact, hapticNotification } from '@/utils/telegram';
 import NineRouterSettings from '@/components/chat/NineRouterSettings';
 import { resolveProviderIcon } from '@/components/chat/providerIcon';
 import { assetUrl } from '@/utils/assetUrl';
+import UserAvatar from '@/components/UserAvatar';
 
 const MODEL_PROVIDER_ALIASES = Object.freeze({ gcli: 'grok-cli', gb: 'grok-cli', 'grok-build': 'grok-cli' });
 const MODEL_PROVIDER_NAMES = Object.freeze({
@@ -498,13 +499,13 @@ function ChatBubble({ message, onRetry, onPin, isPinned, onFeedback, feedback, o
         <>
         <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} animate-fadeIn group ${isPinned ? 'ring-1 ring-amber-500/20 rounded-2xl p-1' : ''}`}>
             {isUser ? (
-                user?.photo_url ? (
-                    <img src={user.photo_url} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-brand-500/30 flex-shrink-0" />
-                ) : (
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-brand-500/20 ring-1 ring-brand-500/30`}>
-                        <User size={14} className="text-brand-400" />
-                    </div>
-                )
+                <UserAvatar
+                    user={user}
+                    icon={User}
+                    iconSize={14}
+                    className="w-8 h-8 rounded-full ring-1 ring-brand-500/30 flex-shrink-0"
+                    fallbackClassName="bg-brand-500/20 text-brand-400"
+                />
             ) : (
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ring-1 ring-emerald-500/30 overflow-hidden bg-surface-800`}>
                     <img src={assetUrl('xbot-logo.png')} alt="XBot" className="w-full h-full object-cover" />
