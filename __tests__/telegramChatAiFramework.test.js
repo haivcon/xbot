@@ -4,6 +4,7 @@ const {
   TELEGRAM_AI_COMMANDS,
   buildAuthoritativeCatalog,
   escapeTelegramHtml,
+  resolveTelegramAiCommand,
   splitTelegramHtml
 } = require('../src/services/aiChatContracts');
 const { TelegramCallbackStore } = require('../src/services/telegramCallbackStore');
@@ -13,7 +14,7 @@ const { createTelegramAiMenuHandlers } = require('../src/app/telegramAiMenuHandl
 describe('xBot Telegram Chat AI framework contracts', () => {
   test('canonical command registry contains focused commands and models alias', () => {
     expect(TELEGRAM_AI_COMMANDS.map(item => item.name)).toEqual([
-      'new', 'model', 'stop', 'retry', 'history', 'status', 'providers', 'help'
+      'chat', 'new', 'model', 'stop', 'retry', 'history', 'status', 'providers', 'help'
     ]);
     expect(TELEGRAM_AI_COMMANDS.find(item => item.name === 'model').aliases).toContain('models');
   });
@@ -36,7 +37,8 @@ describe('xBot Telegram Chat AI framework contracts', () => {
     });
     expect(catalog.models.map(item => item.id)).toEqual(['p1/m1']);
     expect(catalog.combos.map(item => item.id)).toEqual(['combo/ok']);
-    expect(catalog.selectedRoute).toBe('p1/m1');
+    expect(catalog.selectedRoute).toBe('p2/private');
+    expect(catalog.selectionState).toBe('stale');
     expect(catalog.revision).toMatch(/^[a-f0-9]{12}$/);
   });
 
@@ -150,7 +152,7 @@ describe('xBot Telegram Chat AI framework contracts', () => {
     expect(active.abortController.signal.aborted).toBe(true);
     expect(service.getActiveGeneration({ tenantId: '1', conversationId: context.conversationId })).toBeNull();
     await handlers.handleCommand({ ...base, message_id: 3, text: '/retry' });
-    expect(retried).toEqual([{ prompt: 'hello', routeRef: 'opaque-model' }]);
+    expect(retried).toEqual([{ prompt: 'hello', routeRef: '' }]);
     expect(saved.at(-1).turns).toEqual(expect.arrayContaining([expect.objectContaining({ role: 'user', content: 'hello' })]));
   });
 
@@ -171,7 +173,196 @@ describe('xBot Telegram Chat AI framework contracts', () => {
     expect(await handlers.handleCommand({ text: '/history', chat: { id: -1, type: 'group' }, from: { id: 1 } })).toBe(true);
     expect(sent[0].text).not.toMatch(/conversation ID|model ID|connected account/i);
     await handlers.handleCommand({ text: '/help', chat: { id: 1, type: 'private' }, from: { id: 1 } });
-    for (const command of TELEGRAM_AI_COMMANDS) expect(sent.at(-1).text).toContain(`/${command.name}`);
+    expect(sent.at(-1).text).toContain('/chat');
+    expect(sent.at(-1).options.reply_markup.inline_keyboard.flat().map(button => button.text).join(' ')).toMatch(/All commands/);
+  });
+});
+
+describe('approved Telegram Chat AI control-center UX', () => {
+  function makeBot(editError = null) {
+    let messageId = 40;
+    return {
+      sendMessage: jest.fn(async (chatId, text, options) => ({ message_id: ++messageId, chat: { id: chatId }, text, options })),
+      answerCallbackQuery: jest.fn(async () => {}),
+      editMessageText: jest.fn(async () => {
+        if (editError) throw editError;
+        return true;
+      })
+    };
+  }
+
+  const privateMessage = (text, extra = {}) => ({
+    message_id: 7,
+    text,
+    chat: { id: 1, type: 'private' },
+    from: { id: 1, language_code: 'en' },
+    ...extra
+  });
+
+  const catalog = () => buildAuthoritativeCatalog({
+    providers: [
+      { id: 'ready', name: 'Ready & <safe>', connected: true, routable: true, status: 'active' },
+      { id: 'empty', name: 'Empty', connected: true, routable: true, status: 'active' },
+      { id: 'offline', name: 'Offline', connected: false, status: 'disconnected' }
+    ],
+    models: Array.from({ length: 14 }, (_, index) => ({
+      id: `ready/model-${index + 1}`,
+      providerId: 'ready',
+      label: index === 0 ? 'Long <model> & safe' : `Model ${index + 1}`,
+      aliases: index === 0 ? ['fast'] : [],
+      capabilities: index === 0 ? ['vision'] : []
+    })),
+    selectedRoute: 'offline/old'
+  });
+
+  test('registry makes chat primary with ai alias and model/models parity', () => {
+    expect(TELEGRAM_AI_COMMANDS.map(item => item.name)).toEqual([
+      'chat', 'new', 'model', 'stop', 'retry', 'history', 'status', 'providers', 'help'
+    ]);
+    expect(TELEGRAM_AI_COMMANDS[0]).toMatchObject({ name: 'chat', aliases: ['ai'] });
+    expect(TELEGRAM_AI_COMMANDS.find(item => item.name === 'model').aliases).toContain('models');
+    expect(resolveTelegramAiCommand('/chat hello')).toMatchObject({ name: 'chat' });
+    expect(resolveTelegramAiCommand('/ai hello')).toMatchObject({ name: 'chat' });
+  });
+
+  test('chat and ai prompt/photo/audio inputs share the legacy execution contract', async () => {
+    const bot = makeBot();
+    const prompts = [];
+    const handlers = createTelegramAiMenuHandlers({
+      bot, getLang: async () => 'en', discoverCatalog: catalog,
+      promptMessage: async msg => prompts.push(msg),
+      featureFlags: { telegramUi: true, groupLegacy: false }
+    });
+    await handlers.handleCommand(privateMessage('/chat hello'));
+    await handlers.handleCommand(privateMessage('/ai hello'));
+    await handlers.handleCommand(privateMessage('/chat', { photo: [{ file_id: 'photo' }], caption: '/chat describe' }));
+    await handlers.handleCommand(privateMessage('/chat tts hello', { audio: { file_id: 'audio' } }));
+    expect(prompts.map(item => item.text || item.caption)).toEqual(['/ai hello', '/ai hello', '/ai describe', '/ai tts hello']);
+    expect(prompts[2].photo).toEqual([{ file_id: 'photo' }]);
+    expect(prompts[3].audio).toEqual({ file_id: 'audio' });
+  });
+
+  test.each([
+    ['idle', ['New chat', 'Change model', 'History', 'Status', 'Providers', 'Help'], ['Retry', 'Stop']],
+    ['generating', ['Stop'], ['New chat', 'Retry', 'History']],
+    ['stopping', ['Stopping'], ['New chat', 'Retry', 'History']],
+    ['interrupted', ['Retry', 'New chat', 'Change model', 'History', 'Status'], ['Stop']],
+    ['retryable', ['Retry', 'New chat', 'Change model', 'History', 'Status'], ['Stop']],
+    ['completed', ['New chat', 'Change model', 'History'], ['Retry', 'Stop']],
+    ['error', ['New chat', 'Change model', 'History', 'Status'], ['Retry', 'Stop']]
+  ])('control center renders %s lifecycle buttons safely', async (lifecycle, present, absent) => {
+    const bot = makeBot();
+    const handlers = createTelegramAiMenuHandlers({ bot, getLang: async () => 'en', discoverCatalog: catalog, featureFlags: { telegramUi: true, groupLegacy: false } });
+    handlers.state.lifecycle.set('1', { status: lifecycle, retryable: ['retryable', 'interrupted'].includes(lifecycle) });
+    await handlers.handleCommand(privateMessage('/chat'));
+    const rendered = bot.sendMessage.mock.calls.at(-1);
+    const labels = rendered[2].reply_markup.inline_keyboard.flat().map(button => button.text).join(' ');
+    for (const label of present) expect(labels).toContain(label);
+    for (const label of absent) expect(labels).not.toContain(label);
+    expect(rendered[1]).toContain('offline/old');
+    expect(rendered[1]).toMatch(/stale|unavailable/i);
+    expect(rendered[1]).not.toContain('<safe>');
+  });
+
+  test('model picker groups authoritative providers and supports search/select persistence', async () => {
+    const bot = makeBot();
+    const service = new AiConversationService({ idFactory: () => 'conversation-1' });
+    const handlers = createTelegramAiMenuHandlers({ bot, getLang: async () => 'en', discoverCatalog: catalog, conversationService: service, featureFlags: { telegramUi: true, groupLegacy: false } });
+    await handlers.handleCommand(privateMessage('/model'));
+    let rendered = bot.sendMessage.mock.calls.at(-1);
+    const labels = rendered[2].reply_markup.inline_keyboard.flat().map(button => button.text).join(' ');
+    expect(labels).toMatch(/Ready.*14/);
+    expect(labels).toMatch(/Empty.*0/);
+    expect(labels).toMatch(/Search/);
+    expect(labels).not.toMatch(/Offline.*[1-9]/);
+    const search = rendered[2].reply_markup.inline_keyboard.flat().find(button => /Search/.test(button.text));
+    await handlers.handleCallback({ id: 'q1', data: search.callback_data, message: { message_id: 41, chat: { id: 1, type: 'private' } }, from: { id: 1 } });
+    expect(await handlers.handleText(privateMessage('fast vision'))).toBe(true);
+    rendered = bot.editMessageText.mock.calls.at(-1);
+    expect(rendered[0]).toMatch(/Long &lt;model&gt; &amp; safe/);
+    const select = rendered[1].reply_markup.inline_keyboard.flat().find(button => /Long/.test(button.text));
+    await handlers.handleCallback({ id: 'q2', data: select.callback_data, message: { message_id: 41, chat: { id: 1, type: 'private' } }, from: { id: 1 } });
+    expect(handlers.state.currentRoute.get('1')).toBe('ready/model-1');
+    expect((await service.listConversations({ tenantId: '1' }))[0].routeRef).toBe('ready/model-1');
+  });
+
+  test('history paginates, opens, resumes and new preserves previous history', async () => {
+    let n = 0;
+    const service = new AiConversationService({ idFactory: () => `conversation-${++n}`, now: (() => { let value = 100; return () => ++value; })() });
+    for (let index = 0; index < 9; index += 1) await service.newConversation({ tenantId: '1', routeRef: `ready/model-${index + 1}` });
+    const bot = makeBot();
+    const handlers = createTelegramAiMenuHandlers({ bot, getLang: async () => 'en', discoverCatalog: catalog, conversationService: service, featureFlags: { telegramUi: true, groupLegacy: false } });
+    await handlers.handleCommand(privateMessage('/history'));
+    const history = bot.sendMessage.mock.calls.at(-1);
+    const historyButtons = history[2].reply_markup.inline_keyboard.flat();
+    expect(historyButtons.map(button => button.text).join(' ')).not.toMatch(/Delete|Rename|Summary/);
+    expect(historyButtons.map(button => button.text)).toContain('1/2');
+    const open = historyButtons.find(button => /conversation-/.test(button.text));
+    await handlers.handleCallback({ id: 'open', data: open.callback_data, message: { message_id: 41, chat: { id: 1, type: 'private' } }, from: { id: 1 } });
+    const details = bot.editMessageText.mock.calls.at(-1);
+    const resume = details[1].reply_markup.inline_keyboard.flat().find(button => /Resume/.test(button.text));
+    expect(resume).toBeDefined();
+    await handlers.handleCallback({ id: 'resume', data: resume.callback_data, message: { message_id: 41, chat: { id: 1, type: 'private' } }, from: { id: 1 } });
+    expect(handlers.state.currentConversation.get('1')).toMatch(/^conversation-/);
+    await handlers.handleCommand(privateMessage('/new'));
+    expect(await service.listConversations({ tenantId: '1' })).toHaveLength(10);
+    expect(bot.sendMessage.mock.calls.at(-1)[1]).toMatch(/remains in history/i);
+  });
+
+  test('edit failure and stale callback each send exactly one safe replacement', async () => {
+    const editError = new Error('Bad Request: message to edit not found');
+    const bot = makeBot(editError);
+    const handlers = createTelegramAiMenuHandlers({ bot, getLang: async () => 'en', discoverCatalog: catalog, featureFlags: { telegramUi: true, groupLegacy: false } });
+    await handlers.handleCommand(privateMessage('/model'));
+    const provider = bot.sendMessage.mock.calls.at(-1)[2].reply_markup.inline_keyboard.flat().find(button => /Ready/.test(button.text));
+    await handlers.handleCallback({ id: 'page', data: provider.callback_data, message: { message_id: 41, chat: { id: 1, type: 'private' } }, from: { id: 1 } });
+    expect(bot.editMessageText).toHaveBeenCalled();
+    expect(bot.sendMessage).toHaveBeenCalledTimes(2);
+    const before = bot.sendMessage.mock.calls.length;
+    await handlers.handleCallback({ id: 'stale', data: 'xa1:expired', message: { message_id: 41, chat: { id: 1, type: 'private' } }, from: { id: 1 } });
+    expect(bot.sendMessage).toHaveBeenCalledTimes(before + 1);
+    expect(bot.answerCallbackQuery.mock.calls.at(-1)[1].text).not.toMatch(/token|revision|unknown/i);
+    const stale = bot.sendMessage.mock.calls.at(-1);
+    expect(stale[1]).toMatch(/expired|updated/i);
+    expect(stale[2].reply_markup.inline_keyboard.flat()[0].callback_data).toMatch(/^xa1:/);
+  });
+
+  test.each(['/chat', '/ai', '/model', '/models', '/new', '/stop', '/retry', '/history', '/status', '/providers', '/help'])('%s is private-only in groups with no state leakage', async command => {
+    const bot = makeBot();
+    const discoverCatalog = jest.fn(catalog);
+    const service = { listConversations: jest.fn(), newConversation: jest.fn() };
+    const handlers = createTelegramAiMenuHandlers({ bot, getLang: async () => 'en', discoverCatalog, conversationService: service, botUsername: 'verified_bot', featureFlags: { telegramUi: true, groupLegacy: false } });
+    await handlers.handleCommand({ text: command, chat: { id: -10, type: 'group' }, from: { id: 1 } });
+    expect(discoverCatalog).not.toHaveBeenCalled();
+    expect(service.listConversations).not.toHaveBeenCalled();
+    const sent = bot.sendMessage.mock.calls[0];
+    expect(sent[1]).not.toMatch(/model-|conversation-|connected account/i);
+    expect(sent[2].reply_markup.inline_keyboard[0][0].url).toBe('https://t.me/verified_bot?start=chat');
+  });
+
+  test('group chat/ai prompts keep legacy execution without private-state discovery', async () => {
+    const bot = makeBot();
+    const prompts = [];
+    const discoverCatalog = jest.fn(catalog);
+    const handlers = createTelegramAiMenuHandlers({ bot, getLang: async () => 'en', discoverCatalog, promptMessage: async msg => prompts.push(msg.text), featureFlags: { telegramUi: true, groupLegacy: false } });
+    const group = { chat: { id: -10, type: 'group' }, from: { id: 1 } };
+    await handlers.handleCommand({ ...group, text: '/chat hello' });
+    await handlers.handleCommand({ ...group, text: '/ai hello' });
+    expect(prompts).toEqual(['/ai hello', '/ai hello']);
+    expect(discoverCatalog).not.toHaveBeenCalled();
+  });
+
+  test('status providers and contextual help are compact and safe', async () => {
+    const bot = makeBot();
+    const handlers = createTelegramAiMenuHandlers({ bot, getLang: async () => 'vi', discoverCatalog: catalog, dashboardLink: async () => 'https://xbot.example/secure-once', featureFlags: { telegramUi: true, groupLegacy: false } });
+    for (const command of ['/status', '/providers', '/help']) await handlers.handleCommand(privateMessage(command));
+    const [status, providers, help] = bot.sendMessage.mock.calls.slice(-3);
+    expect(status[1]).not.toMatch(/tenant|endpoint|signature|secret/i);
+    expect(providers[1]).toContain('Ready');
+    expect(providers[1]).toContain('14');
+    expect(providers[2].reply_markup.inline_keyboard.flat().find(button => button.url).url).toBe('https://xbot.example/secure-once');
+    expect(help[2].reply_markup.inline_keyboard.flat().map(button => button.text).join(' ')).toMatch(/Chat|Model|History|Privacy|command/i);
+    expect(help[1].length).toBeLessThan(1000);
   });
 });
 
@@ -181,6 +372,7 @@ describe('runtime characterization', () => {
     expect(source).toContain("require('./src/app/telegramAiMenuHandlers')");
     expect(source).toMatch(/handleTelegramAiCommand\(msg\)[\s\S]*?handleAiCommand\(msg\)/);
     expect(source).toContain('handleTelegramAiCallback(query)');
+    expect(source).toMatch(/TELEGRAM_AI_COMMANDS[\s\S]*?flatMap\(item => \[item\.name, \.\.\.\(item\.aliases \|\| \[\]\)\]/);
     expect(source.indexOf('enforceBanForCallback(query, callbackLang)')).toBeLessThan(source.indexOf('handleTelegramAiCallback(query)'));
     expect(source).not.toContain("model.id.split('/')[0]");
   });

@@ -54,6 +54,23 @@ class AiConversationService {
     return [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, boundedLimit).map(item => ({ ...item, turns: undefined }));
   }
 
+  async selectConversation({ tenantId, conversationId, routeRef } = {}) {
+    const tenant = this._tenant(tenantId);
+    const conversation = await this.getConversation({ tenantId: tenant, conversationId });
+    if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', 'Conversation not found');
+    conversation.routeRef = String(routeRef || '');
+    conversation.updatedAt = this.now();
+    this.conversations.set(conversation.id, conversation);
+    await this.adapter?.saveConversation?.(conversation);
+    return { ...conversation, turns: [...(conversation.turns || [])] };
+  }
+
+  async resumeConversation({ tenantId, conversationId } = {}) {
+    const conversation = await this.getConversation({ tenantId, conversationId });
+    if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', 'Conversation not found');
+    return conversation;
+  }
+
   async beginGeneration({ tenantId, conversationId, prompt, routeRef = '', idempotencyKey = '' } = {}) {
     const tenant = this._tenant(tenantId);
     const conversation = this.conversations.get(String(conversationId));
@@ -123,6 +140,14 @@ class AiConversationService {
   getActiveGeneration({ tenantId, conversationId } = {}) {
     const tenant = this._tenant(tenantId);
     const item = [...this.generations.values()].find(entry => entry.tenantId === tenant && entry.conversationId === String(conversationId) && entry.status === 'running');
+    return item ? { ...item } : null;
+  }
+
+  getLatestGeneration({ tenantId, conversationId } = {}) {
+    const tenant = this._tenant(tenantId);
+    const item = [...this.generations.values()]
+      .filter(entry => entry.tenantId === tenant && entry.conversationId === String(conversationId))
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
     return item ? { ...item } : null;
   }
 

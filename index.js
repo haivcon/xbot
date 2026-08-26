@@ -1781,6 +1781,7 @@ function startTelegramBot() {
                     try {
                         const scopedCommands = scope.type === 'all_private_chats'
                             ? commands.concat(TELEGRAM_AI_COMMANDS
+                                .flatMap(item => [item.name, ...(item.aliases || [])].map(name => ({ ...item, name })))
                                 .filter(item => !commands.some(existing => existing.command === item.name))
                                 .map(item => ({ command: item.name, description: sanitizeDescription(item.description[langCode] || item.description.en, item.name) })))
                             : commands;
@@ -2039,6 +2040,8 @@ function startTelegramBot() {
             if (routeRef) telegramAiMenus.state.currentRoute.set(String(msg.from?.id || ''), routeRef);
             return handleAiCommand({ ...msg, text: `/ai ${prompt}` });
         },
+        promptMessage: (msg) => handleAiCommand(msg),
+        botUsername: BOT_USERNAME,
         dashboardLink: async ({ userId, section }) => {
             const token = crypto.randomBytes(32).toString('hex');
             dashboardLoginTokens.set(token, {
@@ -3531,6 +3534,10 @@ function startTelegramBot() {
         }
 
         if (await handleTelegramAiCommand(msg)) {
+            return;
+        }
+
+        if (await telegramAiMenus.handleText(msg)) {
             return;
         }
 
