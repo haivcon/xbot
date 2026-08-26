@@ -124,6 +124,60 @@ describe('tenant-bound Telegram dashboard avatar', () => {
         }
     });
 
+    function avatarFetch(contentType, chunks, headers = {}) {
+        return jest.fn()
+            .mockResolvedValueOnce(mockResponse({ json: { ok: true, result: { photos: [[{ file_id: 'avatar-file', width: 1, height: 1 }]] } } }))
+            .mockResolvedValueOnce(mockResponse({ json: { ok: true, result: { file_path: 'photos/private-user-avatar.jpg' } } }))
+            .mockResolvedValueOnce(mockResponse({ headers: { ...headers, ...(contentType === undefined ? {} : { 'content-type': contentType }) }, chunks }));
+    }
+
+    test.each([
+        ['application/octet-stream', [0xff, 0xd8, 0xff, 0xd9], 'image/jpeg'],
+        [' application/octet-stream ; charset=binary ', [137, 80, 78, 71, 13, 10, 26, 10], 'image/png'],
+        ['APPLICATION/OCTET-STREAM', Buffer.from('RIFF\x04\x00\x00\x00WEBP', 'binary'), 'image/webp'],
+        [' image/jpg ; charset=binary ', [0xff, 0xd8, 0xff, 0xd9], 'image/jpeg'],
+    ])('accepts reviewed magic for %s and returns canonical %s', async (contentType, bytes, expectedMime) => {
+        const service = createTelegramAvatarService({ token: TEST_TOKEN, fetchImpl: avatarFetch(contentType, [bytes]) });
+        await expect(service.getAvatar('private-user')).resolves.toMatchObject({
+            bytes: Buffer.from(bytes),
+            mime: expectedMime
+        });
+    });
+
+    test.each([
+        ['image/jpeg', [137, 80, 78, 71, 13, 10, 26, 10]],
+        ['image/png', [0xff, 0xd8, 0xff, 0xd9]],
+        ['image/webp', Buffer.from('not-a-webp!!')],
+        ['application/octet-stream', Buffer.from('unknown-magic')],
+        [undefined, [0xff, 0xd8, 0xff, 0xd9]],
+        ['text/plain', [0xff, 0xd8, 0xff, 0xd9]],
+        ['image/gif', Buffer.from('GIF89a')],
+        ['image/svg+xml', Buffer.from('<svg>')],
+    ])('rejects conflicting, unknown, missing, or other declared MIME %s without metadata leakage', async (contentType, bytes) => {
+        const service = createTelegramAvatarService({ token: TEST_TOKEN, fetchImpl: avatarFetch(contentType, [bytes]) });
+        try {
+            await service.getAvatar('private-user');
+            throw new Error('expected avatar rejection');
+        } catch (error) {
+            expect(error).toMatchObject({ code: 'AVATAR_UNSUPPORTED_MEDIA', statusCode: 502 });
+            expect(JSON.stringify({ code: error.code, message: error.message })).not.toMatch(
+                /private-user|test-telegram-token|photos\/|api\.telegram\.org|avatar-file/i
+            );
+        }
+    });
+
+    test.each([
+        ['declared', { 'content-length': '9' }, [[0xff, 0xd8, 0xff]]],
+        ['streamed', {}, [Buffer.from([0xff, 0xd8, 0xff, 1, 2]), Buffer.from([3, 4, 5, 6])]],
+    ])('preserves the %s size bound for application/octet-stream', async (_name, headers, chunks) => {
+        const service = createTelegramAvatarService({
+            token: TEST_TOKEN,
+            fetchImpl: avatarFetch('application/octet-stream', chunks, headers),
+            maxBytes: 8
+        });
+        await expect(service.getAvatar('private-user')).rejects.toMatchObject({ code: 'AVATAR_TOO_LARGE' });
+    });
+
     test('rejects malformed metadata, unsupported MIME, declared and streamed oversize, and timeout', async () => {
         const scenarios = [
             [async () => mockResponse({ json: { ok: true, result: { photos: [[{ file_id: 'x' }]] } } }), 'AVATAR_UPSTREAM_MALFORMED'],

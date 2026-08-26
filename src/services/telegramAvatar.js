@@ -1,16 +1,17 @@
 'use strict';
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const GENERIC_MIME = 'application/octet-stream';
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_JSON_BYTES = 64 * 1024;
 
-function hasReviewedSignature(bytes, mime) {
-    if (mime === 'image/jpeg') return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-    if (mime === 'image/png') return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-    if (mime === 'image/webp') return bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
-        && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
-    return false;
+function detectReviewedMime(bytes) {
+    if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+    if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'image/png';
+    if (bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
+        && bytes.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+    return null;
 }
 
 class AvatarError extends Error {
@@ -97,11 +98,17 @@ function createTelegramAvatarService({
             const downloadUrl = `https://api.telegram.org/file/bot${token}/${encodedPath}`;
             const response = await request(downloadUrl);
             if (!response?.ok) throw new AvatarError('AVATAR_UPSTREAM_FAILED', 502);
-            const mime = String(response.headers?.get?.('content-type') || '').split(';', 1)[0].trim().toLowerCase();
-            if (!ALLOWED_MIME.has(mime)) throw new AvatarError('AVATAR_UNSUPPORTED_MEDIA', 502);
+            let declaredMime = String(response.headers?.get?.('content-type') || '').split(';', 1)[0].trim().toLowerCase();
+            if (declaredMime === 'image/jpg') declaredMime = 'image/jpeg';
+            if (!ALLOWED_MIME.has(declaredMime) && declaredMime !== GENERIC_MIME) {
+                throw new AvatarError('AVATAR_UNSUPPORTED_MEDIA', 502);
+            }
             const bytes = await readBounded(response, maxBytes, 'AVATAR_TOO_LARGE');
-            if (!hasReviewedSignature(bytes, mime)) throw new AvatarError('AVATAR_UNSUPPORTED_MEDIA', 502);
-            return { bytes, mime };
+            const detectedMime = detectReviewedMime(bytes);
+            if (!detectedMime || (declaredMime !== GENERIC_MIME && declaredMime !== detectedMime)) {
+                throw new AvatarError('AVATAR_UNSUPPORTED_MEDIA', 502);
+            }
+            return { bytes, mime: detectedMime };
         } catch (error) {
             if (error instanceof AvatarError) throw error;
             if (error?.name === 'AbortError' || controller.signal.aborted) {
