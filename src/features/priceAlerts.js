@@ -246,6 +246,14 @@ function createPriceAlerts(deps) {
         ];
         const formattedTable = formatMarkdownTableBlock(tableSource, HELP_TABLE_LAYOUT);
         const tokensHeader = escapeHtml(t(lang, 'price_menu_tokens_header', { count: tokens.length, max: PRICE_ALERT_MAX_TOKENS }));
+        const { getPriceAlertSchedulerStatus } = require('../core/executionPolicy');
+        const scheduler = getPriceAlertSchedulerStatus();
+        const activeTokenCount = tokens.filter((token) => Number(token.enabled) === 1).length;
+        const schedulerSection = escapeHtml(t(lang, 'price_scheduler_status', {
+            enabled: scheduler.priceAlertSchedulerEnabled ? t(lang, 'price_status_yes') : t(lang, 'price_status_no'),
+            running: scheduler.priceAlertSchedulerRunning ? t(lang, 'price_status_yes') : t(lang, 'price_status_no'),
+            active: activeTokenCount
+        }));
         let tokensSection = tokensHeader;
         if (!tokens.length) {
             tokensSection = [tokensHeader, escapeHtml(t(lang, 'price_menu_empty'))].join('\n');
@@ -284,6 +292,7 @@ function createPriceAlerts(deps) {
         const text = [
             `<b>${escapeHtml(t(lang, 'price_menu_title'))}</b>`,
             `<pre>${escapeHtml(formattedTable)}</pre>`,
+            schedulerSection,
             tokensSection
         ].filter(Boolean).join('\n');
         return { text, reply_markup: keyboard };
@@ -675,7 +684,13 @@ function createPriceAlerts(deps) {
         await addFeatureTopic(chatId, 'price', topicKey === 'main' ? null : topicKey);
         await setPriceAlertTarget(chatId, topicId); // legacy fallback
         const key = topicId ? 'price_target_saved_topic' : 'price_target_saved_chat';
-        await sendReply(msg, t(lang, key, { topic: topicId ? topicId.toString() : '' }));
+        const { isPriceAlertSchedulerEnabled } = require('../core/executionPolicy');
+        const readiness = isPriceAlertSchedulerEnabled() ? 'price_scheduler_enabled' : 'price_scheduler_disabled';
+        await sendReply(msg, [
+            t(lang, key, { topic: topicId ? topicId.toString() : '' }),
+            t(lang, 'price_target_saved_not_active'),
+            t(lang, readiness)
+        ].join('\n'));
     };
     const handlePriceUnsubscribeCommand = async (msg) => {
         const chatId = msg.chat?.id;
@@ -2078,22 +2093,24 @@ function createPriceAlerts(deps) {
         const topicTargets = await listFeatureTopics(token.chatId, 'price');
         const legacyTarget = await getPriceAlertTarget(token.chatId);
         const tokenTopics = await listPriceAlertTokenTopics(token.id, token.chatId);
-        const topicStatus = new Map();
-        tokenTopics.forEach((entry) => {
-            const key = (entry.topicId === undefined || entry.topicId === null ? 'main' : entry.topicId.toString());
-            topicStatus.set(key, Number(entry.enabled) === 1);
-        });
-        const targets = [];
-        if (Array.isArray(topicTargets) && topicTargets.length > 0) {
-            targets.push(...topicTargets.map((t) => (t.topicId === undefined || t.topicId === null ? 'main' : t.topicId.toString())));
-        } else if (legacyTarget) {
-            targets.push(legacyTarget.topicId === undefined || legacyTarget.topicId === null ? 'main' : legacyTarget.topicId.toString());
-        } else {
-            targets.push('main');
-        }
-        let snapshot = null;
+        const topicStatus = new Map(tokenTopics.map((entry) => [
+            entry.topicId === undefined || entry.topicId === null ? 'main' : entry.topicId.toString(),
+            Number(entry.enabled) === 1
+        ]));
+        const configured = Array.isArray(topicTargets) && topicTargets.length > 0
+            ? topicTargets.map((entry) => entry.topicId === undefined || entry.topicId === null ? 'main' : entry.topicId.toString())
+            : legacyTarget
+                ? [legacyTarget.topicId === undefined || legacyTarget.topicId === null ? 'main' : legacyTarget.topicId.toString()]
+                : [];
+        const targets = [...new Set(configured)]
+            .filter((topicId) => !topicStatus.has(topicId) || topicStatus.get(topicId))
+            .sort((left, right) => left === 'main' ? -1 : right === 'main' ? 1 : Number(left) - Number(right));
+        const result = { attempted: 0, succeeded: 0, failed: 0 };
+        if (targets.length === 0) return result;
+
         const cacheKey = `${token.tokenAddress}|${token.chainIndex || ''}`;
         const cached = getCachedMeta(cacheKey);
+        let snapshot;
         try {
             snapshot = await fetchTokenPriceOverview({
                 tokenAddress: token.tokenAddress,
@@ -2102,133 +2119,100 @@ function createPriceAlerts(deps) {
                 throttleMs: PRICE_ALERT_RATE_LIMIT_MS,
                 mode: 'basic'
             });
-            if (snapshot) {
-                cacheTokenMeta(cacheKey, snapshot);
-            }
+            if (snapshot) cacheTokenMeta(cacheKey, snapshot);
         } catch (error) {
-            if (cached) {
-                snapshot = cached;
-            } else {
-                throw error;
-            }
+            if (!cached) return { ...result, failureClass: 'upstream_fetch' };
+            snapshot = cached;
         }
 
-        // Get attached media for random selection
         const mediaList = await listPriceAlertMedia(token.id, token.chatId);
-        const randomMedia = mediaList.length > 0
-            ? mediaList[Math.floor(Math.random() * mediaList.length)]
-            : null;
-
-        // Get custom titles for random selection
+        const randomMedia = mediaList.length > 0 ? mediaList[Math.floor(Math.random() * mediaList.length)] : null;
         const titleList = await listPriceAlertTitles(token.id, token.chatId);
-        const randomTitle = titleList.length > 0
-            ? titleList[Math.floor(Math.random() * titleList.length)].title
-            : null;
+        const randomTitle = titleList.length > 0 ? titleList[Math.floor(Math.random() * titleList.length)].title : null;
 
         for (const topicId of targets) {
-            const enabled = topicStatus.has(topicId) ? topicStatus.get(topicId) : true;
-            if (!enabled) {
+            result.attempted++;
+            const numericThreadId = topicId === 'main' ? null : Number(topicId);
+            if (topicId !== 'main' && (!Number.isSafeInteger(numericThreadId) || numericThreadId <= 0)) {
+                result.failed++;
                 continue;
             }
-            const threadId = topicId === 'main' ? null : topicId;
-            const lang = await resolveTopicLanguage(token.chatId, threadId, defaultLang);
-            const text = buildAlertText(lang, token, snapshot || {}, randomTitle);
-
-            const keyboardRows = [];
-            const customLinksRow = [];
-            if (token.websiteUrl) {
-                const parts = token.websiteUrl.split('|');
-                if (parts.length > 1) {
-                    customLinksRow.push({ text: parts[0].trim(), url: parts.slice(1).join('|').trim() });
-                } else {
-                    customLinksRow.push({ text: '🌐 Website', url: token.websiteUrl });
+            try {
+                const lang = await resolveTopicLanguage(token.chatId, numericThreadId, defaultLang);
+                const text = buildAlertText(lang, token, snapshot || {}, randomTitle);
+                const keyboardRows = [];
+                const customLinksRow = [];
+                for (const [value, fallback] of [[token.websiteUrl, '🌐 Website'], [token.twitterUrl, '🐦 Twitter/X']]) {
+                    if (!value) continue;
+                    const parts = value.split('|');
+                    customLinksRow.push(parts.length > 1
+                        ? { text: parts[0].trim(), url: parts.slice(1).join('|').trim() }
+                        : { text: fallback, url: value });
                 }
-            }
-            if (token.twitterUrl) {
-                const parts = token.twitterUrl.split('|');
-                if (parts.length > 1) {
-                    customLinksRow.push({ text: parts[0].trim(), url: parts.slice(1).join('|').trim() });
+                if (customLinksRow.length > 0) keyboardRows.push(customLinksRow);
+                keyboardRows.push([{ text: t(lang, 'price_alert_ecosystem_btn'), url: 'https://xlayer.my/' }]);
+                const options = { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboardRows } };
+                if (numericThreadId !== null) options.message_thread_id = numericThreadId;
+                if (randomMedia) {
+                    options.caption = text;
+                    if (randomMedia.mediaType === 'video') await bot.sendVideo(token.chatId, randomMedia.fileId, options);
+                    else await bot.sendPhoto(token.chatId, randomMedia.fileId, options);
                 } else {
-                    customLinksRow.push({ text: '🐦 Twitter/X', url: token.twitterUrl });
+                    options.disable_web_page_preview = true;
+                    await bot.sendMessage(token.chatId, text, options);
                 }
-            }
-            if (customLinksRow.length > 0) {
-                keyboardRows.push(customLinksRow);
-            }
-            keyboardRows.push([{ text: t(lang, 'price_alert_ecosystem_btn'), url: 'https://xlayer.my/' }]);
-
-            const options = {
-                parse_mode: 'HTML',
-                reply_markup: { inline_keyboard: keyboardRows }
-            };
-            if (threadId !== null && threadId !== undefined) {
-                options.message_thread_id = Number(threadId);
-            }
-
-            // Send with media if available, otherwise text only
-            if (randomMedia) {
-                options.caption = text;
-                if (randomMedia.mediaType === 'video') {
-                    await bot.sendVideo(token.chatId, randomMedia.fileId, options);
-                } else {
-                    await bot.sendPhoto(token.chatId, randomMedia.fileId, options);
-                }
-            } else {
-                options.disable_web_page_preview = true;
-                await bot.sendMessage(token.chatId, text, options);
+                result.succeeded++;
+            } catch {
+                result.failed++;
             }
             await delay(PRICE_ALERT_RATE_LIMIT_MS);
         }
+        return result;
     };
-    // Circuit breaker: stop hammering when network is down
-    let priceAlertConsecutiveFailures = 0;
-    const PRICE_ALERT_MAX_CONSECUTIVE_FAILURES = 5;
 
+    const retryCooldowns = new Map();
+    const retryCooldownMs = Math.max(1000, Number(deps.PRICE_ALERT_RETRY_COOLDOWN_MS) || 30000);
     const runPriceSchedulerTick = async () => {
-        // Circuit breaker: skip tick if too many consecutive failures
-        if (priceAlertConsecutiveFailures >= PRICE_ALERT_MAX_CONSECUTIVE_FAILURES) {
-            log.warn(`Circuit breaker active (${priceAlertConsecutiveFailures} consecutive failures), skipping tick`);
-            // Gradually recover: decrement to allow retry after a few skipped ticks
-            priceAlertConsecutiveFailures--;
-            return;
-        }
-
+        const { isPriceAlertSchedulerEnabled } = require('../core/executionPolicy');
+        if (!isPriceAlertSchedulerEnabled()) return { skipped: 'disabled' };
+        const now = Date.now();
         try {
-            const due = await listDuePriceAlertTokens(PRICE_ALERT_MAX_PER_TICK, Date.now());
+            const due = await listDuePriceAlertTokens(PRICE_ALERT_MAX_PER_TICK, now);
             for (const token of due) {
-                try {
-                    await sendPriceAlertNow(token);
-                    priceAlertConsecutiveFailures = 0; // Reset on success
-                } catch (error) {
-                    priceAlertConsecutiveFailures++;
-                    log.error(`Failed to send alert for ${token.tokenAddress}: ${error.message}`);
-                } finally {
+                const tokenKey = Number(token.id);
+                if ((retryCooldowns.get(tokenKey) || 0) > now) continue;
+                const result = await sendPriceAlertNow(token);
+                if (result.succeeded > 0) {
+                    retryCooldowns.delete(tokenKey);
                     await recordPriceAlertRun(token.id, token.intervalSeconds);
+                } else {
+                    retryCooldowns.set(tokenKey, now + retryCooldownMs);
+                    log.warn(`Price alert delivery degraded attempted=${result.attempted} succeeded=0 failed=${result.failed} class=${result.failureClass || (result.attempted ? 'delivery' : 'no_targets')}`);
                 }
                 await delay(PRICE_ALERT_RATE_LIMIT_MS);
             }
-        } catch (error) {
-            priceAlertConsecutiveFailures++;
-            log.error(`Scheduler tick failed: ${error.message}`);
+            return { processed: due.length };
+        } catch {
+            log.error('Price alert scheduler tick failed class=database');
+            return { failed: true };
         }
     };
+    function getPriceAlertSchedulerStatus() {
+        const policy = require('../core/executionPolicy');
+        return { ...policy.getPriceAlertSchedulerStatus(), priceAlertSchedulerRunning: Boolean(priceSchedulerTimer) };
+    }
     function startPriceAlertScheduler() {
-        const { isExecutionDisabled } = require('../core/executionPolicy');
-        if (isExecutionDisabled()) return false;
-        if (priceSchedulerTimer) {
-            clearInterval(priceSchedulerTimer);
-            priceSchedulerTimer = null;
+        const policy = require('../core/executionPolicy');
+        if (!policy.isPriceAlertSchedulerEnabled()) {
+            policy.setPriceAlertSchedulerRunning(false);
+            return false;
         }
-        const tick = () => {
-            runPriceSchedulerTick().catch((error) => {
-                log.error(`Tick error: ${error.message}`);
-            });
-        };
+        if (priceSchedulerTimer) clearInterval(priceSchedulerTimer);
+        const tick = () => runPriceSchedulerTick().catch(() => log.error('Price alert scheduler tick failed class=unexpected'));
         tick();
         priceSchedulerTimer = setInterval(tick, PRICE_ALERT_POLL_INTERVAL_MS);
-        if (typeof priceSchedulerTimer.unref === 'function') {
-            priceSchedulerTimer.unref();
-        }
+        if (typeof priceSchedulerTimer.unref === 'function') priceSchedulerTimer.unref();
+        policy.setPriceAlertSchedulerRunning(true);
         return true;
     };
     return {
@@ -2238,7 +2222,10 @@ function createPriceAlerts(deps) {
         handlePriceCallback,
         handlePriceWizardMessage,
         sendPriceAdminMenu,
+        sendPriceAlertNow,
+        runPriceSchedulerTick,
         startPriceAlertScheduler,
+        getPriceAlertSchedulerStatus,
         priceWizardStates
     };
 }

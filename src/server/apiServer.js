@@ -313,7 +313,16 @@ function startApiServer() {
             dbStatus = 'error';
         }
 
-        res.json({ status: dbStatus === 'ok' ? 'ok' : 'degraded' });
+        const { getPriceAlertSchedulerStatus } = require('../core/executionPolicy');
+        const scheduler = getPriceAlertSchedulerStatus();
+        const schedulerHealthy = !scheduler.priceAlertSchedulerEnabled || scheduler.priceAlertSchedulerRunning;
+        res.json({
+            status: dbStatus === 'ok' && schedulerHealthy ? 'ok' : 'degraded',
+            ...scheduler,
+            ...(scheduler.priceAlertSchedulerEnabled && !scheduler.priceAlertSchedulerRunning
+                ? { degradedReason: 'price_alert_scheduler_not_running' }
+                : {})
+        });
     });
 
     app.get('/readyz', (_req, res) => {

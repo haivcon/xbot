@@ -2,9 +2,25 @@
 
 const EXECUTION_DISABLED_CODE = 'EXECUTION_DISABLED';
 const EXECUTION_DISABLED_MESSAGE = 'Execution is disabled by runtime policy.';
+let priceAlertSchedulerRunning = false;
 
 function isExecutionDisabled(value = process.env.EXECUTION_DISABLED) {
     return String(value ?? '').trim().toLowerCase() !== 'false';
+}
+
+function isPriceAlertSchedulerEnabled(value = process.env.PRICE_ALERT_SCHEDULER_ENABLED) {
+    return String(value ?? '').trim().toLowerCase() === 'true';
+}
+
+function setPriceAlertSchedulerRunning(running) {
+    priceAlertSchedulerRunning = Boolean(running);
+}
+
+function getPriceAlertSchedulerStatus() {
+    return {
+        priceAlertSchedulerEnabled: isPriceAlertSchedulerEnabled(),
+        priceAlertSchedulerRunning,
+    };
 }
 
 function createExecutionDisabledError() {
@@ -40,6 +56,7 @@ function getRuntimeCapabilities() {
         staticDashboard: true,
         execution: executionEnabled,
         autonomousActions: executionEnabled,
+        ...getPriceAlertSchedulerStatus(),
     };
 }
 
@@ -47,6 +64,9 @@ module.exports = {
     EXECUTION_DISABLED_CODE,
     EXECUTION_DISABLED_MESSAGE,
     isExecutionDisabled,
+    isPriceAlertSchedulerEnabled,
+    setPriceAlertSchedulerRunning,
+    getPriceAlertSchedulerStatus,
     createExecutionDisabledError,
     assertExecutionEnabled,
     guardExecution,

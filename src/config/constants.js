@@ -29,6 +29,8 @@ const HELP_COMMAND_DETAILS = {
     lang: { command: '/lang', icon: '🌐', descKey: 'help_command_lang' },
     help: { command: '/help', icon: '🆘', descKey: 'help_command_help' },
     price: { command: '/price', icon: '💹', descKey: 'help_command_price' },
+    pricev: { command: '/pricev', icon: '📌', descKey: 'help_command_pricev' },
+    pricex: { command: '/pricex', icon: '🔕', descKey: 'help_command_pricex' },
     checkin: { command: '/checkin', icon: '✅', descKey: 'help_command_checkin' },
     topcheckin: { command: '/topcheckin', icon: '🏆', descKey: 'help_command_topcheckin' },
     checkinadmin: { command: '/checkinadmin', icon: '🛡️', descKey: 'help_command_checkin_admin' },
@@ -108,6 +110,23 @@ const HELP_TABLE_LAYOUT = {
     borderStyle: 'unicode'
 };
 
+function buildTelegramCommandSets(translate, lang) {
+    const build = (keys) => keys.map((key) => {
+        const detail = HELP_COMMAND_DETAILS[key];
+        return {
+            command: detail.command.replace(/^\//, ''),
+            description: String(translate(lang, detail.descKey) || key).replace(/\s+/g, ' ').trim().slice(0, 256)
+        };
+    });
+    const base = ['start', 'lang', 'help', 'ai', 'random', 'mywallet', 'ping'];
+    return {
+        default: build(base),
+        all_private_chats: build(base),
+        all_group_chats: build(base),
+        all_chat_administrators: build([...base, 'price', 'pricev', 'pricex'])
+    };
+}
+
 const ADMIN_MENU_SECTION_CONFIG = {
     lists: {
         labelKey: 'checkin_admin_section_lists_button',
@@ -159,7 +178,8 @@ module.exports = {
     HELP_COMMAND_DETAILS,
     HELP_GROUP_DETAILS,
     HELP_TABLE_LAYOUT,
-    HELP_USER_SECTIONS
+    HELP_USER_SECTIONS,
+    buildTelegramCommandSets
 };
 
 

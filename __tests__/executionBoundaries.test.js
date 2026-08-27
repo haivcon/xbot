@@ -104,6 +104,8 @@ describe('execution-disabled boundaries', () => {
             staticDashboard: true,
             execution: false,
             autonomousActions: false,
+            priceAlertSchedulerEnabled: false,
+            priceAlertSchedulerRunning: false,
         });
     });
 });

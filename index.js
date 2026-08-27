@@ -5,7 +5,7 @@ const dns = require('dns');
 dns.setDefaultResultOrder('ipv4first');
 const logger = require('./src/core/logger');
 const log = logger.child('Bot');
-const { isExecutionDisabled, getRuntimeCapabilities } = require('./src/core/executionPolicy');
+const { isExecutionDisabled, isPriceAlertSchedulerEnabled, getRuntimeCapabilities } = require('./src/core/executionPolicy');
 
 // Enable automatic filename/content-type detection to silence upcoming file send deprecations
 process.env.NTBA_FIX_350 = process.env.NTBA_FIX_350 || '1';
@@ -339,7 +339,8 @@ const {
     HELP_COMMAND_DETAILS,
     HELP_GROUP_DETAILS,
     HELP_TABLE_LAYOUT,
-    HELP_USER_SECTIONS
+    HELP_USER_SECTIONS,
+    buildTelegramCommandSets
 } = require('./src/config/constants');
 const createCheckinChallenges = require('./src/features/checkin/challenges');
 const {
@@ -1724,16 +1725,6 @@ function startTelegramBot() {
     log.child('Router').info(`Callback router initialized (${cbRouter.stats().total} routes)`);
 
     async function registerBaseCommands() {
-        const commandKeys = [
-            'start',
-            'lang',
-            'help',
-            'ai',
-            'random',
-            'mywallet',
-            'ping'
-        ];
-
         const sanitizeDescription = (rawText, fallback = '') => {
             const base = (rawText || '').toString().trim() || (fallback || '').toString().trim();
             const normalized = base.replace(/\s+/g, ' ');
@@ -1758,27 +1749,13 @@ function startTelegramBot() {
         ));
 
         for (const langCode of languageCodes) {
-            const commands = commandKeys
-                .map((key) => HELP_COMMAND_DETAILS[key])
-                .filter(Boolean)
-                .map((detail) => {
-                    const commandName = detail.command.replace('/', '');
-                    const fallbackDesc = detail.command.replace(/^\//, '') || detail.descKey || commandName;
-                    return {
-                        command: commandName,
-                        description: sanitizeDescription(t(langCode, detail.descKey), fallbackDesc)
-                    };
-                })
-                .filter((entry) => Boolean(entry.description));
-
-            if (!commands.length) {
-                continue;
-            }
+            const commandSets = buildTelegramCommandSets(t, langCode);
 
             for (const scope of scopes) {
                 const maxRetries = 3;
                 for (let attempt = 0; attempt < maxRetries; attempt++) {
                     try {
+                        const commands = commandSets[scope.type] || commandSets.default;
                         const scopedCommands = scope.type === 'all_private_chats'
                             ? commands.concat(TELEGRAM_AI_COMMANDS
                                 .flatMap(item => [item.name, ...(item.aliases || [])].map(name => ({ ...item, name })))
@@ -3713,8 +3690,8 @@ async function main() {
         await startTelegramTransport();
         if (!isExecutionDisabled()) {
             startCheckinScheduler();
-            startPriceAlertScheduler();
         }
+        if (isPriceAlertSchedulerEnabled()) startPriceAlertScheduler();
 
         log.info('✅ Tất cả dịch vụ đã sẵn sàng!', getRuntimeCapabilities());
 
