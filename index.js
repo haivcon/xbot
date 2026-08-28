@@ -1750,8 +1750,15 @@ function startTelegramBot() {
                 .map((file) => resolveLangCode(file.replace('.json', '')))
         ));
 
-        for (const langCode of languageCodes) {
+        const fallbackLang = resolveLangCode(defaultLang);
+        const registrations = [
+            { langCode: fallbackLang, languageCode: null },
+            ...languageCodes.map((langCode) => ({ langCode, languageCode: langCode }))
+        ];
+
+        for (const { langCode, languageCode } of registrations) {
             const commandSets = buildTelegramCommandSets(t, langCode, aiCommandPolicy);
+            const languageLabel = languageCode || 'fallback';
 
             for (const scope of scopes) {
                 const maxRetries = 3;
@@ -1762,18 +1769,19 @@ function startTelegramBot() {
                             ...item,
                             description: sanitizeDescription(item.description, item.command)
                         }));
-                        await bot.setMyCommands(scopedCommands, { scope, language_code: langCode });
+                        const options = languageCode ? { scope, language_code: languageCode } : { scope };
+                        await bot.setMyCommands(scopedCommands, options);
                         break; // success
                     } catch (error) {
                         const isTransient = error.message?.includes('AggregateError') || error.message?.includes('EFATAL') || error.message?.includes('ECONNRESET') || error.message?.includes('ETIMEDOUT');
                         if (isTransient && attempt < maxRetries - 1) {
                             const wait = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
-                            log.warn(`Command registration retry ${attempt + 1}/${maxRetries} for scope=${scope?.type} lang=${langCode} in ${wait}ms`);
+                            log.warn(`Command registration retry ${attempt + 1}/${maxRetries} for scope=${scope?.type} lang=${languageLabel} in ${wait}ms`);
                             await delay(wait);
                             continue;
                         }
                         const body = error?.response?.body ? ` | body=${JSON.stringify(error.response.body)}` : '';
-                        log.error(`Failed to register commands for scope ${scope?.type} lang=${langCode}: ${error.message}${body}`);
+                        log.error(`Failed to register commands for scope ${scope?.type} lang=${languageLabel}: ${error.message}${body}`);
                     }
                 }
                 await delay(500);

@@ -173,6 +173,59 @@ describe('legacy API callback safety policy', () => {
 });
 
 describe('runtime wiring contracts', () => {
+    test('startup registers generic fallback plus en/vi commands once per scope', async () => {
+        const source = fs.readFileSync(path.join(ROOT, 'index.js'), 'utf8');
+        const start = source.indexOf('async function registerBaseCommands()');
+        expect(start).toBeGreaterThan(-1);
+        let depth = 0;
+        let end = -1;
+        for (let index = source.indexOf('{', start); index < source.length; index += 1) {
+            if (source[index] === '{') depth += 1;
+            if (source[index] === '}') depth -= 1;
+            if (depth === 0) { end = index + 1; break; }
+        }
+        const bot = { setMyCommands: jest.fn().mockResolvedValue(undefined) };
+        const runnable = new Function(
+            'fs', 'path', '__dirname', 'resolveLangCode', 'buildTelegramCommandSets', 't',
+            'aiCommandPolicy', 'bot', 'delay', 'log', 'defaultLang',
+            `return (${source.slice(start, end).replace('async function registerBaseCommands', 'async function')});`
+        )(
+            { readdirSync: () => ['en.json', 'vi.json'] }, path, ROOT, value => value,
+            buildTelegramCommandSets, translate, resolveAiCommandPolicy({}), bot,
+            async () => {}, { warn: jest.fn(), error: jest.fn() }, 'vi'
+        );
+        await runnable();
+
+        expect(bot.setMyCommands).toHaveBeenCalledTimes(12);
+        const calls = bot.setMyCommands.mock.calls;
+        const generic = calls.filter(([, options]) => !Object.hasOwn(options, 'language_code'));
+        const localized = calls.filter(([, options]) => Object.hasOwn(options, 'language_code'));
+        expect(generic).toHaveLength(4);
+        expect(localized).toHaveLength(8);
+        expect(localized.map(([, options]) => options.language_code).sort()).toEqual([
+            'en', 'en', 'en', 'en', 'vi', 'vi', 'vi', 'vi'
+        ]);
+        expect(new Set(calls.map(([, options]) => `${options.scope.type}:${options.language_code || '<generic>'}`)).size).toBe(12);
+        for (const [commands, options] of generic) {
+            const vietnamese = localized.find(([, localizedOptions]) => (
+                localizedOptions.scope.type === options.scope.type && localizedOptions.language_code === 'vi'
+            ));
+            expect(commands).toEqual(vietnamese[0]);
+        }
+
+        const byGenericScope = Object.fromEntries(generic.map(([commands, options]) => [
+            options.scope.type,
+            commands.map(item => item.command)
+        ]));
+        expect(byGenericScope.all_private_chats).toEqual(expect.arrayContaining([
+            'chat', 'new', 'model', 'stop', 'retry', 'history', 'status', 'providers', 'help'
+        ]));
+        for (const hidden of AI_HIDDEN_COMMANDS) expect(byGenericScope.all_private_chats).not.toContain(hidden);
+        expect(byGenericScope.all_group_chats).not.toEqual(expect.arrayContaining(['pricev', 'pricex']));
+        expect(byGenericScope.all_chat_administrators).toEqual(expect.arrayContaining(['price', 'pricev', 'pricex']));
+        expect(calls.flatMap(([commands]) => commands).every(item => item.description.length >= 3 && item.description.length <= 256)).toBe(true);
+    });
+
     test('index uses shared policy guards and contains no raw API key Telegram copy', () => {
         const source = fs.readFileSync(path.join(ROOT, 'index.js'), 'utf8');
         expect(source).toContain("require('./src/core/aiCommandPolicy')");
