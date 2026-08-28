@@ -1,9 +1,19 @@
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const read = relativePath => fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
 const exists = relativePath => fs.existsSync(path.join(ROOT, relativePath));
+const isTracked = relativePath => {
+    if (!exists('.git')) return exists(relativePath);
+    try {
+        execFileSync('git', ['ls-files', '--error-unmatch', relativePath], { cwd: ROOT, stdio: 'ignore' });
+        return true;
+    } catch {
+        return false;
+    }
+};
 
 describe('xBot-only repository surface', () => {
     test('standalone ecosystem landing, docs, and xKey copies are absent', () => {
@@ -55,13 +65,37 @@ describe('xBot-only repository surface', () => {
         expect(serviceWorker).toContain("caches.match('/xBot/')");
     });
 
-    test('deployment requires only retained xBot build artifacts', () => {
-        const deployScript = read('scripts/deploy.sh');
-        const requiredFiles = deployScript.match(/required_dashboard_files=\(\n([\s\S]*?)\n\)/)?.[1] || '';
+    test('committed build and release contracts require only retained xBot artifacts', () => {
+        const viteConfig = read('dashboard/vite.config.js');
+        expect(viteConfig).toContain("root: path.resolve(__dirname, 'xBot')");
+        expect(viteConfig).toContain("outDir: path.resolve(__dirname, 'dist/xBot')");
+        expect(viteConfig).toContain("xbot: path.resolve(__dirname, 'xBot/index.html')");
 
-        expect(requiredFiles).toContain('"xBot/index.html"');
-        expect(requiredFiles).toContain('"sw.js"');
-        expect(requiredFiles).not.toMatch(/"(?:index\.html|xKey\/index\.html|docs\/index\.html)"/);
+        const releaseManifest = read('scripts/generate-release-manifest.js');
+        expect(releaseManifest).toContain("'dashboard/dist/xBot/index.html'");
+        expect(releaseManifest).toContain("'dashboard/dist/xBot/.vite/manifest.json'");
+        expect(releaseManifest).not.toMatch(/dist\/(?:index\.html|xKey\/|docs\/)/);
+    });
+
+    test('README deployment references are portable from a tracked checkout', () => {
+        const readme = read('README.md');
+        const deploySection = readme.match(/## Deploy\r?\n([\s\S]*?)\r?\n## License/)?.[1] || '';
+        const trackedPaths = [
+            'dashboard/vite.config.js',
+            'scripts/generate-release-manifest.js',
+            'src/core/releaseManifest.js',
+            'src/core/readiness.js'
+        ];
+
+        expect(deploySection).toContain('npm --prefix dashboard run build');
+        expect(deploySection).toContain('npm run release:manifest');
+        expect(deploySection).toContain('/health');
+        expect(deploySection).toContain('/readyz');
+        for (const relativePath of trackedPaths) {
+            expect(deploySection).toContain(`\`${relativePath}\``);
+            expect(isTracked(relativePath)).toBe(true);
+        }
+        expect(deploySection).not.toContain('scripts/deploy.sh');
     });
 
     test('OAuth deployment docs distinguish upstream native clients from xBot web clients', () => {

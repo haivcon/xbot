@@ -198,13 +198,20 @@ key still available; changing the key first makes existing ciphertext unreadable
 
 ## Deploy
 
+Deploy from an immutable release built from a clean tracked checkout; this repository does not ship a
+host-specific activation script. The committed dashboard contract is `dashboard/vite.config.js`, and the
+release artifact contract is `scripts/generate-release-manifest.js` with runtime validation in
+`src/core/releaseManifest.js`.
+
 ```bash
-# On VPS
-cd /root/xbot
-bash scripts/deploy.sh
+npm --prefix dashboard run build
+npm run release:manifest -- --git-sha <40-character-git-sha> --built-at <ISO-UTC-timestamp>
 ```
 
-See `scripts/deploy.sh` for PM2-based production deployment with backup, health check, and rollback.
+Promotion tooling must preserve the generated release manifest and verify the public `/health` and `/readyz`
+contracts defined by `src/core/readiness.js` before considering an immutable release active. The canonical CI
+sequence is committed in `.github/workflows/ci.yml`; host activation, backup, and rollback remain
+operator-controlled procedures outside this repository.
 
 ## License
 
