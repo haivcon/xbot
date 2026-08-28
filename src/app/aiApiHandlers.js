@@ -11,8 +11,9 @@ const { aiApiAddPrompts, aiApiMenuStates } = require('../core/state');
 const logger = require('../core/logger');
 const log = logger.child('AiApiHandlers');
 const { getPersonaStrings } = require('./personaI18n');
+const { resolveAiCommandPolicy } = require('../core/aiCommandPolicy');
 
-function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiKey, escapeHtml }) {
+function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiKey, escapeHtml, featurePolicy = resolveAiCommandPolicy(), dashboardLink = null }) {
     function resolveThreadId(message, options = {}) {
         return options.message_thread_id
             ?? message?.message_thread_id
@@ -54,6 +55,37 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
             log.child('ApiHub').warn(`sendMessage fallback failed: ${error.message}`);
             return null;
         }
+    }
+
+    async function renderDeprecatedCard(message, lang, userId) {
+        const copy = lang === 'vi'
+            ? '⚠️ /api cũ đã ngừng dùng. Quản lý hoặc kết nối lại nhà cung cấp an toàn trong 9Router Providers.'
+            : '⚠️ Legacy /api is deprecated. Manage or reconnect providers securely in 9Router Providers.';
+        const url = typeof dashboardLink === 'function'
+            ? await dashboardLink({ userId: String(userId || ''), chatId: message?.chat?.id, section: 'providers' })
+            : null;
+        const inline_keyboard = url ? [[{ text: '🔐 Providers', url }]] : [];
+        await editOrSendMenuMessage(message, copy, { reply_markup: { inline_keyboard } });
+    }
+
+    async function handleLegacyCallback(query, lang) {
+        const data = String(query?.data || '');
+        if (!/^(?:apihub|aiapi)\|/.test(data)) return false;
+        const userId = query.from?.id?.toString();
+        if (!featurePolicy.legacyApiUiEnabled) {
+            await renderDeprecatedCard(query.message, lang, userId);
+            await bot.answerCallbackQuery(query.id).catch(() => {});
+            return true;
+        }
+        if (data.startsWith('aiapi|copy|')) {
+            const safeCopy = lang === 'vi'
+                ? '🔒 API key luôn ở phía máy chủ. Quản lý hoặc kết nối lại trong Providers/dashboard.'
+                : '🔒 API keys remain server-side. Manage or reconnect them in Providers/dashboard.';
+            await bot.sendMessage(userId, safeCopy, { reply_markup: buildCloseKeyboard(lang) });
+            await bot.answerCallbackQuery(query.id).catch(() => {});
+            return true;
+        }
+        return false;
     }
 
     async function renderAiApiMenuMessage(message, lang, userId, provider = 'google', page = 0, options = {}) {
@@ -279,6 +311,10 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
         if (!userId) {
             return;
         }
+        if (!featurePolicy.legacyApiUiEnabled) {
+            await renderDeprecatedCard(msg, lang, userId);
+            return;
+        }
 
         const keys = await db.listUserAiKeys(userId);
         const preferredProvider = await db.getUserAiProvider(userId);
@@ -295,6 +331,10 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
 
     async function startAiApiAddPrompt(userId, lang, provider = 'google') {
         if (!userId) {
+            return null;
+        }
+        if (!featurePolicy.legacyApiUiEnabled) {
+            await renderDeprecatedCard({ chat: { id: userId } }, lang, userId);
             return null;
         }
 
@@ -318,7 +358,7 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
             }
         });
 
-        aiApiAddPrompts.set(userId.toString(), { messageId: message.message_id, lang, provider: meta.id });
+        aiApiAddPrompts.set(userId.toString(), { messageId: message.message_id, chatId: userId.toString(), lang, provider: meta.id });
         return message;
     }
 
@@ -327,6 +367,11 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
         const lang = prompt?.lang || await getLang(msg);
         const provider = prompt?.provider || 'google';
         if (!userId) {
+            return;
+        }
+        if (!featurePolicy.legacyApiUiEnabled) {
+            aiApiAddPrompts.delete(userId);
+            await renderDeprecatedCard(msg, lang, userId);
             return;
         }
 
@@ -400,6 +445,7 @@ function createAiApiHandlers({ t, bot, db, getLang, buildCloseKeyboard, maskApiK
         buildApiHubMenu,
         handleAiApiSubmission,
         handleApiCommand,
+        handleLegacyCallback,
         renderAiApiMenuMessage,
         renderApiHubMessage,
         startAiApiAddPrompt

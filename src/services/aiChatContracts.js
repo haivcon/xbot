@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { AI_VISIBLE_COMMANDS } = require('../core/aiCommandPolicy');
 
 const TELEGRAM_AI_COMMANDS = Object.freeze([
   { name: 'chat', aliases: ['ai'], description: { en: 'Open Chat AI or send a prompt', vi: 'Mở Chat AI hoặc gửi câu hỏi' } },
@@ -10,15 +11,20 @@ const TELEGRAM_AI_COMMANDS = Object.freeze([
   { name: 'retry', aliases: [], description: { en: 'Retry an interrupted turn', vi: 'Thử lại lượt bị gián đoạn' } },
   { name: 'history', aliases: [], description: { en: 'Browse private chat history', vi: 'Xem lịch sử trò chuyện riêng' } },
   { name: 'status', aliases: [], description: { en: 'Show Chat AI status', vi: 'Xem trạng thái Chat AI' } },
-  { name: 'providers', aliases: [], description: { en: 'Show provider connections', vi: 'Xem kết nối nhà cung cấp' } },
-  { name: 'help', aliases: [], description: { en: 'Show Chat AI help', vi: 'Xem trợ giúp Chat AI' } }
+  { name: 'providers', aliases: [], description: { en: 'Show 9Router providers', vi: 'Xem nhà cung cấp 9Router' } }
 ]);
+
+if (TELEGRAM_AI_COMMANDS.some((item, index) => item.name !== AI_VISIBLE_COMMANDS[index])) {
+  throw new Error('Telegram AI command policy mismatch');
+}
 
 const COMMAND_BY_NAME = new Map();
 for (const command of TELEGRAM_AI_COMMANDS) {
   COMMAND_BY_NAME.set(command.name, command);
   for (const alias of command.aliases) COMMAND_BY_NAME.set(alias, command);
 }
+COMMAND_BY_NAME.set('api', { name: 'api', aliases: [], description: { en: '', vi: '' } });
+COMMAND_BY_NAME.set('cancel', { name: 'cancel', aliases: [], description: { en: '', vi: '' } });
 
 function parseTelegramAiCommand(text) {
   const match = String(text || '').trim().match(/^\/([a-z]+)(?:@[\w_]+)?(?:\s+([\s\S]+))?$/i);

@@ -8,6 +8,8 @@ const {
 } = require('../services/aiChatContracts');
 const { AiConversationService } = require('../services/aiConversationService');
 const { TelegramCallbackStore } = require('../services/telegramCallbackStore');
+const { resolveAiCommandPolicy } = require('../core/aiCommandPolicy');
+const { cancelCancellableAiState } = require('../core/aiCancellableState');
 
 const COPY = {
   en: {
@@ -20,7 +22,8 @@ const COPY = {
     providerStatus: 'Providers', connected: 'connected', zeroModels: 'connected · 0 models', needsAction: 'needs action', unavailable: 'unavailable', discoveryError: 'discovery error', refresh: 'Refresh', secureSetup: 'Secure setup',
     helpIntro: 'Ask with /chat <prompt>. Personal models, providers, and history stay private.', modelsHelp: 'Models / providers', privacy: 'Privacy', allCommands: 'All commands',
     stale: 'This menu expired or was updated.', openMenu: 'Open new menu', selected: 'Model selected', stopped: 'Stopping. Partial output will be preserved.', noActive: 'No active response to stop.', noRetry: 'No retryable interrupted turn.',
-    details: 'Conversation details'
+    details: 'Conversation details', apiDeprecated: 'Legacy /api is deprecated. Providers are managed securely through 9Router.',
+    audioUnavailable: 'Audio and TTS compatibility is unavailable.', cancelled: 'Pending input cancelled.', nothingToCancel: 'Nothing to cancel.'
   },
   vi: {
     privateOnly: 'Mở Chat AI riêng tư để bảo vệ trạng thái cá nhân.', openPrivate: 'Mở chat riêng',
@@ -32,12 +35,14 @@ const COPY = {
     providerStatus: 'Nhà cung cấp', connected: 'đã kết nối', zeroModels: 'đã kết nối · 0 model', needsAction: 'cần thao tác', unavailable: 'không khả dụng', discoveryError: 'lỗi khám phá', refresh: 'Làm mới', secureSetup: 'Thiết lập an toàn',
     helpIntro: 'Hỏi bằng /chat <nội dung>. Model, nhà cung cấp và lịch sử cá nhân luôn ở chat riêng.', modelsHelp: 'Model / nhà cung cấp', privacy: 'Riêng tư', allCommands: 'Tất cả lệnh',
     stale: 'Menu này đã hết hạn hoặc được cập nhật.', openMenu: 'Mở menu mới', selected: 'Đã chọn model', stopped: 'Đang dừng. Nội dung một phần sẽ được giữ lại.', noActive: 'Không có phản hồi đang chạy.', noRetry: 'Không có lượt gián đoạn để thử lại.',
-    details: 'Chi tiết cuộc trò chuyện'
+    details: 'Chi tiết cuộc trò chuyện', apiDeprecated: '/api cũ đã ngừng dùng. Nhà cung cấp được quản lý an toàn qua 9Router.',
+    audioUnavailable: 'Tương thích âm thanh và TTS hiện không khả dụng.', cancelled: 'Đã hủy nhập liệu đang chờ.', nothingToCancel: 'Không có thao tác nào để hủy.'
   }
 };
 
 function flagsFromEnv() {
-  return { telegramUi: process.env.XBOT_TELEGRAM_CHAT_9R_UI !== 'false', legacyMenu: process.env.XBOT_AI_LEGACY_MENU === 'true', groupLegacy: process.env.XBOT_AI_GROUP_LEGACY_ENABLED === 'true' };
+  const policy = resolveAiCommandPolicy();
+  return { telegramUi: policy.chat9RouterUiEnabled, groupLegacy: process.env.XBOT_AI_GROUP_LEGACY_ENABLED === 'true', ...policy };
 }
 
 function createTelegramAiMenuHandlers({
@@ -50,9 +55,16 @@ function createTelegramAiMenuHandlers({
   promptMessage = null,
   callbackStore = new TelegramCallbackStore(),
   botUsername = '',
-  featureFlags = flagsFromEnv(),
+  featurePolicy,
+  featureFlags,
   now = Date.now
 } = {}) {
+  const defaultPolicy = flagsFromEnv();
+  featurePolicy = featurePolicy
+    ? { ...defaultPolicy, ...featurePolicy }
+    : featureFlags
+      ? { ...defaultPolicy, chat9RouterUiEnabled: featureFlags.telegramUi, groupLegacy: featureFlags.groupLegacy }
+      : defaultPolicy;
   const currentConversation = new Map();
   const currentRoute = new Map();
   const catalogByTenant = new Map();
@@ -300,11 +312,16 @@ function createTelegramAiMenuHandlers({
   }
 
   async function handleCommand(msg) {
-    if (!featureFlags.telegramUi) return false;
+    if (!featurePolicy.chat9RouterUiEnabled) return false;
     const sourceText = (Array.isArray(msg?.photo) && msg.photo.length && msg.caption) ? msg.caption : (msg?.text || msg?.caption);
     const command = parseTelegramAiCommand(sourceText);
     if (!command) return false;
     const lang = await language(msg);
+    const hasAudioInput = Boolean(msg.audio || msg.voice || (command.name === 'chat' && /^tts\b/i.test(command.prompt)));
+    if (hasAudioInput && !featurePolicy.audioCompatEnabled) {
+      await send(msg, escapeTelegramHtml(text(lang, 'audioUnavailable')));
+      return true;
+    }
     if (command.name === 'chat' && (command.prompt || msg.photo?.length || msg.audio || msg.voice || msg.document)) {
       if (typeof promptMessage !== 'function') return false;
       const legacyText = `/ai${command.prompt ? ` ${command.prompt}` : ''}`;
@@ -313,18 +330,25 @@ function createTelegramAiMenuHandlers({
       return true;
     }
     if (!isPrivate(msg)) {
-      if (featureFlags.groupLegacy && command.name === 'chat') return false;
+      if (featurePolicy.groupLegacy && command.name === 'chat') return false;
       const keyboard = botUsername && /^[A-Za-z0-9_]{5,32}$/.test(botUsername) ? [[{ text: `🔒 ${text(lang, 'openPrivate')}`, url: `https://t.me/${botUsername}?start=chat` }]] : [];
       await send(msg, escapeTelegramHtml(text(lang, 'privateOnly')), { reply_markup: { inline_keyboard: keyboard } });
       return true;
     }
-    if (command.name === 'chat') await showControlCenter(msg, lang);
+    if (command.name === 'api') {
+      if (featurePolicy.legacyApiUiEnabled) return false;
+      const url = await dashboardLink({ userId: tenantOf(msg), chatId: chatOf(msg), section: 'providers' });
+      await send(msg, escapeTelegramHtml(text(lang, 'apiDeprecated')), { reply_markup: { inline_keyboard: [[{ text: `🔐 ${text(lang, 'providers')}`, url }]] } });
+    } else if (command.name === 'cancel') {
+      const cancelled = cancelCancellableAiState({ userId: tenantOf(msg), chatId: chatOf(msg), searchState });
+      await send(msg, escapeTelegramHtml(text(lang, cancelled ? 'cancelled' : 'nothingToCancel')));
+    } else if (command.name === 'chat') await showControlCenter(msg, lang);
     else if (command.name === 'new') await createNew(msg, lang);
     else if (command.name === 'model') await showModelMenu(msg, lang);
     else if (command.name === 'providers') await showProviders(msg, lang);
     else if (command.name === 'status') await showStatus(msg, lang);
     else if (command.name === 'history') await showHistory(msg, lang);
-    else if (command.name === 'help') await showHelp(msg, lang);
+
     else if (command.name === 'stop') {
       const tenantId = tenantOf(msg); const conversationId = currentConversation.get(tenantId); const active = conversationId && conversationService.getActiveGeneration({ tenantId, conversationId });
       if (!active) await send(msg, escapeTelegramHtml(text(lang, 'noActive')));
@@ -347,12 +371,13 @@ function createTelegramAiMenuHandlers({
   async function handleText(msg) {
     if (!isPrivate(msg)) return false;
     const tenantId = tenantOf(msg);
-    const pending = searchState.get(tenantId);
+    const stateKey = `${tenantId}:${chatOf(msg)}`;
+    const pending = searchState.get(stateKey);
     if (!pending) return false;
-    if (now() > pending.expiresAt) { searchState.delete(tenantId); return false; }
+    if (now() > pending.expiresAt) { searchState.delete(stateKey); return false; }
     const query = String(msg.text || '').trim().toLowerCase().slice(0, 100);
     if (!query) return true;
-    searchState.delete(tenantId);
+    searchState.delete(stateKey);
     const catalog = await loadCatalog(tenantId);
     const terms = query.split(/\s+/).filter(Boolean);
     const results = catalog.models.filter(model => {
@@ -366,7 +391,7 @@ function createTelegramAiMenuHandlers({
   }
 
   async function handleCallback(query) {
-    if (!featureFlags.telegramUi || !String(query?.data || '').startsWith('xa1:')) return false;
+    if (!featurePolicy.chat9RouterUiEnabled || !String(query?.data || '').startsWith('xa1:')) return false;
     const lang = await language(query);
     const tenantId = tenantOf(query);
     const catalog = catalogByTenant.get(tenantId);
@@ -383,7 +408,7 @@ function createTelegramAiMenuHandlers({
     else if (action === 'models') await showModelMenu(query, lang, '', 0, true);
     else if (action === 'provider_models') await showModelMenu(query, lang, payload?.providerId || '', payload?.page || 0, true);
     else if (action === 'search') {
-      searchState.set(tenantId, { chatId: query.message.chat.id, messageId: query.message.message_id, expiresAt: now() + SEARCH_TTL_MS });
+      searchState.set(`${tenantId}:${chatOf(query)}`, { userId: tenantId, chatId: String(query.message.chat.id), messageId: query.message.message_id, expiresAt: now() + SEARCH_TTL_MS });
       await editOrReplace(query, escapeTelegramHtml(text(lang, 'searchPrompt')), { reply_markup: { inline_keyboard: [[{ text: text(lang, 'cancel'), callback_data: issue('models', query, catalog?.revision) }]] } });
     } else if (action === 'select') {
       const fresh = await loadCatalog(tenantId);

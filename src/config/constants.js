@@ -1,4 +1,6 @@
 // Centralized constants for commands, help layout, and check-in helpers (UTF-8, emoji friendly for Markdown V2).
+const { resolveAiCommandPolicy } = require('../core/aiCommandPolicy');
+const { TELEGRAM_AI_COMMANDS } = require('../services/aiChatContracts');
 
 const CHECKIN_EMOTIONS = ['😀', '😃', '😄', '😁', '😊', '😍'];
 
@@ -6,7 +8,7 @@ const HELP_COMMAND_DETAILS = {
     start: { command: '/start', icon: '🚀', descKey: 'help_command_start' },
     datatelegram: { command: '/dataTelegram', icon: '🗂️', descKey: 'help_command_idtelegram' },
     ai: { command: '/chat', icon: '🤖', descKey: 'help_command_ai' },
-    api: { command: '/api', icon: '🔑', descKey: 'help_command_api' },
+
     register: { command: '/register', icon: '📝', descKey: 'help_command_register' },
     mywallet: { command: '/mywallet', icon: '👛', descKey: 'help_command_mywallet' },
     unregister: { command: '/unregister', icon: '🗑️', descKey: 'help_command_unregister' },
@@ -54,7 +56,7 @@ const HELP_COMMAND_DETAILS = {
     admin_filter: { command: '/filter', icon: '🚫', descKey: 'help_command_admin_filter' },
     admin_filters: { command: '/filters', icon: '🧰', descKey: 'help_command_admin_filters' },
     admin_filterx: { command: '/filterx', icon: '??', descKey: 'help_command_admin_filterx' },
-    profile: { command: '/profile', icon: '🙋', descKey: 'help_command_profile' },
+
     ping: { command: '/ping', icon: '🏓', descKey: 'help_command_ping' },
     recent: { command: '/recent', icon: '📋', descKey: 'help_command_recent' },
     meme: { command: '/meme', icon: '🎯', descKey: 'help_command_meme' },
@@ -69,7 +71,7 @@ const HELP_GROUP_DETAILS = {
         icon: '🚀',
         titleKey: 'help_group_onboarding_title',
         descKey: 'help_group_onboarding_desc',
-        commands: ['start', 'help', 'lang', 'ai', 'api', 'profile']
+        commands: ['start', 'help', 'lang', 'ai']
     },
     xlayer_check: {
         icon: '🔎',
@@ -110,7 +112,7 @@ const HELP_TABLE_LAYOUT = {
     borderStyle: 'unicode'
 };
 
-function buildTelegramCommandSets(translate, lang) {
+function buildTelegramCommandSets(translate, lang, policy = resolveAiCommandPolicy()) {
     const build = (keys) => keys.map((key) => {
         const detail = HELP_COMMAND_DETAILS[key];
         return {
@@ -119,12 +121,19 @@ function buildTelegramCommandSets(translate, lang) {
         };
     });
     const base = ['start', 'lang', 'help', 'ai', 'random', 'mywallet', 'ping'];
-    return {
+    const sets = {
         default: build(base),
         all_private_chats: build(base),
         all_group_chats: build(base),
         all_chat_administrators: build([...base, 'price', 'pricev', 'pricex'])
     };
+    if (policy.chat9RouterUiEnabled) {
+        const existing = new Set(sets.all_private_chats.map(item => item.command));
+        sets.all_private_chats.push(...TELEGRAM_AI_COMMANDS
+            .filter(item => !existing.has(item.name))
+            .map(item => ({ command: item.name, description: String(item.description[lang] || item.description.en).slice(0, 256) })));
+    }
+    return sets;
 }
 
 const ADMIN_MENU_SECTION_CONFIG = {

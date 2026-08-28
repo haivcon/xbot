@@ -181,6 +181,7 @@ const {
 
 
 function createAiHandlers(deps) {
+  const featurePolicy = deps.featurePolicy || require('../core/aiCommandPolicy').resolveAiCommandPolicy();
   // Initialize skill engine and scheduler
   try {
     initSkills();
@@ -1253,6 +1254,12 @@ function createAiHandlers(deps) {
     const ttsPayload = isTtsMode ? userPrompt.replace(/^tts\b/i, '').trim() : '';
     const userId = msg.from?.id?.toString();
     const chatType = msg.chat?.type;
+    if ((hasAudio || isTtsMode) && !featurePolicy.audioCompatEnabled) {
+      await sendReply(msg, lang === 'vi'
+        ? '⚠️ Tương thích âm thanh và TTS hiện không khả dụng.'
+        : '⚠️ Audio and TTS compatibility is unavailable.');
+      return;
+    }
     // Gentle reminder to fill personal info for personalization
     if (userId && chatType === 'private') {
       const today = new Date().toISOString().slice(0, 10);

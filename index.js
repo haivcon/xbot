@@ -109,6 +109,8 @@ const { sanitizeSecrets } = require('./src/core/sanitize');
 const { commandRegistry } = require('./src/core/commandRegistry');
 const { loadCommands, startHotReload } = require('./src/core/commandLoader');
 const { createCommandRouter } = require('./src/core/commandRouter');
+const { resolveAiCommandPolicy } = require('./src/core/aiCommandPolicy');
+const aiCommandPolicy = resolveAiCommandPolicy();
 const {
     aiState,
     normalizeAiProvider,
@@ -373,7 +375,7 @@ const { createTelegramDebugHelpers } = require('./src/app/telegramDebug');
 const { createAiApiHandlers } = require('./src/app/aiApiHandlers');
 const { createAiHandlers } = require('./src/app/aiHandlers');
 const { createTelegramAiMenuHandlers } = require('./src/app/telegramAiMenuHandlers');
-const { TELEGRAM_AI_COMMANDS, buildAuthoritativeCatalog } = require('./src/services/aiChatContracts');
+const { buildAuthoritativeCatalog } = require('./src/services/aiChatContracts');
 const { discoverTenantModels } = require('./src/services/nineRouterTenantChat');
 const { registerAutoDetection } = require('./src/bot/handlers/autoDetection');
 const { getPendingConfirmation, clearPendingConfirmation } = require('./src/bot/handlers/confirmationHandler');
@@ -1749,19 +1751,17 @@ function startTelegramBot() {
         ));
 
         for (const langCode of languageCodes) {
-            const commandSets = buildTelegramCommandSets(t, langCode);
+            const commandSets = buildTelegramCommandSets(t, langCode, aiCommandPolicy);
 
             for (const scope of scopes) {
                 const maxRetries = 3;
                 for (let attempt = 0; attempt < maxRetries; attempt++) {
                     try {
                         const commands = commandSets[scope.type] || commandSets.default;
-                        const scopedCommands = scope.type === 'all_private_chats'
-                            ? commands.concat(TELEGRAM_AI_COMMANDS
-                                .flatMap(item => [item.name, ...(item.aliases || [])].map(name => ({ ...item, name })))
-                                .filter(item => !commands.some(existing => existing.command === item.name))
-                                .map(item => ({ command: item.name, description: sanitizeDescription(item.description[langCode] || item.description.en, item.name) })))
-                            : commands;
+                        const scopedCommands = commands.map(item => ({
+                            ...item,
+                            description: sanitizeDescription(item.description, item.command)
+                        }));
                         await bot.setMyCommands(scopedCommands, { scope, language_code: langCode });
                         break; // success
                     } catch (error) {
@@ -1870,10 +1870,25 @@ function startTelegramBot() {
     log.info(`Registered ${modularCommands.length} modular commands with ${modularCommands.reduce((sum, c) => sum + (c.aliases?.length || 0), 0)} aliases`);
 
 
+    const createDashboardLink = async ({ userId, section }) => {
+        const token = crypto.randomBytes(32).toString('hex');
+        dashboardLoginTokens.set(token, {
+            userId,
+            firstName: '',
+            username: '',
+            createdAt: Date.now(),
+            target: section === 'providers' ? 'providers' : undefined
+        });
+        setTimeout(() => dashboardLoginTokens.delete(token), 5 * 60 * 1000).unref?.();
+        const baseUrl = (PUBLIC_BASE_URL || `http://localhost:${API_PORT || 3000}`).replace(/\/+$/, '');
+        return `${baseUrl}/api/dashboard/auth/auto-login?token=${token}`;
+    };
+
     const {
         buildApiHubMenu,
         handleAiApiSubmission,
         handleApiCommand,
+        handleLegacyCallback,
         renderAiApiMenuMessage,
         renderApiHubMessage,
         startAiApiAddPrompt
@@ -1884,7 +1899,9 @@ function startTelegramBot() {
         getLang,
         buildCloseKeyboard,
         maskApiKey,
-        escapeHtml
+        escapeHtml,
+        featurePolicy: aiCommandPolicy,
+        dashboardLink: createDashboardLink
     });
 
     function pickStartVideo() {
@@ -1992,6 +2009,7 @@ function startTelegramBot() {
         downloadTelegramFile,
         resolveAudioMimeType,
         telegramConversationService,
+        featurePolicy: aiCommandPolicy,
         getTelegramAiContext: ({ userId }) => telegramAiMenus?.getChatContext(userId) || null
     });
 
@@ -2019,19 +2037,8 @@ function startTelegramBot() {
         },
         promptMessage: (msg) => handleAiCommand(msg),
         botUsername: BOT_USERNAME,
-        dashboardLink: async ({ userId, section }) => {
-            const token = crypto.randomBytes(32).toString('hex');
-            dashboardLoginTokens.set(token, {
-                userId,
-                firstName: '',
-                username: '',
-                createdAt: Date.now(),
-                target: section === 'providers' ? 'providers' : undefined
-            });
-            setTimeout(() => dashboardLoginTokens.delete(token), 5 * 60 * 1000).unref?.();
-            const baseUrl = (PUBLIC_BASE_URL || `http://localhost:${API_PORT || 3000}`).replace(/\/+$/, '');
-            return `${baseUrl}/api/dashboard/auth/auto-login?token=${token}`;
-        }
+        dashboardLink: createDashboardLink,
+        featurePolicy: aiCommandPolicy
     });
     const handleTelegramAiCommand = telegramAiMenus.handleCommand;
     const handleTelegramAiCallback = telegramAiMenus.handleCallback;
@@ -2757,6 +2764,9 @@ function startTelegramBot() {
             return;
         }
 
+        // Legacy callbacks stay readable during migration but policy guards run first.
+        if (await handleLegacyCallback(query, callbackLang)) return;
+
         const apiHubAction = query.data?.startsWith('apihub|') ? query.data.split('|') : null;
         if (apiHubAction && apiHubAction.length > 1) {
             const step = apiHubAction[1];
@@ -2791,6 +2801,10 @@ function startTelegramBot() {
 
         const ttsSettingsAction = query.data?.startsWith('ttssettings|') ? query.data.split('|') : null;
         if (ttsSettingsAction && ttsSettingsAction.length > 1) {
+            if (!aiCommandPolicy.audioCompatEnabled) {
+                await bot.answerCallbackQuery(queryId, { text: callbackLang === 'vi' ? 'Âm thanh/TTS hiện không khả dụng.' : 'Audio/TTS is unavailable.', show_alert: true });
+                return;
+            }
             const userId = query.from?.id?.toString();
             const currentPage = Number(ttsSettingsAction[1]) || 0;
             const settings = await getUserTtsConfig(userId);
@@ -2838,42 +2852,11 @@ function startTelegramBot() {
             }
 
             if (action === 'copy') {
-                const keyId = aiApiAction[3];
-                const currentPage = Number(aiApiAction[4]) || 0;
-
-                if (userId && keyId) {
-                    const keyEntry = await db.getUserAiKey(userId, keyId);
-                    if (keyEntry?.apiKey) {
-                        const meta = buildAiProviderMeta(callbackLang, keyEntry.provider || provider);
-                        const name = keyEntry.name && keyEntry.name.trim()
-                            ? escapeHtml(keyEntry.name.trim())
-                            : t(callbackLang, 'ai_api_default_name');
-                        const copyText = [
-                            `${meta.icon} ${t(callbackLang, 'ai_api_copy_title', { provider: meta.label, name })}`,
-                            `<code>${escapeHtml(keyEntry.apiKey)}</code>`,
-                            t(callbackLang, 'ai_api_copy_notice')
-                        ]
-                            .filter(Boolean)
-                            .join('\n');
-
-                        await bot.sendMessage(userId, copyText, {
-                            parse_mode: 'HTML',
-                            disable_web_page_preview: true
-                        });
-
-                        if (query.message) {
-                            await renderAiApiMenuMessage(query.message, callbackLang, userId, provider, currentPage, {
-                                backCallbackData,
-                                provider
-                            });
-                        }
-
-                        await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'ai_api_copy_sent'), show_alert: true });
-                        return;
-                    }
-                }
-
-                await bot.answerCallbackQuery(queryId, { text: t(callbackLang, 'ai_api_copy_missing'), show_alert: true });
+                // Migration safety: credentials never leave server-side storage via Telegram.
+                await bot.sendMessage(userId, callbackLang === 'vi'
+                    ? '🔒 API key luôn ở phía máy chủ. Quản lý hoặc kết nối lại trong Providers/dashboard.'
+                    : '🔒 API keys remain server-side. Manage or reconnect them in Providers/dashboard.');
+                await bot.answerCallbackQuery(queryId);
                 return;
             }
 
@@ -2967,6 +2950,10 @@ function startTelegramBot() {
 
         const ttsVoiceAction = query.data?.startsWith('ttsvoice|') ? query.data.split('|') : null;
         if (ttsVoiceAction && ttsVoiceAction.length > 1) {
+            if (!aiCommandPolicy.audioCompatEnabled) {
+                await bot.answerCallbackQuery(queryId, { text: callbackLang === 'vi' ? 'Âm thanh/TTS hiện không khả dụng.' : 'Audio/TTS is unavailable.', show_alert: true });
+                return;
+            }
             const userId = query.from?.id?.toString();
             const voice = ttsVoiceAction[1];
             const settings = await saveUserTtsVoice(userId, voice);
@@ -2988,6 +2975,10 @@ function startTelegramBot() {
 
         const ttsLangAction = query.data?.startsWith('ttslang|') ? query.data.split('|') : null;
         if (ttsLangAction && ttsLangAction.length > 1) {
+            if (!aiCommandPolicy.audioCompatEnabled) {
+                await bot.answerCallbackQuery(queryId, { text: callbackLang === 'vi' ? 'Âm thanh/TTS hiện không khả dụng.' : 'Audio/TTS is unavailable.', show_alert: true });
+                return;
+            }
             const userId = query.from?.id?.toString();
             const language = ttsLangAction[1];
             const settings = await saveUserTtsLanguage(userId, language);
@@ -3489,6 +3480,18 @@ function startTelegramBot() {
 
         if (/^\/(?:persona|personas|personality)(?:@[\w_]+)?(?:\s|$)/i.test(textOrCaption)) {
             const lang = await resolveNotificationLanguage(userId, msg.from?.language_code);
+            if (chatType !== 'private') {
+                await sendReply(msg, t(lang, 'command_private_only') || 'Please use this command in private chat.');
+                return;
+            }
+            if (!aiCommandPolicy.legacyPersonaEnabled) {
+                await sendReply(msg, t(lang, 'command_execution_error'));
+                return;
+            }
+            if (/^\/(?:personas|personality)(?:@[\w_]+)?(?:\s|$)/i.test(textOrCaption)) {
+                await sendReply(msg, lang === 'vi' ? 'Lệnh này đã ngừng dùng. Hãy dùng /persona.' : 'This alias is deprecated. Use /persona.');
+                return;
+            }
             const currentPersonaId = await getUserPersona(userId);
             const personaList = Object.values(AI_PERSONAS).map((p) => {
                 const current = currentPersonaId === p.id ? ' ✓' : '';
@@ -3502,10 +3505,12 @@ function startTelegramBot() {
         }
 
         if (/^\/api(?:@[\w_]+)?(?:\s|$)/i.test(textOrCaption)) {
-            if (process.env.XBOT_AI_LEGACY_MENU !== 'true') {
-                await handleTelegramAiCommand({ ...msg, text: '/providers' });
+            if (chatType !== 'private') {
+                const lang = await resolveNotificationLanguage(userId, msg.from?.language_code);
+                await sendReply(msg, t(lang, 'command_private_only') || 'Please use this command in private chat.');
                 return;
             }
+            if (!aiCommandPolicy.legacyApiUiEnabled && await handleTelegramAiCommand(msg)) return;
             await handleApiCommand(msg);
             return;
         }

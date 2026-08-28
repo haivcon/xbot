@@ -14,7 +14,7 @@ const { createTelegramAiMenuHandlers } = require('../src/app/telegramAiMenuHandl
 describe('xBot Telegram Chat AI framework contracts', () => {
   test('canonical command registry contains focused commands and models alias', () => {
     expect(TELEGRAM_AI_COMMANDS.map(item => item.name)).toEqual([
-      'chat', 'new', 'model', 'stop', 'retry', 'history', 'status', 'providers', 'help'
+      'chat', 'new', 'model', 'stop', 'retry', 'history', 'status', 'providers'
     ]);
     expect(TELEGRAM_AI_COMMANDS.find(item => item.name === 'model').aliases).toContain('models');
   });
@@ -172,9 +172,7 @@ describe('xBot Telegram Chat AI framework contracts', () => {
     });
     expect(await handlers.handleCommand({ text: '/history', chat: { id: -1, type: 'group' }, from: { id: 1 } })).toBe(true);
     expect(sent[0].text).not.toMatch(/conversation ID|model ID|connected account/i);
-    await handlers.handleCommand({ text: '/help', chat: { id: 1, type: 'private' }, from: { id: 1 } });
-    expect(sent.at(-1).text).toContain('/chat');
-    expect(sent.at(-1).options.reply_markup.inline_keyboard.flat().map(button => button.text).join(' ')).toMatch(/All commands/);
+    expect(await handlers.handleCommand({ text: '/help', chat: { id: 1, type: 'private' }, from: { id: 1 } })).toBe(false);
   });
 });
 
@@ -217,7 +215,7 @@ describe('approved Telegram Chat AI control-center UX', () => {
 
   test('registry makes chat primary with ai alias and model/models parity', () => {
     expect(TELEGRAM_AI_COMMANDS.map(item => item.name)).toEqual([
-      'chat', 'new', 'model', 'stop', 'retry', 'history', 'status', 'providers', 'help'
+      'chat', 'new', 'model', 'stop', 'retry', 'history', 'status', 'providers'
     ]);
     expect(TELEGRAM_AI_COMMANDS[0]).toMatchObject({ name: 'chat', aliases: ['ai'] });
     expect(TELEGRAM_AI_COMMANDS.find(item => item.name === 'model').aliases).toContain('models');
@@ -327,7 +325,7 @@ describe('approved Telegram Chat AI control-center UX', () => {
     expect(stale[2].reply_markup.inline_keyboard.flat()[0].callback_data).toMatch(/^xa1:/);
   });
 
-  test.each(['/chat', '/ai', '/model', '/models', '/new', '/stop', '/retry', '/history', '/status', '/providers', '/help'])('%s is private-only in groups with no state leakage', async command => {
+  test.each(['/chat', '/ai', '/model', '/models', '/new', '/stop', '/retry', '/history', '/status', '/providers'])('%s is private-only in groups with no state leakage', async command => {
     const bot = makeBot();
     const discoverCatalog = jest.fn(catalog);
     const service = { listConversations: jest.fn(), newConversation: jest.fn() };
@@ -355,14 +353,13 @@ describe('approved Telegram Chat AI control-center UX', () => {
   test('status providers and contextual help are compact and safe', async () => {
     const bot = makeBot();
     const handlers = createTelegramAiMenuHandlers({ bot, getLang: async () => 'vi', discoverCatalog: catalog, dashboardLink: async () => 'https://xbot.example/secure-once', featureFlags: { telegramUi: true, groupLegacy: false } });
-    for (const command of ['/status', '/providers', '/help']) await handlers.handleCommand(privateMessage(command));
-    const [status, providers, help] = bot.sendMessage.mock.calls.slice(-3);
+    for (const command of ['/status', '/providers']) await handlers.handleCommand(privateMessage(command));
+    const [status, providers] = bot.sendMessage.mock.calls.slice(-2);
     expect(status[1]).not.toMatch(/tenant|endpoint|signature|secret/i);
     expect(providers[1]).toContain('Ready');
     expect(providers[1]).toContain('14');
     expect(providers[2].reply_markup.inline_keyboard.flat().find(button => button.url).url).toBe('https://xbot.example/secure-once');
-    expect(help[2].reply_markup.inline_keyboard.flat().map(button => button.text).join(' ')).toMatch(/Chat|Model|History|Privacy|command/i);
-    expect(help[1].length).toBeLessThan(1000);
+    expect(await handlers.handleCommand(privateMessage('/help'))).toBe(false);
   });
 });
 
@@ -372,7 +369,8 @@ describe('runtime characterization', () => {
     expect(source).toContain("require('./src/app/telegramAiMenuHandlers')");
     expect(source).toMatch(/handleTelegramAiCommand\(msg\)[\s\S]*?handleAiCommand\(msg\)/);
     expect(source).toContain('handleTelegramAiCallback(query)');
-    expect(source).toMatch(/TELEGRAM_AI_COMMANDS[\s\S]*?flatMap\(item => \[item\.name, \.\.\.\(item\.aliases \|\| \[\]\)\]/);
+    expect(source).toContain('buildTelegramCommandSets(t, langCode, aiCommandPolicy)');
+    expect(source).not.toMatch(/TELEGRAM_AI_COMMANDS[\s\S]*?flatMap\(item => \[item\.name, \.\.\.\(item\.aliases \|\| \[\]\)\]/);
     expect(source.indexOf('enforceBanForCallback(query, callbackLang)')).toBeLessThan(source.indexOf('handleTelegramAiCallback(query)'));
     expect(source).not.toContain("model.id.split('/')[0]");
   });
@@ -384,7 +382,8 @@ describe('runtime characterization', () => {
     const indexSource = fs.readFileSync(path.join(root, 'index.js'), 'utf8');
     const chatSource = fs.readFileSync(path.join(root, 'dashboard/xBot/src/pages/user/ChatPage.jsx'), 'utf8');
 
-    expect(indexSource).toMatch(/dashboardLink:\s*async\s*\(\{\s*userId,\s*section\s*\}\)/);
+    expect(indexSource.match(/const createDashboardLink\s*=\s*async\s*\(\{\s*userId,\s*section\s*\}\)/g)).toHaveLength(1);
+    expect(indexSource.match(/dashboardLink:\s*createDashboardLink/g)).toHaveLength(2);
     expect(indexSource).toMatch(/target:\s*section\s*===\s*['"]providers['"]\s*\?\s*['"]providers['"]\s*:\s*undefined/);
     expect(chatSource).toMatch(/useSearchParams/);
     expect(chatSource).toMatch(/searchParams\.get\(['"]section['"]\)\s*===\s*['"]providers['"]/);
