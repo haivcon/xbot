@@ -3,4 +3,5 @@ require('dotenv').config();
 process.env.EXECUTION_DISABLED = 'true';
 process.env.PRICE_ALERT_SCHEDULER_ENABLED = 'true';
 process.env.JOB_QUEUE_CONCURRENCY = '1';
+process.env.RELEASE_MANIFEST_REQUIRED = 'true';
 require('./index.js');

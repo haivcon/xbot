@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install dashboard dependencies
+        run: npm --prefix dashboard ci
+      - name: Validate JavaScript syntax and JSON
+        run: npm run validate:syntax
+      - name: Run root tests
+        run: npm test -- --runInBand --no-coverage
+      - name: Build dashboard
+        run: npm --prefix dashboard run build
+      - name: Capture deterministic build timestamp
+        id: build-metadata
+        shell: bash
+        run: printf 'built_at=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')" >> "$GITHUB_OUTPUT"
+      - name: Generate and validate release manifest
+        run: |
+          npm run release:manifest -- --git-sha "${{ github.sha }}" --built-at "${{ steps.build-metadata.outputs.built_at }}"
+          node -e "const m=require('./release-manifest.json'); const allowed=['builtAt','gitSha','hashes','manifestVersion','nodeVersion','packageVersion']; if(Object.keys(m).some(k=>!allowed.includes(k))) process.exit(1);"

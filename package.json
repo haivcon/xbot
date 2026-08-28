@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "jest --verbose"
+    "test": "jest --verbose",
+    "validate:syntax": "node --check index.js && node --check safe-wrapper.js && node --check src/server/apiServer.js && node --check src/core/readiness.js && node --check src/core/releaseManifest.js && node --check scripts/generate-release-manifest.js && node -e \"JSON.parse(require('fs').readFileSync('package.json','utf8')); JSON.parse(require('fs').readFileSync('package-lock.json','utf8')); JSON.parse(require('fs').readFileSync('dashboard/package.json','utf8')); JSON.parse(require('fs').readFileSync('dashboard/package-lock.json','utf8'))\"",
+    "release:manifest": "node scripts/generate-release-manifest.js"
   },
   "jest": {
     "testMatch": [

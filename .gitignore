@@ -83,6 +83,8 @@ __tests__/*
 !__tests__/nineRouterOAuthHttpIntegration.test.js
 !__tests__/telegramChatAiFramework.test.js
 !__tests__/dashboardTelegramAvatar.test.js
+!__tests__/readinessReleaseManifest.test.js
+/release-manifest.json
 
 # ─── Logs ───
 *.log

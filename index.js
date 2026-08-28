@@ -320,7 +320,7 @@ const {
     ERC20_TRANSFER_TOPIC
 } = require('./src/config/env');
 const createOkxService = require('./src/services/okxService');
-const { startApiServer } = require('./src/server/apiServer');
+const { readinessRuntime, startApiServer } = require('./src/server/apiServer');
 const { handleTopTokenCallback } = require('./src/handlers/callbacks/topToken');
 const createTopTokenHelpers = require('./src/handlers/commands/topToken');
 const { handleTxhashCallback } = require('./src/handlers/callbacks/txhash');
@@ -3631,6 +3631,9 @@ async function main() {
 
         // Bước 1: Khởi tạo DB
         await db.init();
+        const quickCheck = await db.dbGet('PRAGMA quick_check');
+        if (quickCheck?.quick_check !== 'ok') throw new Error('SQLite quick_check failed');
+        readinessRuntime.markDatabaseReady();
         await hydrateCoOwners();
         await hydrateBannedUsers();
         await hydrateBannedDevices();
@@ -3688,6 +3691,7 @@ async function main() {
         // Bước 3: Bật transport sau migration, recovery và ingress guard.
         startApiServer();
         await startTelegramTransport();
+        readinessRuntime.markTelegramIngressReady();
         if (!isExecutionDisabled()) {
             startCheckinScheduler();
         }
@@ -3710,6 +3714,7 @@ let isShuttingDown = false;
 function gracefulShutdown(signal) {
     if (isShuttingDown) return;
     isShuttingDown = true;
+    readinessRuntime.markShuttingDown();
     log.warn(`Received ${signal}. Graceful shutdown...`);
     try {
         bot.stopPolling({ cancel: true });

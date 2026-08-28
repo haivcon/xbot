@@ -10,18 +10,15 @@ const db = require('../../db.js');
 const { normalizeAddressSafe } = require('../utils/helpers');
 const {
     OKX_BASE_URL,
-    API_PORT,
-    NINEROUTER_MODEL
+    API_PORT
 } = require('../config/env');
 const { createDashboardRoutes } = require('./dashboardRoutes');
 const { verifyJWT } = require('./dashboardAuth');
 const { renderChatMetrics } = require('../services/chatOrchestrator/telemetry');
-const { checkNineRouterReadiness } = require('../services/nineRouterConnection');
 const { nineRouterRuntime } = require('../services/nineRouterRuntime');
-const {
-    createTenantHeaders,
-    getConfig: getNineRouterTenantConfig
-} = require('../services/nineRouterTenantClient');
+const { createControlHandlers, createReadinessRuntime } = require('../core/readiness');
+const { loadReleaseManifest } = require('../core/releaseManifest');
+const { getPriceAlertSchedulerStatus } = require('../core/executionPolicy');
 const {
     enqueueJob,
     registerJobHandler,
@@ -33,6 +30,10 @@ const {
 
 const app = express();
 const startedAt = new Date();
+const readinessRuntime = createReadinessRuntime({
+    release: loadReleaseManifest(),
+    manifestRequired: String(process.env.RELEASE_MANIFEST_REQUIRED || '').trim().toLowerCase() === 'true'
+});
 const RATE_LIMIT_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS || 60_000);
 const RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX || 500);
 const REQUEST_TIMEOUT_MS = Number(process.env.API_REQUEST_TIMEOUT_MS || 10_000);
@@ -303,44 +304,13 @@ function startApiServer() {
         next();
     });
 
-    app.get(['/health', '/healthz'], async (req, res) => {
-        // DB connectivity check
-        let dbStatus = 'unknown';
-        try {
-            await db.getUserLanguage('__health_check__');
-            dbStatus = 'ok';
-        } catch {
-            dbStatus = 'error';
-        }
-
-        const { getPriceAlertSchedulerStatus } = require('../core/executionPolicy');
-        const scheduler = getPriceAlertSchedulerStatus();
-        const schedulerHealthy = !scheduler.priceAlertSchedulerEnabled || scheduler.priceAlertSchedulerRunning;
-        res.json({
-            status: dbStatus === 'ok' && schedulerHealthy ? 'ok' : 'degraded',
-            ...scheduler,
-            ...(scheduler.priceAlertSchedulerEnabled && !scheduler.priceAlertSchedulerRunning
-                ? { degradedReason: 'price_alert_scheduler_not_running' }
-                : {})
-        });
+    const controlHandlers = createControlHandlers({
+        runtime: readinessRuntime,
+        getSchedulerStatus: getPriceAlertSchedulerStatus,
+        getNineRouterStatus: () => nineRouterRuntime.getStatus().connected ? 'ok' : 'degraded'
     });
-
-    app.get('/readyz', (_req, res) => {
-        let configReadiness;
-        try {
-            const tenantConfig = getNineRouterTenantConfig();
-            configReadiness = checkNineRouterReadiness({
-                baseUrl: `${tenantConfig.baseUrl}/v1`,
-                buildHeaders: createTenantHeaders,
-                allowedModels: (NINEROUTER_MODEL || '').split(',').map(value => value.trim()).filter(Boolean)
-            });
-        } catch {
-            configReadiness = { ready: false };
-        }
-        const connection = nineRouterRuntime.getStatus({ configured: configReadiness.ready });
-        const readiness = connection.connected ? { status: 'ready' } : { status: 'not_ready' };
-        return res.status(connection.connected ? 200 : 503).json(readiness);
-    });
+    app.get(['/health', '/healthz'], controlHandlers.health);
+    app.get('/readyz', controlHandlers.ready);
 
     app.get('/metrics', localOnly, async (req, res) => {
         if (!METRICS_ENABLED) {
@@ -504,6 +474,7 @@ function startApiServer() {
     // === Serve the XBot dashboard ===
     const dashboardDist = path.join(__dirname, '../../dashboard/dist/xBot');
     if (fs.existsSync(dashboardDist)) {
+        readinessRuntime.markStaticDashboardReady();
         app.use('/xBot', express.static(dashboardDist));
         app.get('/', (_req, res) => res.redirect('/xBot/'));
         // SPA fallback: serve the XBot entry for dashboard client-side routes.
@@ -516,6 +487,7 @@ function startApiServer() {
         });
         log.child('Dashboard').info(`Serving dashboard from ${dashboardDist}`);
     } else {
+        readinessRuntime.markStaticDashboardError();
         log.child('Dashboard').info('Dashboard dist not found — run "npm run build" in dashboard/ to enable');
     }
 
@@ -550,6 +522,7 @@ function startApiServer() {
     const tryListen = (port, attemptsLeft = 5) => {
         const host = getApiHost();
         const server = app.listen(port, host, async () => {
+            readinessRuntime.markHttpServerReady();
             log.child('APIServer').info(`Dang chay tai http://${host}:${port}`);
 
             // === WebSocket server for real-time dashboard ===
@@ -634,6 +607,7 @@ function startApiServer() {
             }
         });
         server.on('error', (err) => {
+            readinessRuntime.markHttpServerError();
             if (err?.code === 'EADDRINUSE' && attemptsLeft > 0) {
                 const nextPort = port + 1;
                 log.child('APIServer').error(`Port ${port} dang bi chiem. Thu port ${nextPort}...`);
@@ -662,6 +636,7 @@ function broadcastWsEvent(type, data) {
 
 module.exports = {
     app,
+    readinessRuntime,
     authenticateWebSocketRequest,
     startApiServer,
     broadcastWsEvent,
