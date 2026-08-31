@@ -551,70 +551,14 @@ function registerSwapConfirmCallback(bot, getLang, t) {
   bot.on('callback_query', async (query) => {
     const data = query.data || '';
     if (!data.startsWith('swpc|')) return;
-    // Format: swpc|chainIndex|fromAddr|toAddr|amount|fromDec|toDec|fromSym|toSym
-    const parts = data.split('|');
-    if (parts.length < 9) return;
-    const [, chainIndex, fromAddr, toAddr, amount, fromDec, toDec, fromSym, toSym] = parts;
     const msg = query.message;
-    const lang = getLang(msg.chat.id);
-    const userId = String(query.from?.id || msg.chat.id);
-
-    try {
-      assertExecutionEnabled();
-      await bot.answerCallbackQuery(query.id, { text: t(lang, 'ai_swap_confirming') });
-      // Get user trading wallet
-      const { dbGet } = require('../../db/core');
-      const tw = await dbGet('SELECT * FROM user_trading_wallets WHERE userId = ?', [userId]);
-      if (!tw) {
-        await bot.editMessageText(t(lang, 'ai_no_trading_wallet'), { chat_id: msg.chat.id, message_id: msg.message_id, parse_mode: 'HTML' });
-        return;
-      }
-      // Decrypt key
-      assertExecutionEnabled();
-      const privateKey = global._decryptTradingKey(tw.encryptedKey);
-      const onchainos = require('../services/onchainos');
-      const ethers = require('ethers');
-      // Get swap transaction data
-      const txData = await onchainos.getSwapTransaction({
-        chainIndex, fromTokenAddress: fromAddr, toTokenAddress: toAddr,
-        amount, userWalletAddress: tw.address, slippagePercent: '1'
-      });
-      const txRaw = Array.isArray(txData) ? txData[0] : txData;
-      if (!txRaw || !txRaw.tx) {
-        await bot.editMessageText(`❌ ${t(lang, 'ai_swap_sign_error')}: no tx data`, { chat_id: msg.chat.id, message_id: msg.message_id, parse_mode: 'HTML' });
-        return;
-      }
-      // Sign transaction
-      const { _getChainRpc, _getExplorerUrl } = require('../features/ai/onchain/helpers');
-      const rpcUrl = _getChainRpc(chainIndex);
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
-      const wallet = new ethers.Wallet(privateKey, provider);
-      const tx = txRaw.tx;
-      assertExecutionEnabled();
-      const signedTx = await wallet.signTransaction({
-        to: tx.to, data: tx.data, value: BigInt(tx.value || '0'),
-        gasLimit: BigInt(tx.gas || tx.gasLimit || '300000'),
-        gasPrice: BigInt(tx.gasPrice || '1000000000'),
-        nonce: await provider.getTransactionCount(wallet.address),
-        chainId: parseInt(chainIndex)
-      });
-      // Broadcast
-      const broadcastResult = await onchainos.broadcastTransaction(signedTx, chainIndex, tw.address);
-      const txHash = broadcastResult?.orderId || broadcastResult?.hash || broadcastResult?.transactionHash || 'pending';
-      const explorerBase = _getExplorerUrl(chainIndex);
-      const explorerLink = `${explorerBase}/tx/${txHash}`;
-      const toAmount = Number(txRaw.routerResult?.toTokenAmount || txRaw.toTokenAmount || 0) / (10 ** Number(toDec));
-      const toStr = toAmount > 0 ? toAmount.toFixed(toAmount < 1 ? 8 : 4) : '?';
-      let successCard = `🎉 <b>${t(lang, 'ai_swap_success')}</b>\n━━━━━━━━━━━━━━━━━━\n`;
-
-      successCard += `📤 ${fromSym} → 📥 ${toStr} <b>${toSym}</b>\n`;
-      successCard += `🔗 <a href="${explorerLink}">${t(lang, 'ai_swap_tx')}</a>\n`;
-      await bot.editMessageText(successCard, { chat_id: msg.chat.id, message_id: msg.message_id, parse_mode: 'HTML', disable_web_page_preview: true });
-    } catch (err) {
-      log.child('Swap').error('Error:', err.message);
-      await bot.editMessageText(`❌ ${t(lang, 'ai_swap_sign_error')}: ${err.message?.substring(0, 100)}`, {
-        chat_id: msg.chat.id, message_id: msg.message_id, parse_mode: 'HTML'
-      }).catch(() => { });
+    const code = 'LEGACY_SWAP_CALLBACK_DISABLED';
+    await bot.answerCallbackQuery(query.id, { text: code, show_alert: true }).catch(() => { });
+    if (msg?.chat?.id && msg?.message_id) {
+      await bot.editMessageText(
+        `❌ ${code}\n\nLegacy swap execution callbacks are disabled. Prepare a fresh quote in Chat AI.`,
+        { chat_id: msg.chat.id, message_id: msg.message_id }
+      ).catch(() => { });
     }
   });
 
@@ -995,19 +939,27 @@ function registerBatchTransferCallbacks(bot, getLang) {
     const batchId = payload.replace(/^(confirm_|cancel_)/, '');
     const action = isConfirm ? 'confirm' : 'cancel';
 
-    // Resolve pending confirmation promise
-    const resolver = global._batchTransferPending?.get(batchId);
-    if (resolver) {
-      resolver(action);
+    // Resolve only a fresh, exact actor/chat/message-bound confirmation once.
+    const pending = global._batchTransferPending?.get(batchId);
+    const bound = pending
+      && Date.now() <= pending.expiresAt
+      && String(query.from?.id || '') === pending.userId
+      && String(query.message?.chat?.id || '') === pending.chatId
+      && String(query.message?.message_id || '') === pending.messageId;
+    if (bound) {
+      global._batchTransferPending.delete(batchId);
+      pending.resolve(action);
     }
 
-    // Set cancel signal for mid-batch abort
-    if (isCancel && global._batchTransferCancel) {
+    // Set cancel signal only for the bound actor/message.
+    if (bound && isCancel && global._batchTransferCancel) {
       global._batchTransferCancel.set(batchId, true);
     }
 
-    try { await bot.answerCallbackQuery(query.id); } catch (_) { }
-    try { await bot.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => { }); } catch (_) { }
+    try { await bot.answerCallbackQuery(query.id, bound ? undefined : { text: 'Expired or invalid confirmation', show_alert: true }); } catch (_) { }
+    if (bound) {
+      try { await bot.deleteMessage(query.message.chat.id, query.message.message_id).catch(() => { }); } catch (_) { }
+    }
   });
 
   // batchretry|retry_xxx

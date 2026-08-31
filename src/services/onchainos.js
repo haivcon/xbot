@@ -989,19 +989,30 @@ async function awGetBalance(options = {}) {
 }
 
 async function awSend(params) {
+    assertExecutionEnabled();
+    if (Object.prototype.hasOwnProperty.call(params || {}, 'force')) {
+        const error = new Error('Caller-supplied force is not allowed.');
+        error.code = 'FORCE_NOT_ALLOWED';
+        throw error;
+    }
     const payload = {
         amount: params.amount,
         toAddress: params.toAddress,
         chainIndex: params.chainIndex,
         fromAddress: params.fromAddress,
-        contractToken: params.contractToken,
-        force: params.force
+        contractToken: params.contractToken
     };
     const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
     return okxFetch('POST', '/api/v5/waas/wallet/send', clean);
 }
 
 async function awContractCall(params) {
+    assertExecutionEnabled();
+    if (Object.prototype.hasOwnProperty.call(params || {}, 'force')) {
+        const error = new Error('Caller-supplied force is not allowed.');
+        error.code = 'FORCE_NOT_ALLOWED';
+        throw error;
+    }
     const payload = {
         toAddress: params.toAddress,
         chainIndex: params.chainIndex,
@@ -1010,8 +1021,7 @@ async function awContractCall(params) {
         unsignedTx: params.unsignedTx,
         gasLimit: params.gasLimit,
         fromAddress: params.fromAddress,
-        mevProtection: params.mevProtection,
-        force: params.force
+        mevProtection: params.mevProtection
     };
     const clean = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined && v !== null && v !== ''));
     return okxFetch('POST', '/api/v5/waas/wallet/contract-call', clean);
@@ -1024,6 +1034,12 @@ async function awGetHistory(params = {}) {
 }
 
 async function awSignMessage(params) {
+    assertExecutionEnabled();
+    if (Object.prototype.hasOwnProperty.call(params || {}, 'force')) {
+        const error = new Error('Caller-supplied force is not allowed.');
+        error.code = 'FORCE_NOT_ALLOWED';
+        throw error;
+    }
     const payload = {
         chainIndex: params.chainIndex,
         message: params.message,

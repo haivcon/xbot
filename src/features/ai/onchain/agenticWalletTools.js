@@ -7,6 +7,19 @@ const onchainos = require('../../../services/onchainos');
 const logger = require('../../../core/logger');
 const log = logger.child('AgenticWallet');
 const { CHAIN_NAMES } = require('./helpers');
+const { assertExecutionEnabled } = require('../../../core/executionPolicy');
+
+function denied(error) {
+    return { success: false, code: error.code || 'REQUEST_DENIED', displayMessage: `❌ ${error.msg || error.message}` };
+}
+
+function rejectForce(args) {
+    if (Object.prototype.hasOwnProperty.call(args || {}, 'force')) {
+        const error = new Error('Caller-supplied force is not allowed.');
+        error.code = 'FORCE_NOT_ALLOWED';
+        throw error;
+    }
+}
 
 
 module.exports = {
@@ -115,14 +128,15 @@ module.exports = {
     // ── Send ──
     async aw_send(args, context) {
         try {
+            assertExecutionEnabled();
+            rejectForce(args);
             const lang = context?.lang || 'en';
             const data = await onchainos.awSend({
                 amount: args.amount,
                 toAddress: args.toAddress,
                 chainIndex: args.chainIndex,
                 fromAddress: args.fromAddress,
-                contractToken: args.contractToken,
-                force: args.force
+                contractToken: args.contractToken
             });
 
             if (data && data.txHash) {
@@ -133,18 +147,25 @@ module.exports = {
 
             // Confirmation required
             if (data && data.confirming) {
-                return { displayMessage: lang === 'vi' ? '⏳ Giao dịch cần xác nhận. Vui lòng xác nhận để tiếp tục.' : '⏳ Transaction requires confirmation. Please confirm to proceed.' };
+                return {
+                    success: false,
+                    status: 'PENDING_APPROVAL',
+                    pendingApproval: { upstream: 'onchainos', operation: 'aw_send', requestId: data.requestId || data.orderId || null },
+                    displayMessage: lang === 'vi' ? '⏳ Giao dịch đang chờ phê duyệt riêng.' : '⏳ Transaction is pending separate approval.'
+                };
             }
             return `❌ Send failed. Unexpected response.`;
         } catch (error) {
             log.error('aw_send error:', error);
-            return `❌ Send failed: ${error.msg || error.message}`;
+            return denied(error);
         }
     },
 
     // ── Contract Call ──
     async aw_contract_call(args, context) {
         try {
+            assertExecutionEnabled();
+            rejectForce(args);
             const lang = context?.lang || 'en';
             const data = await onchainos.awContractCall({
                 toAddress: args.toAddress,
@@ -154,8 +175,7 @@ module.exports = {
                 unsignedTx: args.unsignedTx,
                 gasLimit: args.gasLimit,
                 fromAddress: args.fromAddress,
-                mevProtection: args.mevProtection,
-                force: args.force
+                mevProtection: args.mevProtection
             });
 
             if (data && data.txHash) {
@@ -163,10 +183,18 @@ module.exports = {
                 const card = `✅ <b>Contract Call Executed</b>\n━━━━━━━━━━━━━━━━━━\n⛓ ${chain}\n📋 Contract: <code>${(args.toAddress || '').slice(0, 10)}...${(args.toAddress || '').slice(-4)}</code>\n🔗 TX: <code>${data.txHash}</code>`;
                 return { displayMessage: card };
             }
+            if (data && data.confirming) {
+                return {
+                    success: false,
+                    status: 'PENDING_APPROVAL',
+                    pendingApproval: { upstream: 'onchainos', operation: 'aw_contract_call', requestId: data.requestId || data.orderId || null },
+                    displayMessage: lang === 'vi' ? '⏳ Lệnh gọi đang chờ phê duyệt riêng.' : '⏳ Contract call is pending separate approval.'
+                };
+            }
             return `❌ Contract call failed. Unexpected response.`;
         } catch (error) {
             log.error('aw_contract_call error:', error);
-            return `❌ Contract call failed: ${error.msg || error.message}`;
+            return denied(error);
         }
     },
 
@@ -222,6 +250,8 @@ module.exports = {
     // ── Sign Message ──
     async aw_sign_message(args, context) {
         try {
+            assertExecutionEnabled();
+            rejectForce(args);
             const lang = context?.lang || 'en';
             const data = await onchainos.awSignMessage({
                 chainIndex: args.chainIndex,
@@ -237,7 +267,7 @@ module.exports = {
             return `❌ Sign message failed. Unexpected response.`;
         } catch (error) {
             log.error('aw_sign_message error:', error);
-            return `❌ Sign failed: ${error.msg || error.message}`;
+            return denied(error);
         }
     }
 };

@@ -34,6 +34,27 @@ function assertExecutionEnabled() {
     if (isExecutionDisabled()) throw createExecutionDisabledError();
 }
 
+function exactTrue(value) {
+    return value === 'true';
+}
+
+function createPolicyError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    error.status = 503;
+    return error;
+}
+
+function assertDcaExecutionEnabled() {
+    assertExecutionEnabled();
+    if (!exactTrue(process.env.DCA_LIVE_EXECUTION_ENABLED)) {
+        throw createPolicyError('DCA_EXECUTION_DISABLED', 'Live DCA execution is disabled by runtime policy.');
+    }
+    if (!exactTrue(process.env.DURABLE_INTENT_GATEWAY_READY)) {
+        throw createPolicyError('DURABLE_INTENT_GATEWAY_NOT_READY', 'Durable intent gateway is not ready.');
+    }
+}
+
 function guardExecution(operation) {
     return async function guardedExecution(...args) {
         assertExecutionEnabled();
@@ -69,6 +90,7 @@ module.exports = {
     getPriceAlertSchedulerStatus,
     createExecutionDisabledError,
     assertExecutionEnabled,
+    assertDcaExecutionEnabled,
     guardExecution,
     sendExecutionDisabled,
     getRuntimeCapabilities,

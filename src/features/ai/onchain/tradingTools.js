@@ -391,16 +391,15 @@ module.exports = {
                             } catch (e) { log.child('AUTOSWAP').error('Error reading allowance, defaulting to 0'); }
 
                             if (currentAllowance < BigInt(args.amount)) {
-                                log.child('AUTOSWAP').info(`Allowance ${currentAllowance} < ${args.amount}. Approving INFINITE amount...`);
-                                // Generate infinite approve data using ethers
+                                log.child('AUTOSWAP').info(`Allowance ${currentAllowance} < ${args.amount}. Approving exact required amount...`);
                                 const erc20Interface = new ethers.Interface(["function approve(address spender, uint256 amount) public returns (bool)"]);
-                                const infiniteApproveData = erc20Interface.encodeFunctionData("approve", [approval.dexContractAddress, ethers.MaxUint256]);
+                                const approveDataExact = erc20Interface.encodeFunctionData("approve", [approval.dexContractAddress, BigInt(args.amount)]);
 
                                 // Sign and broadcast approval tx
                                 assertExecutionEnabled();
                                 const approveTx = await wallet.signTransaction({
                                     to: fromTokenAddress.toLowerCase(), // send to TOKEN contract
-                                    data: infiniteApproveData,
+                                    data: approveDataExact,
                                     value: 0n,
                                     gasLimit: BigInt(approval.gasLimit || '150000'), // Increased from 100k for complex tokens
                                     gasPrice: BigInt(approval.gasPrice || '1000000000'),
@@ -628,45 +627,35 @@ module.exports = {
                 chainId: chainIdNum
             });
 
-            // 6. Broadcast (with retry for RPC failures)
-            log.child('AUTOSWAP').info(`Broadcasting swap tx...`);
-            const broadcastResult = await rpcRetry(
-                () => onchainos.broadcastTransaction(signedTx, chainIndex, tw.address),
-                3, 'AUTO-SWAP-BROADCAST'
-            );
+            // 6. Broadcast exactly once. Any uncertain outcome requires reconciliation.
+            log.child('AUTOSWAP').info(`Broadcasting swap tx once...`);
+            const broadcastResult = await onchainos.broadcastTransaction(signedTx, chainIndex, tw.address);
             const result = Array.isArray(broadcastResult) ? broadcastResult[0] : broadcastResult;
-            const txHash = result?.txHash || result?.orderId || 'pending';
+            const txHash = result?.txHash || result?.orderId || null;
             const orderId = result?.orderId || 'N/A';
             const explorerBase = _getExplorerUrl(chainIndex);
-            const explorerLink = `${explorerBase}/tx/${txHash}`;
+            const explorerLink = txHash ? `${explorerBase}/tx/${txHash}` : explorerBase;
 
-            // 6b. Verify transaction receipt on-chain
-            let txConfirmed = true;
-            if (txHash && txHash !== 'pending') {
+            // 6b. A hash/order is only submission evidence. Success requires status=1 receipt.
+            let receiptStatus = 'unknown';
+            if (txHash) {
                 try {
                     log.child('AUTOSWAP').info('Waiting for tx receipt...');
-                    const receipt = await provider.waitForTransaction(txHash, 1, 30000); // 1 confirmation, 30s timeout
-                    if (receipt && receipt.status === 0) {
-                        txConfirmed = false;
-                        log.child('AUTOSWAP').warn('❌ Transaction REVERTED on-chain: ' + txHash);
-                        // Return failure with explorer link
-                        let lang = context?.lang || 'en';
-                        try { const { getUserLanguage: gUL } = require('../../../../db/users'); const dl = await gUL(String(context?.chatId || context?.msg?.chat?.id || userId)); if (dl) lang = dl; } catch(_){}
-                        const failTitles = { en: 'SWAP FAILED', vi: 'SWAP THẤT BẠI', zh: '兑换失败', ko: '스왑 실패', ru: 'ОБМЕН НЕ УДАЛСЯ', id: 'SWAP GAGAL' };
-                        const failReasons = { en: 'Transaction reverted on-chain', vi: 'Giao dịch bị revert trên blockchain', zh: '交易在链上回滚', ko: '트랜잭션 되돌림', ru: 'Транзакция отменена', id: 'Transaksi gagal on-chain' };
-                        const failHints = { en: 'Possible causes: slippage too low, insufficient liquidity, or token restrictions.', vi: 'Nguyên nhân: slippage thấp, thanh khoản không đủ, hoặc token bị hạn chế.', zh: '可能原因：滑点过低、流动性不足或代币限制。', ko: '원인: 슬리피지 부족, 유동성 부족, 또는 토큰 제한.', ru: 'Причины: низкий слиппейдж, недостаточная ликвидность или ограничения токена.', id: 'Penyebab: slippage rendah, likuiditas kurang, atau batasan token.' };
-                        const lk = ['zh-Hans','zh-cn'].includes(lang) ? 'zh' : (['en','vi','zh','ko','ru','id'].includes(lang) ? lang : 'en');
-                        return {
-                            displayMessage: `❌ <b>${failTitles[lk] || failTitles.en}</b>\n━━━━━━━━━━━━━━━━━━\n⚠️ ${failReasons[lk] || failReasons.en}\n💡 <i>${failHints[lk] || failHints.en}</i>\n\n🔗 <a href="${explorerLink}">TxHash: ${txHash.slice(0,18)}...</a>`,
-                            action: true, success: false
-                        };
-                    } else {
-                        log.child('AUTOSWAP').info('✅ Transaction confirmed on-chain!');
-                    }
+                    const receipt = await provider.waitForTransaction(txHash, 1, 30000);
+                    if (receipt?.status === 1) receiptStatus = 'success';
+                    else if (receipt?.status === 0) receiptStatus = 'reverted';
                 } catch (receiptErr) {
-                    // Timeout or error — log but don't block (tx might still be pending)
-                    log.child('AUTOSWAP').warn('Receipt check timeout/error (tx may still be pending):', receiptErr.message);
+                    log.child('AUTOSWAP').warn('Receipt UNKNOWN; pending reconciliation:', receiptErr.message);
                 }
+            }
+            const txConfirmed = receiptStatus === 'success';
+            if (receiptStatus === 'reverted') {
+                log.child('AUTOSWAP').warn('❌ Transaction REVERTED on-chain: ' + txHash);
+                return {
+                    status: 'reverted',
+                    displayMessage: `❌ <b>SWAP REVERTED</b>\n━━━━━━━━━━━━━━━━━━\n⚠️ Transaction reverted on-chain.\n\n🔗 <a href="${explorerLink}">TxHash: ${String(txHash).slice(0,18)}...</a>`,
+                    action: true, success: false
+                };
             }
 
             // 7. Parse result amounts
@@ -704,18 +693,25 @@ module.exports = {
             const fromAmt = (Number(routerResult.fromTokenAmount || args.amount) / Math.pow(10, fromDec)).toLocaleString('en-US', { maximumFractionDigits: 6 });
             const toAmt = (Number(routerResult.toTokenAmount || 0) / Math.pow(10, toDec)).toLocaleString('en-US', { maximumFractionDigits: 6 });
 
-            // Log moved after receipt check
-            log.child('AUTOSWAP').info(`${txConfirmed ? '✅ Success' : '❌ Reverted'}! TxHash: ${txHash}`);
+            log.child('AUTOSWAP').info(`${txConfirmed ? '✅ Confirmed' : '⏳ UNKNOWN'} receipt status for tx: ${txHash || 'unavailable'}`);
             // ── Save swap to history (with status) ──
             try {
                 const { dbRun } = require('../../../../db/core');
                 await dbRun(`CREATE TABLE IF NOT EXISTS swap_history (id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, walletAddress TEXT, chainIndex TEXT, fromToken TEXT, toToken TEXT, fromSymbol TEXT, toSymbol TEXT, fromAmount TEXT, toAmount TEXT, txHash TEXT, orderId TEXT, slippage REAL, priceUsd TEXT DEFAULT '0', status TEXT DEFAULT 'success', createdAt TEXT DEFAULT (datetime('now')))`);
                 const fromPrice = Number(routerResult.fromToken?.tokenUnitPrice || 0);
                 await dbRun('INSERT INTO swap_history (userId,walletAddress,chainIndex,fromToken,toToken,fromSymbol,toSymbol,fromAmount,toAmount,txHash,orderId,slippage,priceUsd,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                    [String(userId), tw.address, chainIndex, fromTokenAddress, toTokenAddress, fromSym||'?', toSym||'?', String(originalAmount||args.amount), String(routerResult.toTokenAmount||'0'), txHash, orderId, dynamicSlippage, String(fromPrice), txConfirmed ? 'success' : 'reverted']);
+                    [String(userId), tw.address, chainIndex, fromTokenAddress, toTokenAddress, fromSym||'?', toSym||'?', String(originalAmount||args.amount), String(routerResult.toTokenAmount||'0'), txHash, orderId, dynamicSlippage, String(fromPrice), receiptStatus]);
             } catch (dbErr) { log.child('AUTOSWAP').warn('Swap history save failed:', dbErr.message); }
 
-
+            if (receiptStatus === 'unknown') {
+                return {
+                    status: 'unknown',
+                    reconciliationRequired: true,
+                    action: true,
+                    success: false,
+                    displayMessage: `⏳ <b>SWAP STATUS UNKNOWN — PENDING RECONCILIATION</b>\n━━━━━━━━━━━━━━━━━━\nBroadcast may have been accepted, but no confirmed receipt is available. Do not retry automatically.${txHash ? `\n\n🔗 <a href="${explorerLink}">TxHash: ${String(txHash).slice(0,18)}...</a>` : ''}`
+                };
+            }
 
             // Use the user's actual DB-stored language preference (not prompt-detected lang which fails on "ok")
             let lang = context?.lang || 'en';
@@ -1141,15 +1137,15 @@ module.exports = {
 
                                     if (currentAllowance < BigInt(s.amount)) {
                                         const erc20Interface = new ethers.Interface(["function approve(address spender, uint256 amount) public returns (bool)"]);
-                                        const infiniteApproveData = erc20Interface.encodeFunctionData("approve", [spender, ethers.MaxUint256]);
+                                        const approveDataExact = erc20Interface.encodeFunctionData("approve", [spender, BigInt(s.amount)]);
                                         assertExecutionEnabled();
                                         const approveTx = await wallet.signTransaction({
-                                            to: fromTokenAddress.toLowerCase(), data: infiniteApproveData, value: 0n,
+                                            to: fromTokenAddress.toLowerCase(), data: approveDataExact, value: 0n,
                                             gasLimit: BigInt(approveData[0].gasLimit || '100000'), gasPrice: BigInt(approveData[0].gasPrice || '1000000000'),
                                             nonce: await provider.getTransactionCount(wallet.address, 'pending'), chainId: chainIdNum
                                         });
                                         await onchainos.broadcastTransaction(approveTx, chainIndex, s.tw.address);
-                                        log.child('BATCHSWAP').info(`✅ Approve INFINITE sent for wallet ${s.tw.address.slice(0, 8)}`);
+                                        log.child('BATCHSWAP').info(`✅ Exact approval sent for wallet ${s.tw.address.slice(0, 8)}`);
                                     } else {
                                         log.child('BATCHSWAP').info(`✅ Allowance sufficient for wallet ${s.tw.address.slice(0, 8)}`);
                                     }

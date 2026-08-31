@@ -4,7 +4,7 @@ const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../core/logger');
 const log = logger.child('AI');
-const { isExecutionDisabled, assertExecutionEnabled } = require('../core/executionPolicy');
+const { isExecutionDisabled, assertExecutionEnabled, assertDcaExecutionEnabled } = require('../core/executionPolicy');
 
 const { sanitizeSecrets } = require('../core/sanitize');
 const { convertMarkdownToTelegram, escapeMarkdownV2 } = require('./utils/markdown');
@@ -352,7 +352,7 @@ function createAiHandlers(deps) {
 
             // ════ Item #1: DCA SWAP EXECUTOR (CRITICAL) ════
           } else if (task.type === 'dca_swap') {
-            assertExecutionEnabled();
+            assertDcaExecutionEnabled();
             const dcaLog = log.child('DCA');
             const p = task.params || {};
             try {
@@ -481,20 +481,27 @@ function createAiHandlers(deps) {
                     const allowance = await erc20Check.allowance(tw.address, spender);
                     if (allowance < BigInt(amountWei)) {
                       const iface = new ethers.Interface(["function approve(address spender, uint256 amount) public returns (bool)"]);
-                      const approveCalldata = iface.encodeFunctionData("approve", [spender, ethers.MaxUint256]);
+                      const approveCalldata = iface.encodeFunctionData("approve", [spender, BigInt(amountWei)]);
                       assertExecutionEnabled();
                       const approveTx = await wallet.signTransaction({
                         to: p.fromTokenAddress, data: approveCalldata, value: 0n,
                         gasLimit: BigInt(approveData[0].gasLimit || '100000'), gasPrice: BigInt(approveData[0].gasPrice || '1000000000'),
                         nonce: await provider.getTransactionCount(wallet.address), chainId: parseInt(chainIndex)
                       });
-                      await onchainos.broadcastTransaction(approveTx, chainIndex, tw.address);
-                      dcaLog.info(`DCA ${task.id}: Approve sent, waiting 3s...`);
-                      await new Promise(r => setTimeout(r, 3000));
+                      const approvalBroadcast = await onchainos.broadcastTransaction(approveTx, chainIndex, tw.address);
+                      const approvalResult = Array.isArray(approvalBroadcast) ? approvalBroadcast[0] : approvalBroadcast;
+                      const approvalHash = approvalResult?.txHash || approvalResult?.transactionHash || approvalResult?.orderId;
+                      if (!approvalHash) throw new Error('Approval broadcast returned no transaction identifier');
+                      const approvalReceipt = await provider.waitForTransaction(approvalHash, 1, 30000);
+                      if (!approvalReceipt || approvalReceipt.status !== 1) {
+                        throw new Error(approvalReceipt?.status === 0 ? 'Approval transaction reverted' : 'Approval receipt is unknown');
+                      }
+                      dcaLog.info(`DCA ${task.id}: Exact approval confirmed.`);
                     }
                   }
                 } catch (approveErr) {
-                  dcaLog.warn(`DCA ${task.id}: Approve failed:`, approveErr.message);
+                  dcaLog.warn(`DCA ${task.id}: Approval denied or unconfirmed:`, approveErr.message);
+                  throw approveErr;
                 }
               }
 

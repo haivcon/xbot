@@ -944,8 +944,8 @@ module.exports = {
             const btns = btnTexts[lk] || btnTexts.en;
 
             try {
-                // Send confirmation with inline buttons
-                await bot.sendMessage(chatId, confirmTexts[lk] || confirmTexts.en, {
+                // Send confirmation with inline buttons and bind the exact returned message.
+                const confirmationMessage = await bot.sendMessage(chatId, confirmTexts[lk] || confirmTexts.en, {
                     parse_mode: 'HTML',
                     disable_notification: true,
                     reply_markup: {
@@ -955,27 +955,33 @@ module.exports = {
                         ]]
                     }
                 });
+                if (!confirmationMessage?.message_id) throw new Error('Confirmation message was not acknowledged');
 
-                // Wait for confirmation (60s timeout, auto-proceed)
                 const confirmed = await new Promise((resolve) => {
                     const timeout = setTimeout(() => {
                         global._batchTransferPending.delete(batchId);
                         resolve('timeout');
                     }, 60000);
-                    global._batchTransferPending.set(batchId, (action) => {
-                        clearTimeout(timeout);
-                        global._batchTransferPending.delete(batchId);
-                        resolve(action);
+                    global._batchTransferPending.set(batchId, {
+                        userId: String(userId),
+                        chatId: String(chatId),
+                        messageId: String(confirmationMessage.message_id),
+                        expiresAt: Date.now() + 60000,
+                        resolve(action) {
+                            clearTimeout(timeout);
+                            global._batchTransferPending.delete(batchId);
+                            resolve(action);
+                        }
                     });
                 });
 
-                if (confirmed === 'cancel') {
+                if (confirmed !== 'confirm') {
                     return { displayMessage: `❌ ${cancelledTexts[lk] || cancelledTexts.en}`, action: true, success: false };
                 }
-                // 'confirm' or 'timeout' → proceed (startup msg handles progress display)
             } catch (e) {
-                // If button send fails, just proceed
-                log.child('BATCHTRANSFER').warn('Confirm button send failed, proceeding:', e.message);
+                global._batchTransferPending.delete(batchId);
+                log.child('BATCHTRANSFER').warn('Confirmation unavailable; batch denied:', e.message);
+                return { displayMessage: `❌ ${cancelledTexts[lk] || cancelledTexts.en}`, action: true, success: false };
             }
         }
 
